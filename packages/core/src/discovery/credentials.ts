@@ -263,10 +263,6 @@ export function productionLooking(detail: string | undefined): string | undefine
 }
 
 /**
- * A binary on PATH plus a credential it can read is an authenticated CLI, and that
- * pair is the whole finding: either alone is unremarkable.
- */
-/**
  * Whether a table's `~` credential names this found file, as the file itself or as the
  * directory it sits in: `~/.config/gcloud` is where gcloud keeps `credentials.db`, and a
  * suffix match alone never saw it.
@@ -282,6 +278,10 @@ export const SCANNED_CREDENTIAL_FILES: readonly string[] = SPECS.flatMap(
   (spec) => spec.paths,
 );
 
+/**
+ * A binary on PATH plus a credential it can read is an authenticated CLI, and that
+ * pair is the whole finding: either alone is unremarkable.
+ */
 export function authenticatedClis(
   binaries: readonly string[],
   credentials: readonly CredentialFinding[],
