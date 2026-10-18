@@ -7,7 +7,7 @@
 
 # Memnox runtime
 
-### Your agents can already do the work.<br>Memnox makes it safe to let them **do it without you**.
+### Your agents can already do the work.<br>Memnox makes it safe to let them **do it in your boundaries**.
 
 One boundary of **allow**, **ask** and **deny** over every agent on your machine,<br>
 ruled before each tool call runs. No model decides anything, and nothing leaves your machine.
