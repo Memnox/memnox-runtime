@@ -8,7 +8,7 @@ import type { ChangedFile } from '../session-tools/show-tool';
 /** What a session changed, read through the changes tool for the live window: its files, and one file's diff. */
 
 /** What changes says a session changed, in one repository or the one it wrote in last. */
-export interface Changes {
+interface Changes {
   repository?: string;
   files?: { shown: ChangedFile[] };
   alsoChanged?: { repository: string }[];
