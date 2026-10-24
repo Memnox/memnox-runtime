@@ -23,6 +23,7 @@ const TAR_NAME = { at: 0, length: 100 };
 const TAR_SIZE = { at: 124, length: 12 };
 const TAR_PREFIX = { at: 345, length: 155 };
 const OCTAL = 8;
+const SEMVER = /^\d+\.\d+\.\d+$/;
 const BUILD_HINT = 'Build it with pnpm --filter @memnox/noise build, which needs Rust.';
 
 const platform = `${process.platform}-${process.arch}`;
@@ -71,12 +72,17 @@ function fileFromTar(tar, wanted) {
 
 async function fetchPrebuilt() {
   const { version } = JSON.parse(await readFile(join(NOISE_DIR, 'package.json'), 'utf8'));
+  // Checked, since it goes into a URL and only a plain version belongs there.
+  if (!SEMVER.test(String(version))) {
+    say(`the manifest names no plain version to fetch. ${BUILD_HINT}`);
+    return;
+  }
   const registry = (process.env.npm_config_registry ?? DEFAULT_REGISTRY).replace(
     /\/$/,
     '',
   );
   const name = `@memnox/noise-${prebuilt}`;
-  const meta = await fetch(`${registry}/${name.replace('/', '%2f')}/${version}`);
+  const meta = await fetch(`${registry}/${encodeURIComponent(name)}/${version}`);
   if (!meta.ok) {
     say(`no ${name}@${version} on ${registry} (${meta.status}). ${BUILD_HINT}`);
     return;
