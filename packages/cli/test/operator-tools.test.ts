@@ -820,6 +820,8 @@ describe('telling an agent what the person said', () => {
       agent: 'claude-code',
       pid: process.pid,
       app: 'Visual Studio Code',
+      // In its chat panel, or a run from a terminal reads that terminal as where it waits.
+      panel: true,
       seenAt: '2026-09-30T11:00:00.000Z',
       cwd: deps.home,
     });

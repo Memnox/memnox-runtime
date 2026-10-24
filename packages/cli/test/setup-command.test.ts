@@ -87,7 +87,12 @@ const json = (body: unknown): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
-/** Nothing real is installed: a test that loaded a service would configure the machine running it. */
+/** A test that loaded a service would configure the machine running it. */
+const fakeService: NonNullable<WiringSeams['service']> = async () => ({
+  state: { supported: true, installed: true, path: '/tmp/svc', manager: 'launchd' },
+});
+
+/** Nothing real is installed. */
 function fakeWiring(wired: string[]): WiringSeams {
   return {
     interceptors: async (at) => {
@@ -100,9 +105,7 @@ function fakeWiring(wired: string[]): WiringSeams {
         launchers: [],
       };
     },
-    service: async () => ({
-      state: { supported: true, installed: true, path: '/tmp/svc', manager: 'launchd' },
-    }),
+    service: fakeService,
     rules: async () => 5,
     claudeHook: async () => false,
     codexHook: async () => false,
@@ -227,9 +230,12 @@ describe('memnox setup', () => {
             confirm: async (_question, fallback) =>
               fallback === false ? driven.move === true : driven.yes !== false,
             interactive: () => driven.interactive !== false,
-            ...(driven.wired === undefined
-              ? {}
-              : { wiringSeams: fakeWiring(driven.wired) }),
+            // Never the real launchctl or systemctl: on a machine running a daemon each run
+            // would stop and restart it, which on Linux outlasts the test's timeout.
+            wiringSeams:
+              driven.wired === undefined
+                ? { service: fakeService }
+                : fakeWiring(driven.wired),
             reportScan: async (at: string) => {
               reports.push(at);
               return driven.reported !== false;

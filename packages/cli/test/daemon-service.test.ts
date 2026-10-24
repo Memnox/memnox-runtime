@@ -27,6 +27,7 @@ describe('having the machine start the daemon', () => {
     // Never the real launchctl or systemctl: this file names the test runner.
     const { state } = await installService(dir, {
       node: () => process.execPath,
+      loaded: () => false,
       load: () => null,
       linger: () => null,
     });
@@ -50,6 +51,7 @@ describe('having the machine start the daemon', () => {
     const dir = await home();
     const result = await installService(dir, {
       node: () => process.execPath,
+      loaded: () => false,
       load: () => null,
       linger: () => 'sudo loginctl enable-linger deploy',
     });
@@ -94,7 +96,9 @@ describe('having the machine start the daemon', () => {
     const dir = await home();
     await installService(dir, {
       node: () => process.execPath,
+      loaded: () => false,
       load: () => null,
+      linger: () => null,
     });
     // A stop that is only announced leaves a daemon running that nothing owns up to.
     const { state, warning } = await uninstallService(dir, {
