@@ -54,7 +54,8 @@ jobs:
         with:
           node-version: 22
       - run: sh native/noise/scripts/build-node.sh
-      - run: node --test native/noise/test/
+      # A folder is read as a module to load on Windows, so the files are named.
+      - run: node --test native/noise/test/*.test.cjs
 
   # Catches a broken manifest at PR time rather than at tag time.
   publish-dry-run:

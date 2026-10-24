@@ -19,7 +19,7 @@
     "build:xcframework": "sh scripts/build-xcframework.sh",
     "build:android": "sh scripts/build-android.sh",
     "test:jni": "sh scripts/test-jni.sh",
-    "test": "cargo test --features ffi && node --test test/"
+    "test": "cargo test --features ffi && node --test test/*.test.cjs"
   },
   "optionalDependencies": {
     "@memnox/noise-darwin-arm64": "workspace:*",
