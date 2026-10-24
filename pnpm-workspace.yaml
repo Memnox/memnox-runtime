@@ -12,6 +12,11 @@ allowBuilds:
 # GHSA-68fv-2mgg-jv7q; the audit fails the build at high, so hold it at the patched line.
 overrides:
   source-map-js: '>=1.2.2'
+  # zod under knip (GHSA-mrhx-c7xc-m3w5), held on its own major so the fix is no breaking upgrade.
+  zod: '^4.6.6'
+
+# vite is a root devDependency only so the peer vitest installs resolves past
+# GHSA-587h-7wmj-h5pm: an override rewrites the peer range and leaves the old resolution.
 
 # braces is a transitive dev dependency of changesets, knip and vitest with no patched
 # release yet (GHSA-vfj7-8cjw-p6xm lists none and 3.0.3 is still the latest), so the only
