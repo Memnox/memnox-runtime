@@ -29,6 +29,13 @@ node packages/cli/dist/index.js doctor --wiring
 `pnpm build` first, because the `dist/` you just ran is whatever was last built, and a
 change you did not build is a change you did not test.
 
+The pairing tests load `@memnox/noise`, a Rust addon. `pnpm install` fetches the
+published build for your platform (macOS, Linux and Windows on x64, macOS and Linux on
+arm64) and checks it against the registry's integrity, so no Rust is needed to run the
+suite. If you change anything under `native/noise`, or the install said it could not
+fetch one, build it yourself with `pnpm --filter @memnox/noise build`; a local build
+always wins over the fetched one.
+
 Nothing in the suite reads your home directory, spawns an agent, or watches a real
 directory. If a test you write needs one of those, inject it instead; see **Seams**
 in `ARCHITECTURE.md`.
