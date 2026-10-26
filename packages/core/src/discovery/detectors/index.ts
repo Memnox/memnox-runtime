@@ -126,7 +126,9 @@ export function watchablePaths(home: string): string[] {
   const paths = new Set<string>();
   for (const spec of DETECTOR_SPECS) {
     for (const relative of spec.configPaths) {
-      paths.add(relative.includes('/') ? dirname(join(home, relative)) : home);
+      paths.add(
+        relative.includes('/') ? dirname(join(home, relative)) : join(home, relative),
+      );
     }
   }
   // A product with its own parser is not in the spec list, so its directory is added here.
