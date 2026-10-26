@@ -143,6 +143,18 @@ async function untilStopped(path: string): Promise<Logged[]> {
   throw new Error('the agent was never stopped');
 }
 
+async function untilLogged(
+  path: string,
+  wanted: (call: Logged) => boolean,
+): Promise<Logged[]> {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const calls = await logged(path).catch((): Logged[] => []);
+    if (calls.some(wanted)) return calls;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('the agent never logged what was waited for');
+}
+
 async function logged(path: string): Promise<Logged[]> {
   const text = await readFile(path, 'utf8');
   return text
@@ -327,7 +339,8 @@ describe('AcpBrain', () => {
     const brain = brainFor(setup);
 
     const turning = turn(brain, 'talk for ever');
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Cancelled once the agent holds the turn, since a fixed wait loses the race to a slow start.
+    await untilLogged(setup.log, (call) => call.method === 'session/prompt');
     brain.cancel();
     const chunks = await turning;
     const next = await turn(brain, 'still there');
