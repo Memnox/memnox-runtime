@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { confirmationMessage, verifiesSigned, writeAccount } from '@memnox/core';
 import {
   claimDeviceSpace,
-  DEVICE_SPACE_WORK_ZEROS,
+  deviceSpaceWorkZeros,
   ensureDeviceSpace,
   pointOf,
   proofDigest,
@@ -116,7 +116,7 @@ describe('registering a personal space with no account', () => {
     expect(Buffer.from(String(body['signingPoint']), 'base64')).toHaveLength(65);
     expect(
       proofDigest(String(body['signingPoint']), String(body['nonce'])).startsWith(
-        '0'.repeat(DEVICE_SPACE_WORK_ZEROS),
+        '0'.repeat(deviceSpaceWorkZeros()),
       ),
     ).toBe(true);
     expect(one?.token).toBe('mch_space');
@@ -278,5 +278,14 @@ describe('which machine the relay dials as', () => {
     const made = await relayMachine(home, async () => readDeviceSpace(home));
     expect(made?.machineId).toBe('mac_space');
     expect((await readDeviceSpace(home))?.relay).toBe(true);
+  });
+});
+
+describe('the work a registration does', () => {
+  it('asks the cloud its five zeros unless the environment names fewer', () => {
+    expect(deviceSpaceWorkZeros({})).toBe(5);
+    expect(deviceSpaceWorkZeros({ MEMNOX_DEVICE_SPACE_WORK_ZEROS: '2' })).toBe(2);
+    expect(deviceSpaceWorkZeros({ MEMNOX_DEVICE_SPACE_WORK_ZEROS: '9' })).toBe(5);
+    expect(deviceSpaceWorkZeros({ MEMNOX_DEVICE_SPACE_WORK_ZEROS: 'none' })).toBe(5);
   });
 });

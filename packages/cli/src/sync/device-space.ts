@@ -31,7 +31,9 @@ const DEVICE_SPACE_FILE = 'device-space.json';
 const DEVICE_SPACE_VERSION = 1;
 const REGISTER_PATH = '/v1/device-spaces';
 /** Leading zero hex digits the cloud asks of a registration, which keeps minting spaces from costing nothing. */
-export const DEVICE_SPACE_WORK_ZEROS = 5;
+const DEVICE_SPACE_WORK_ZEROS = 5;
+/** Lowers the work for a test, whose slower machine cannot spend seconds of hashing per space; the cloud still asks five. */
+const WORK_ZEROS_VAR = 'MEMNOX_DEVICE_SPACE_WORK_ZEROS';
 const WORK_PREFIX = 'memnox-device-space:v1:';
 /** Hashes tried before yielding, so the proof never holds the daemon's other callers for long. */
 const WORK_SLICE = 20_000;
@@ -167,7 +169,7 @@ async function registered(
 /** The nonce whose hash with the signing point opens on enough zeros; yields between slices. */
 async function proofOfWork(
   signingPoint: string,
-  zeros: number = DEVICE_SPACE_WORK_ZEROS,
+  zeros: number = deviceSpaceWorkZeros(),
 ): Promise<string> {
   const wanted = '0'.repeat(zeros);
   for (let start = 0; ; start += WORK_SLICE) {
@@ -177,6 +179,14 @@ async function proofOfWork(
     }
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
+}
+
+/** The zeros a registration hashes for: the cloud's five unless the environment names fewer. */
+export function deviceSpaceWorkZeros(env: NodeJS.ProcessEnv = process.env): number {
+  const named = Number(env[WORK_ZEROS_VAR]);
+  return Number.isInteger(named) && named > 0 && named < DEVICE_SPACE_WORK_ZEROS
+    ? named
+    : DEVICE_SPACE_WORK_ZEROS;
 }
 
 export function proofDigest(signingPoint: string, nonce: string): string {

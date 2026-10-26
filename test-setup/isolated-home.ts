@@ -16,3 +16,7 @@ process.env['PATH'] = (process.env['PATH'] ?? '')
 
 // Nothing in a test registers a personal space with the real control plane: this port answers nobody.
 process.env['MEMNOX_CLOUD_URL'] = 'http://127.0.0.1:9';
+
+// Registering a space hashes about a million times for the cloud's five zeros, which a slower machine
+// cannot fit in a test's timeout; the proof is still made and checked, just against fewer.
+process.env['MEMNOX_DEVICE_SPACE_WORK_ZEROS'] = '2';
