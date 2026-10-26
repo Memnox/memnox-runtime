@@ -404,14 +404,17 @@ describe('asking the daemon in your own words', () => {
       socket.on('data', (chunk: string) => {
         for (const line of reader.push(chunk)) {
           const response = decodeResponse(line);
-          if (response !== null) heard.push(response);
+          if (response === null) continue;
+          heard.push(response);
+          // Timed from the end of the turn, so a slow machine still waits for the turn itself.
+          if (response.chunk?.kind === BRAIN_CHUNK.DONE) {
+            setTimeout(() => {
+              socket.end();
+              resolve();
+            }, 150);
+          }
         }
       });
-      // Long enough for anything written after the hold to have arrived, were it sent.
-      setTimeout(() => {
-        socket.end();
-        resolve();
-      }, 150);
       socket.on('error', reject);
     });
 
