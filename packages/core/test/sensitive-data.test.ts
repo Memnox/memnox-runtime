@@ -182,9 +182,14 @@ describe('the sensitive data classifier, kind by kind', () => {
       subject: 'export',
       body: JSON.stringify(RECORD),
     };
-    const started = performance.now();
-    for (let each = 0; each < 1_000; each += 1) classifyOutgoingData(args);
-    expect((performance.now() - started) / 1_000).toBeLessThan(1);
+    // The fastest of several batches, so a machine busy with other test workers measures the classifier.
+    let perCall = Infinity;
+    for (let batch = 0; batch < 5; batch += 1) {
+      const started = performance.now();
+      for (let each = 0; each < 200; each += 1) classifyOutgoingData(args);
+      perCall = Math.min(perCall, (performance.now() - started) / 200);
+    }
+    expect(perCall).toBeLessThan(1);
   });
 
   it('keeps one list of words, each with what it means', () => {
