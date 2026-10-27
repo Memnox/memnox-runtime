@@ -70,7 +70,7 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     configPaths: ['.gemini/settings.json'],
     clients: ['Gemini CLI'],
     inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
-    mcpConfigPath: '.gemini/settings.json',
+    mcpConfigPaths: ['.gemini/settings.json'],
   },
   {
     kind: DISCOVERED_AGENT_KIND.WINDSURF,
@@ -78,7 +78,7 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     configPaths: ['.codeium/windsurf/mcp_config.json', '.codeium/windsurf'],
     clients: ['Windsurf'],
     inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
-    mcpConfigPath: '.codeium/windsurf/mcp_config.json',
+    mcpConfigPaths: ['.codeium/windsurf/mcp_config.json'],
   },
   {
     kind: DISCOVERED_AGENT_KIND.COPILOT_CLI,
@@ -86,7 +86,7 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     configPaths: ['.copilot/mcp-config.json', '.copilot'],
     clients: ['GitHub Copilot CLI'],
     inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
-    mcpConfigPath: '.copilot/mcp-config.json',
+    mcpConfigPaths: ['.copilot/mcp-config.json'],
   },
   {
     kind: DISCOVERED_AGENT_KIND.DEVIN,
@@ -94,7 +94,7 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     configPaths: ['.config/devin/config.json', '.config/devin', '.devin'],
     clients: ['Devin'],
     inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
-    mcpConfigPath: '.config/devin/mcp_config.json',
+    mcpConfigPaths: ['.config/devin/mcp_config.json'],
   },
   {
     // Its servers sit under `mcp` in a shape of its own, so none is read from its config.
