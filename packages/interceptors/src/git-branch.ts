@@ -90,14 +90,40 @@ function destinationOf(refspec: string, checkout: Checkout): string | null {
   return target.startsWith('refs/') ? null : target;
 }
 
+const GITHUB_HOST = 'github.com';
+const GIT_SUFFIX = '.git';
+
+/**
+ * The owner and repository a GitHub remote names, from the first `github.com:` or `github.com/`
+ * followed by exactly `owner/repo`, with `.git` and one closing slash dropped. Read by index, since
+ * a pattern not anchored at the start is retried at every `github.com` and could backtrack.
+ */
+function githubRepository(url: string): { owner: string; repo: string } | null {
+  for (
+    let at = url.indexOf(GITHUB_HOST);
+    at !== -1;
+    at = url.indexOf(GITHUB_HOST, at + 1)
+  ) {
+    const after = url[at + GITHUB_HOST.length];
+    if (after !== ':' && after !== '/') continue;
+    let rest = url.slice(at + GITHUB_HOST.length + 1);
+    if (rest.endsWith('/')) rest = rest.slice(0, -1);
+    // Only when a name is left before it, since a repository may be called `.git` itself.
+    const named = rest.slice(0, -GIT_SUFFIX.length);
+    if (rest.endsWith(GIT_SUFFIX) && named !== '' && !named.endsWith('/')) rest = named;
+    const parts = rest.split('/');
+    const [owner, repo] = parts;
+    if (parts.length !== 2 || owner === undefined || repo === undefined) continue;
+    if (owner === '' || repo === '' || /\s/.test(rest)) continue;
+    return { owner, repo };
+  }
+  return null;
+}
+
 /** A branch on a remote, as a ref every agent pushing there produces alike. */
 export function branchResource(url: string, branch: string): string | undefined {
-  const github = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url);
-  if (github !== null) {
-    const [, owner, repo] = github;
-    if (owner === undefined || repo === undefined) return undefined;
-    return actionResource('github', { owner, repo, branch });
-  }
+  const github = githubRepository(url);
+  if (github !== null) return actionResource('github', { ...github, branch });
   const host = /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)[:/](.+?)(?:\.git)?\/?$/i.exec(url);
   if (host === null) return undefined;
   const [, name, path] = host;
@@ -143,6 +169,25 @@ function git(args: readonly string[]): string | null {
  */
 export function remoteIdentityOf(root: string): string | undefined {
   return repositoryIdentity(git(['-C', root, 'remote', 'get-url', 'origin']));
+}
+
+/**
+ * What every checkout of one repository shares: its remote, or with none the git
+ * directory its worktrees have in common. Undefined outside a repository.
+ */
+export function projectIdentityOf(
+  root: string,
+  remote: string | undefined = remoteIdentityOf(root),
+): string | undefined {
+  if (remote !== undefined) return remote;
+  const common = git([
+    '-C',
+    root,
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-common-dir',
+  ]);
+  return common ?? undefined;
 }
 
 const localCheckout: Checkout = {

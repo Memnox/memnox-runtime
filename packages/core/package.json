@@ -1,6 +1,6 @@
 {
   "name": "@memnox/core",
-  "version": "0.13.14",
+  "version": "0.14.2",
   "description": "Memnox core domain: action events, agent identity, decisions, and store ports.",
   "keywords": [
     "ai-agents",
@@ -31,6 +31,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./engine": {
+      "types": "./dist/engine.d.ts",
+      "import": "./dist/engine.js"
+    },
+    "./wire": {
+      "types": "./dist/wire.d.ts",
+      "import": "./dist/wire.js"
     }
   },
   "engines": {
@@ -42,7 +50,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean"
+    "build": "tsup src/index.ts src/engine.ts src/wire.ts --format esm --dts --clean"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

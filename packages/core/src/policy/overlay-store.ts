@@ -11,7 +11,7 @@ import { AGENT_SUBJECT_PREFIX } from './agent-freeze';
  */
 const OVERLAY_FILE = 'overlays.json';
 
-function overlayPathFor(home: string): string {
+export function overlayPathFor(home: string): string {
   return join(home, MEMNOX_HOME, OVERLAY_FILE);
 }
 

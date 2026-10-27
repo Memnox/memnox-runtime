@@ -59,10 +59,39 @@ Each of them protects its own runtime. None of them can see:
   the browser profile that still holds your sessions. A tool policy governs tools.
 - **The shell all three share.** An agent that can run one reaches everything you reach,
   whatever its tool list says.
+- **The desktop.** A server whose tools both see the screen and press keys reaches every
+  window on the machine. It is reported as a `desktop` surface of the agent whose config
+  declares it, read off the tool names after a probe, and `explain` says that no seam
+  here holds it rather than counting it as one more server.
 - **What a set of permitted tools adds up to.** See below.
 
 That is the whole position: *they decide what their agent may call; Memnox decides what
 the machine underneath will let through.*
+
+## A harness that starts the CLI with its own flags
+
+A chat-style harness that drives Claude Code or Codex as a child process does not read
+the runtime's settings the way a person's terminal does. It passes the permission mode
+on the command line per turn, mounts its own MCP config, and often restricts setting
+sources to the project or redirects the config directory. Three things follow, and the
+scan has to say them rather than assume the opposite:
+
+- **The posture in the settings file is not the posture of the run.** A
+  `~/.claude/settings.json` with no `defaultMode` reads as `asks`, while the child was
+  started with `--permission-mode bypassPermissions`. Discovery reads the file it has
+  and names it, and never claims the flag it cannot see.
+- **A hook in user settings is not in force under `--setting-sources project`.** The
+  hook Memnox installs into `~/.claude/settings.json` is loaded by a terminal session
+  and skipped by such a launch. The project-scope file, `<repo>/.claude/settings.json`,
+  is read by both, so `memnox protect --project-hook` writes the same hook into the
+  repository's own `.claude/settings.local.json`, personal to this machine and never
+  committed.
+- **A windowed app takes no PATH from here.** A harness opened from the dock has the
+  login PATH and nothing `memnox run` set, so the shell seam is held only once the
+  interceptor directory is on the login profile. `memnox explain <agent>` says which.
+
+Nothing in that list needs a detector for one product. It is the shape of every harness
+that spawns a CLI, and the facts above are read from the files any of them leaves.
 
 ## Combined capability
 

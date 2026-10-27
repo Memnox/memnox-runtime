@@ -1,0 +1,40 @@
+# Weekly and grouped, so a week of bumps is a few pull requests to review rather than ten.
+# Minor and patch updates travel together because they should merge on a green build; a
+# major gets a pull request of its own, since one breaking upgrade in a group holds back
+# every safe update beside it.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      # The types follow the oldest Node the packages support, so nothing typechecks
+      # against an API a user on Node 22 does not have.
+      - dependency-name: '@types/node'
+        versions: ['>=23']
+    commit-message:
+      prefix: 'chore(deps):'
+  - package-ecosystem: cargo
+    directory: /native/noise
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: 'chore(deps):'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: 'chore(ci):'

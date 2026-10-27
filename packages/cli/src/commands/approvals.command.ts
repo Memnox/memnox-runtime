@@ -10,13 +10,16 @@ import {
   describePending,
   groupDetail,
   groupPending,
+  EXIT,
   HOLD_ANSWER,
+  HTTP,
   PendingApprovals,
   type HoldAnswer,
   type PendingApproval,
 } from '@memnox/core';
 import type { CliContext } from '../cli-context';
 import { TONE } from '../flow';
+import { answerTeamHeld, readPerson, type PersonCredential } from '../sync/person';
 
 /** What listing and answering both need. */
 interface ApprovalsDeps {
@@ -71,14 +74,44 @@ export function registerApprovalsCommand(
     );
 
   for (const { name, answer, said, verb } of ANSWERS) {
-    program
+    const command = program
       .command(`${name} <id>`)
       .description(`${verb} a call that is waiting for a person`)
-      .option('--group', 'answer for every waiting call of the same kind')
-      .action(async (id: string, options: { group?: boolean }) =>
-        runAnswer(deps, { name, answer, said }, id, options.group === true),
-      );
+      .option('--group', 'answer for every waiting call of the same kind');
+    if (answer === HOLD_ANSWER.ONCE) {
+      command
+        .option('--session', 'allow it for the rest of this session, not just once')
+        .option('--always', 'say where an always answer is made');
+    }
+    command.action(async (id: string, options: AnswerOptions) => {
+      if (options.always === true) return explainAlways(context);
+      const chosen =
+        options.session === true
+          ? { name, answer: HOLD_ANSWER.SESSION, said: 'Approved for this session' }
+          : { name, answer, said };
+      return runAnswer(deps, chosen, id, options.group === true);
+    });
   }
+}
+
+interface AnswerOptions {
+  group?: boolean;
+  session?: boolean;
+  always?: boolean;
+}
+
+/**
+ * An always answer becomes a team rule a second admin approves, so this door names where it is
+ * made rather than offering something it cannot do, and what covers it on this machine meanwhile.
+ */
+function explainAlways(context: CliContext): void {
+  const { flow } = context;
+  flow.open('memnox approve');
+  flow.fail(
+    'An always answer becomes a team rule, so it is made in the console, in Slack or Discord, or in the Memnox apps, where a second admin approves it.',
+  );
+  flow.hint('memnox allow <action> --for 2h   covers it on this machine for a while');
+  process.exitCode = EXIT.MISUSED;
 }
 
 /** Everything waiting, grouped by kind of work unless asked for flat. */
@@ -165,7 +198,42 @@ async function runAnswer(
 
   context.flow.open(`memnox ${how.name}`);
   if (group) return answerEveryLike(context, input);
+  // Not held on this machine, so it may be a question the team routed to the person signed in here.
+  if ((await input.approvals.read(id)) === null) {
+    const person = await readPerson(home());
+    if (person !== null) return answerForTeam(context, { person, how, id });
+  }
   return answerOne(context, input);
+}
+
+/** A team question answered from this terminal, a yes signed by its key, as a phone signs one. */
+async function answerForTeam(
+  context: CliContext,
+  input: { person: PersonCredential; how: HowAnswered; id: string },
+): Promise<void> {
+  const { flow, style } = context;
+  const { person, how, id } = input;
+  const reply = await answerTeamHeld(person, id, how.answer);
+  if (reply.status === HTTP.OK) {
+    const counted = reply.body?.status === 'counted';
+    const needs = reply.body?.approvalsNeeded ?? 0;
+    flow.close(
+      style.ok(
+        counted
+          ? `Counted your yes on ${id}. ${needs} more ${needs === 1 ? 'person needs' : 'people need'} to agree.`
+          : `${how.said} ${id} for your team.`,
+      ),
+    );
+    return;
+  }
+  throw new Error(teamRefusal(reply.status, id));
+}
+
+function teamRefusal(status: number, id: string): string {
+  if (status === HTTP.CONFLICT) return `${id} was already answered, or it ran out.`;
+  if (status === HTTP.FORBIDDEN)
+    return `${id} has not reached you, or this terminal could not sign it.`;
+  return `Nothing is waiting under "${id}" here or for your team.`;
 }
 
 /** One decision covering every call of that kind, with the count it covered. */

@@ -14,6 +14,7 @@ import {
   FileGrants,
   grantKeyFor,
   EVENT_SCHEMA_VERSION,
+  EXECUTION,
   localRuleRef,
   newEventId,
   openLedger,
@@ -24,15 +25,18 @@ import {
   UNNAMED_SESSION,
   type EnforcementMode,
   type EventSink,
+  type Execution,
   type MemnoxEvent,
   type PendingAsk,
   type ToolClass,
 } from '@memnox/core';
 
-import { EDIT_HOST } from './agent-edits';
+import { EDIT_HOST, HERMES_EVENT } from './agent-edits';
 import { EDIT_HOOK_EVENT } from './edit-hook';
 import type { HookAuthorizer } from './hook-authorizer';
 import { fieldsOf, sessionOf } from './hook-payload';
+import { OPENCLAW_EVENT, OPENCLAW_RESOLUTION } from './openclaw-payload';
+import { COPILOT_EVENT } from './named-hosts';
 import { toolCallOf } from './tool-calls';
 import {
   authorizerFor,
@@ -58,6 +62,22 @@ interface PromptAnswerDeps {
 }
 
 const TOOL_CLASSES: readonly string[] = Object.values(TOOL_CLASS);
+
+/** The hosts whose own prompt Memnox can put a question through, and see the call run after. */
+const ANSWERING_HOSTS: readonly string[] = [
+  EDIT_HOST.PRE_TOOL_USE,
+  EDIT_HOST.OPENCLAW,
+  EDIT_HOST.COPILOT,
+  EDIT_HOST.HERMES,
+];
+
+/** The events that say a call ran, which is how a yes at the host's own prompt arrives. */
+const RAN_EVENTS: readonly unknown[] = [
+  EDIT_HOOK_EVENT.POST_TOOL_USE,
+  OPENCLAW_EVENT.AFTER_TOOL,
+  COPILOT_EVENT.POST_TOOL,
+  HERMES_EVENT.POST_TOOL_CALL,
+];
 const MODES: readonly string[] = Object.values(ENFORCEMENT_MODE);
 
 /** The call as its host numbers it, or a digest of the tool and what it was given. */
@@ -72,8 +92,8 @@ export function toolFingerprint(payload: unknown): string | null {
 }
 
 /**
- * Keeps a question the host is about to put to a person, by its call. Only Claude Code and
- * Codex send the same call again once it ran; elsewhere there is nothing to match it with.
+ * Keeps a question the host is about to put to a person, by its call. The hosts that can
+ * ask also send the same call again once it ran; elsewhere nothing would match it.
  */
 export async function rememberQuestion(
   payload: unknown,
@@ -82,7 +102,7 @@ export async function rememberQuestion(
 ): Promise<void> {
   const fingerprint = toolFingerprint(payload);
   if (!answer.asked || fingerprint === null) return;
-  if (answer.call.host !== EDIT_HOST.PRE_TOOL_USE) return;
+  if (!ANSWERING_HOSTS.includes(answer.call.host)) return;
   const { ruling } = answer;
   const ask: PendingAsk = {
     fingerprint,
@@ -111,7 +131,7 @@ export async function learnFromAnswer(
   const hook = fieldsOf(payload);
   const fingerprint = toolFingerprint(payload);
   if (hook === null || fingerprint === null) return false;
-  if (hook['hook_event_name'] !== EDIT_HOOK_EVENT.POST_TOOL_USE) return false;
+  if (!RAN_EVENTS.includes(hook['hook_event_name'])) return false;
   const store = new SessionContextStore(deps.home);
   const session = sessionKey(deps, sessionOf(hook));
   const taken = takeAsk(await store.read(session), fingerprint, deps.now().toISOString());
@@ -121,6 +141,85 @@ export async function learnFromAnswer(
   await countYes(taken.ask, session, deps.home);
   await teachNotice(hook, deps).catch(() => undefined);
   return true;
+}
+
+/** A no at the host's own prompt, by what the host says happened. */
+const REFUSAL: Readonly<Record<string, { execution: Execution; reason: string }>> = {
+  [OPENCLAW_RESOLUTION.DENY]: {
+    execution: EXECUTION.BLOCKED,
+    reason: "said no in {agent}'s own approval to what Memnox asked",
+  },
+  [OPENCLAW_RESOLUTION.TIMEOUT]: {
+    execution: EXECUTION.TIMED_OUT,
+    reason: "left {agent}'s approval unanswered until it timed out",
+  },
+  [OPENCLAW_RESOLUTION.CANCELLED]: {
+    execution: EXECUTION.BLOCKED,
+    reason: '{agent} had nowhere to show the question, or the call was cancelled',
+  },
+};
+
+/**
+ * What the person answered where the host says so outright. A yes is learned when the call
+ * runs, as everywhere else; a no, a timeout or a question nobody could see is a row here,
+ * which Claude Code's own prompt never tells anybody. True when this was such an answer.
+ */
+export async function learnFromRefusal(
+  payload: unknown,
+  deps: PromptAnswerDeps,
+): Promise<boolean> {
+  const hook = fieldsOf(payload);
+  if (hook?.['hook_event_name'] !== OPENCLAW_EVENT.APPROVAL_RESOLVED) return false;
+  const decision = hook['decision'];
+  const refusal = typeof decision === 'string' ? REFUSAL[decision] : undefined;
+  const fingerprint = toolFingerprint(payload);
+  if (refusal === undefined || fingerprint === null) return true;
+  const store = new SessionContextStore(deps.home);
+  const session = sessionKey(deps, sessionOf(hook));
+  const taken = takeAsk(await store.read(session), fingerprint, deps.now().toISOString());
+  if (taken.ask === null) return true;
+  await store.write(session, taken.state);
+  const sink = deps.sink === undefined ? openLedger(deps.home) : deps.sink;
+  if (sink === null) return true;
+  const personSaid = decision === OPENCLAW_RESOLUTION.DENY;
+  await sink
+    .append(noRow({ ask: taken.ask, sessionId: session, refusal, personSaid }, deps))
+    .catch(() => undefined);
+  return true;
+}
+
+/** The no being recorded: the question it answers, where, and what the host said happened. */
+interface Refused {
+  ask: PendingAsk;
+  sessionId: string;
+  refusal: { execution: Execution; reason: string };
+  personSaid: boolean;
+}
+
+function noRow(refused: Refused, deps: PromptAnswerDeps): MemnoxEvent {
+  const { ask, sessionId, refusal, personSaid } = refused;
+  const person = personOf(deps);
+  const what = refusal.reason.replace('{agent}', deps.agent);
+  return {
+    id: newEventId(),
+    schemaVersion: EVENT_SCHEMA_VERSION,
+    at: deps.now().toISOString(),
+    sessionId,
+    agent: deps.agent,
+    // Only a no was somebody's act; a timeout or a question nobody saw is the agent's call stopped.
+    actorType: personSaid ? ACTOR_TYPE.HUMAN : ACTOR_TYPE.AGENT,
+    ...(personSaid ? { principal: person } : {}),
+    surface: surfaceOf(ask.action),
+    operation: ask.action,
+    class: classOf(ask.class),
+    effect: DECISION_EFFECT.DENY,
+    mode: modeOf(ask.mode),
+    reason: `${personSaid ? `${person} ` : ''}${what}: ${ask.reason} (${ask.tool})`,
+    argsDigest: digest(ask.target ?? ask.tool),
+    execution: refusal.execution,
+    ...(ask.target === undefined ? {} : { target: ask.target }),
+    ...(ask.rule === undefined ? {} : { rule: localRuleRef(ask.rule) }),
+  };
 }
 
 /**

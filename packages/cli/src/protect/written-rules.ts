@@ -8,11 +8,15 @@ import {
   TOOL_CLASS,
   TOOL_EFFECT,
   delegations,
+  describeHandedReach,
   discover,
   findUnusedGrants,
   handOverVerdict,
   matchesPattern,
   readPolicyDocumentFile,
+  readPolicyFiles,
+  loadPoliciesFromFile,
+  asksToRelax,
   rollUpUsage,
   usageFrom,
   verbAction,
@@ -257,23 +261,50 @@ export async function runAllow(
 
 /** One allow rule per thing handed over, skipping any a rule of that name already covers. */
 function newAllowRules(
-  existing: readonly { name: string }[],
+  existing: readonly Policy[],
   handing: readonly Delegation[],
+  inForce: readonly Policy[],
 ): {
   name: string;
   description: string;
-  match: { actions: string[] };
-  decision: { effect: typeof DECISION_EFFECT.ALLOW; reason: string };
+  match: { actions: string[]; targets?: string[] };
+  decision: { effect: typeof DECISION_EFFECT.ALLOW; reason: string; relaxes?: string[] };
 }[] {
   const taken = new Set(existing.map((rule) => rule.name));
   return handing
     .filter((each) => !taken.has(allowRuleName(each.action)))
     .map((each) => ({
       name: allowRuleName(each.action),
-      description: `Handed over after ${each.approvals} approvals and no refusal.`,
-      match: { actions: [each.action] },
-      decision: { effect: DECISION_EFFECT.ALLOW, reason: each.because },
+      description: `Handed over after ${each.approvals} approvals and no refusal, ${describeHandedReach(each)}.`,
+      // The targets the yeses named and no others, so the rule reaches no further than they did.
+      match: {
+        actions: [each.action],
+        ...(each.targets.length === 0 ? {} : { targets: [...each.targets] }),
+      },
+      decision: {
+        effect: DECISION_EFFECT.ALLOW,
+        reason: each.because,
+        // An allow beside the ask that held it would still be asked about, so it names that ask.
+        ...relaxing(asksToRelax(inForce, each.action)),
+      },
     }));
+}
+
+function relaxing(names: readonly string[]): { relaxes?: string[] } {
+  return names.length === 0 ? {} : { relaxes: [...names] };
+}
+
+/** Every rule this machine loads, so a handed-over allow can name the asks that would hold it. */
+export async function rulesInForce(
+  written: readonly Policy[],
+  home: string,
+): Promise<Policy[]> {
+  const files = await readPolicyFiles(undefined, home);
+  const loaded = await Promise.all(
+    // A file that will not load holds no ask to name.
+    files.map((file) => loadPoliciesFromFile(file).catch(() => [])),
+  );
+  return [...written, ...loaded.flat()];
 }
 
 /** Appended rather than written over, so handing a second thing over keeps the first. */
@@ -285,7 +316,7 @@ async function writeAllowRules(
   const { flow } = context;
   const document = await readPolicyDocumentFile(path);
   const existing = document?.policies ?? [];
-  const added = newAllowRules(existing, handing);
+  const added = newAllowRules(existing, handing, await rulesInForce(existing, homedir()));
   if (added.length === 0) {
     flow.close('Every one of those is already allowed here.');
     return;
@@ -298,7 +329,12 @@ async function writeAllowRules(
 
   flow.list(
     `Written to ${path}`,
-    added.map((rule) => ({ tone: TONE.OK, text: `allow  ${rule.match.actions[0]}` })),
+    added.map((rule) => ({
+      tone: TONE.OK,
+      text: `allow  ${rule.match.actions[0]}`,
+      detail:
+        rule.match.targets === undefined ? [] : [`on ${rule.match.targets.join(', ')}`],
+    })),
   );
   flow.close(`Wrote ${added.length} allow rule(s).`);
   // Said out loud, because an allow rule is the one change that widens what may happen.

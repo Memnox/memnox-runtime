@@ -1,3 +1,4 @@
+import { provenanceOf } from './policy-provenance';
 import { DECISION_EFFECT, type DecisionEffect } from '../constants/decision.constants';
 import type { Alternative, RateLimitSpec } from '../domain/decision';
 import { SCOPE_MATCH, type ScopeMatch } from '../domain/task';
@@ -11,6 +12,7 @@ import type {
   PolicyMode,
 } from './policy';
 import { POLICY_DOCUMENT_VERSION, POLICY_MODE } from './policy';
+import { validateClassifications } from './classification-validator';
 
 /**
  * Turning a hand-written rule file into rules the engine can hold, every problem listed.
@@ -64,9 +66,9 @@ export function validatePolicyDocument(input: unknown): PolicyDocument {
     seenNames.add(policy.name);
     policies.push(policy);
   }
-
+  const patterns = validateClassifications(doc['classifications'], issues);
   if (issues.length > 0) throw new PolicyValidationError(issues);
-  return { version: POLICY_DOCUMENT_VERSION, project, policies };
+  return { version: POLICY_DOCUMENT_VERSION, project, policies, ...patterns };
 }
 
 /** A typo must be rejected: it would silently split one project into two scopes. */
@@ -108,9 +110,10 @@ function validatePolicy(input: unknown, path: string, issues: string[]): Policy 
     match: validateMatch(match, actions, `${path}.match`, issues),
     decision: {
       effect,
-      ...validateDecision(decision, `${path}.decision`, issues),
+      ...validateDecision(decision, `${path}.decision`, issues, effect),
       approvers,
     },
+    ...provenanceOf(raw, path, issues),
   };
 }
 
@@ -247,8 +250,15 @@ function validateDecision(
   decision: Record<string, unknown>,
   path: string,
   issues: string[],
+  effect: DecisionEffect,
 ): Omit<PolicyDecision, 'effect' | 'approvers'> {
+  const relaxes = asOptionalStringArray(decision['relaxes'], `${path}.relaxes`, issues);
+  // Only an allow stands in for an ask; a stricter rule relaxing anything is a contradiction.
+  if (relaxes !== undefined && effect !== DECISION_EFFECT.ALLOW) {
+    issues.push(`${path}.relaxes is only for an allow`);
+  }
   return {
+    ...(relaxes === undefined ? {} : { relaxes }),
     reason: typeof decision['reason'] === 'string' ? decision['reason'] : undefined,
     minApprovals: asOptionalQuorum(
       decision['minApprovals'],

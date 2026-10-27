@@ -8,10 +8,15 @@ export default defineConfig({
   resolve: {
     // Tests run against source so a build step is never required for local development.
     alias: {
+      // Listed first, since an alias for `@memnox/core` would otherwise take its subpath too.
+      '@memnox/core/engine': fileURLToPath(
+        new URL('./packages/core/src/engine.ts', import.meta.url),
+      ),
       '@memnox/core': packageSrc('core'),
+      '@memnox/guard': packageSrc('guard'),
       '@memnox/proxy': packageSrc('proxy'),
-      '@memnox/interceptors': packageSrc('interceptors')
-    }
+      '@memnox/interceptors': packageSrc('interceptors'),
+    },
   },
   test: {
     include: ['packages/*/test/**/*.test.ts'],
@@ -26,7 +31,7 @@ export default defineConfig({
       // Barrel files, constant tables, and binary entry points — process wiring
       // that runs on import. Logic must live one level in, where it is reachable.
       exclude: ['**/index.ts', '**/*.constants.ts', '**/cli.ts'],
-      reporter: ['text-summary', 'lcov']
-    }
-  }
+      reporter: ['text-summary', 'lcov'],
+    },
+  },
 });

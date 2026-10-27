@@ -61,7 +61,7 @@ describe('LocalGate — argument rules', () => {
       arguments: { command: 'rm -rf /srv' },
     });
 
-    expect(verdict.signals).toEqual(['policy:no-rm-rf']);
+    expect(verdict.signals).toEqual(['policy:no-rm-rf', 'systems:no-rm-rf']);
   });
 
   it('allows a call no rule matches', () => {

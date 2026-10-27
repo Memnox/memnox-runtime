@@ -1,4 +1,6 @@
-import { basename } from 'node:path';
+import { win32 } from 'node:path';
+
+import { WINDOWS } from './windows-exec';
 
 /**
  * What a shell was asked to do. `memnox run` sets this binary as `SHELL`, and an agent's
@@ -20,11 +22,23 @@ export interface ShellInvocation {
   mode: ShellMode;
   /** The line to gate and to hand on unchanged, for the `-c` form. */
   line?: string;
+  /** The words after the `-c` line, which the shell reads as `$0`, `$1` and on. */
+  positional?: string[];
   /** The command to gate and to spawn, for the `--` form. */
   argv?: string[];
   /** Flags seen before `-c`, so the real shell is invoked as it was asked to be. */
   flags: string[];
 }
+
+/** Options whose next word is their value rather than a script path. */
+const OPTIONS_WITH_VALUE: ReadonlySet<string> = new Set([
+  '-o',
+  '+o',
+  '-O',
+  '+O',
+  '--rcfile',
+  '--init-file',
+]);
 
 /** `-c`, and the combined forms a login or interactive shell arrives as: `-lc`, `-ic`. */
 function isCommandFlag(argument: string): boolean {
@@ -32,19 +46,30 @@ function isCommandFlag(argument: string): boolean {
 }
 
 export function parseShellInvocation(argv: readonly string[]): ShellInvocation {
-  const separator = argv.indexOf('--');
-  if (separator !== -1) {
-    return { mode: SHELL_MODE.ARGV, argv: [...argv.slice(separator + 1)], flags: [] };
-  }
-
   const flags: string[] = [];
-  for (const [index, argument] of argv.entries()) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index] ?? '';
+    // Only a `--` ahead of any -c ends the options, since after the line it is `$0`.
+    if (argument === '--') {
+      return { mode: SHELL_MODE.ARGV, argv: [...argv.slice(index + 1)], flags: [] };
+    }
     if (isCommandFlag(argument)) {
       const line = argv[index + 1];
       if (line === undefined) break;
-      return { mode: SHELL_MODE.COMMAND, line, flags };
+      return {
+        mode: SHELL_MODE.COMMAND,
+        line,
+        positional: [...argv.slice(index + 2)],
+        flags,
+      };
     }
-    if (argument.startsWith('-')) {
+    if (OPTIONS_WITH_VALUE.has(argument)) {
+      const value = argv[index + 1];
+      flags.push(...(value === undefined ? [argument] : [argument, value]));
+      index += 1;
+      continue;
+    }
+    if (argument.startsWith('-') || argument.startsWith('+')) {
       flags.push(argument);
       continue;
     }
@@ -55,6 +80,16 @@ export function parseShellInvocation(argv: readonly string[]): ShellInvocation {
   return { mode: SHELL_MODE.INTERACTIVE, flags };
 }
 
+/** The real shell's argv for the `-c` form, positionals kept so `$0` and `$1` survive. */
+export function commandShellArgs(invocation: ShellInvocation): string[] {
+  return [
+    ...invocation.flags,
+    '-c',
+    invocation.line ?? '',
+    ...(invocation.positional ?? []),
+  ];
+}
+
 export const REAL_SHELL_VAR = 'MEMNOX_REAL_SHELL';
 
 /**
@@ -62,19 +97,46 @@ export const REAL_SHELL_VAR = 'MEMNOX_REAL_SHELL';
  */
 export const FALLBACK_SHELL = '/bin/sh';
 
+/** Where Claude Code is told Git Bash lives on Windows, and so the shell its lines are written for. */
+export const GIT_BASH_VAR = 'CLAUDE_CODE_GIT_BASH_PATH';
+
+/** Git for Windows' default install, which is where Claude Code looks when nothing says otherwise. */
+export const WINDOWS_FALLBACK_SHELL = 'C:\\Program Files\\Git\\bin\\bash.exe';
+
 /**
  * Never this binary: `memnox run` overwrites `SHELL`,
  * so reading it back would exec the wrapper for ever.
  */
-export function realShell(env: NodeJS.ProcessEnv, self: string): string {
+export function realShell(
+  env: NodeJS.ProcessEnv,
+  self: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === WINDOWS) return realWindowsShell(env, self);
   for (const candidate of [env[REAL_SHELL_VAR], env['SHELL']]) {
     if (isOtherShell(candidate, self)) return candidate;
   }
   return FALLBACK_SHELL;
 }
 
+/**
+ * Git Bash, because the lines an agent sends are bash. An MSYS path such as the SHELL
+ * Git Bash exports is skipped, since Node on Windows cannot start one.
+ */
+function realWindowsShell(env: NodeJS.ProcessEnv, self: string): string {
+  for (const candidate of [env[REAL_SHELL_VAR], env[GIT_BASH_VAR], env['SHELL']]) {
+    if (isOtherShell(candidate, self) && !candidate.startsWith('/')) return candidate;
+  }
+  return WINDOWS_FALLBACK_SHELL;
+}
+
 function isOtherShell(candidate: string | undefined, self: string): candidate is string {
   return (
-    candidate !== undefined && candidate !== '' && basename(candidate) !== basename(self)
+    candidate !== undefined && candidate !== '' && stemOf(candidate) !== stemOf(self)
   );
+}
+
+/** The name without its directory or a Windows extension, so `memnox-shell.cmd` is still us. */
+function stemOf(path: string): string {
+  return win32.basename(path).replace(/\.(?:cmd|bat|exe|ps1)$/i, '');
 }

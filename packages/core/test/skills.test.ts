@@ -72,7 +72,7 @@ describe('what changed since somebody looked', () => {
     digest: 'd',
     reaches: [],
     acceptedAt: NOW,
-    acceptedBy: 'tresor',
+    acceptedBy: 'ada',
     ...over,
   });
 

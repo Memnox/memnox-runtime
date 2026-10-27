@@ -193,3 +193,52 @@ describe('a role rule now fires', () => {
     );
   });
 });
+
+/* An agent on a shared credential holds whatever every workflow needed; the rules have to
+   see the person it works for, so it never does what they may not. */
+describe('a principal rule now fires', () => {
+  const rule: Policy = {
+    name: 'only-a-dba-deletes',
+    match: { actions: ['mcp.*'], classes: ['destructive'], principals: ['!dba-*'] },
+    decision: {
+      effect: DECISION_EFFECT.DENY,
+      reason: 'the person this agent works for may not delete rows',
+      mode: POLICY_MODE.ENFORCE,
+    },
+  } as Policy;
+  const deletion = {
+    action: 'mcp.query',
+    target: 'support-db',
+    toolClass: 'destructive',
+  };
+
+  it('denies an agent working for somebody the rule does not name', () => {
+    const gate = new LocalGate([rule], {
+      agentName: 'claude-code',
+      principal: 'tier1-sam',
+    });
+    expect(gate.evaluate(deletion).effect).toBe(DECISION_EFFECT.DENY);
+  });
+
+  it('lets the same call through for the person who may make it', () => {
+    const gate = new LocalGate([rule], {
+      agentName: 'claude-code',
+      principal: 'dba-ana',
+    });
+    expect(gate.evaluate(deletion).effect).toBe(DECISION_EFFECT.ALLOW);
+  });
+
+  it('fails closed when nobody was named, since an unnamed person proves no authority', () => {
+    const gate = new LocalGate([rule], { agentName: 'claude-code' });
+    expect(gate.evaluate(deletion).effect).toBe(DECISION_EFFECT.DENY);
+  });
+
+  it('takes the person from the run, never from what the call claims', () => {
+    const gate = new LocalGate([rule], {
+      agentName: 'claude-code',
+      principal: 'tier1-sam',
+    });
+    const claimed = { ...deletion, principal: 'dba-ana' };
+    expect(gate.evaluate(claimed).effect).toBe(DECISION_EFFECT.DENY);
+  });
+});

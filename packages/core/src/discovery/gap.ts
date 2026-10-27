@@ -1,10 +1,7 @@
 import { matchesPattern } from '../policy/pattern-matcher';
 import type { Policy } from '../policy/policy';
-import { TOOL_EFFECT } from './discovery.constants';
-import { distinctTools } from './surface';
+import { capabilitiesOf } from './capabilities';
 import type { DiscoveryReport } from './discover';
-import { externalStateVerbs, verbAction } from '../verbs/verb-table';
-import { verbTableFor } from '../verbs/tables';
 
 /**
  * How much of what an agent can do has a rule about it: the closing line of the scan,
@@ -17,18 +14,7 @@ export interface Gap {
 
 /** Every action a rule could be written about, so "governed" is counted not guessed. */
 export function reachingActions(report: DiscoveryReport): string[] {
-  const tools = distinctTools(report.surfaces)
-    .filter(
-      (tool) => tool.effect !== TOOL_EFFECT.READ && tool.effect !== TOOL_EFFECT.UNKNOWN,
-    )
-    .map((tool) => `mcp.${tool.name}`);
-
-  const cliActions = report.authenticated.flatMap((cli) => {
-    const table = verbTableFor(cli.name);
-    if (table === null) return [];
-    return externalStateVerbs(table).map((verb) => verbAction(cli.name, verb));
-  });
-  return [...tools, ...cliActions];
+  return capabilitiesOf(report).map((capability) => capability.action);
 }
 
 /** The gap, counted rather than asserted: "governed" means a rule actually matches the action. */

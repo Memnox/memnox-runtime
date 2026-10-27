@@ -5,7 +5,7 @@ import { SKILL_FINDING_KIND, skillChangesFrom, skillRef } from '../src/sync/skil
 /**
  * A skill an agent wrote for itself, and whether a person ever learns of it.
  *
- * `VISION.md` `I.4` asks for a self-taught capability to be treated like a
+ * `VISION.md` section `17` asks for a self-taught capability to be treated like a
  * deployment. `memnox skills` has always found them and always printed them to
  * whoever was sitting at the machine — and nobody is sitting at the machine.
  */

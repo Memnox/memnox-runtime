@@ -9,6 +9,9 @@ import {
   type EventSink,
   type Finding,
   type SkillFinding,
+  loadOrCreateConfig,
+  UPLOAD_PATHS,
+  uploadKeyOf,
 } from '@memnox/core';
 
 import { readNames } from '../agents/names';
@@ -153,6 +156,12 @@ function stillOverlapping(
   return sent.filter((each) => Date.parse(each.at) >= from).slice(-MOST_REMEMBERED);
 }
 
+/** The machine's key when paths are to be sent hashed, and none when they go as written. */
+async function pathKeyFor(home: string): Promise<Buffer | null> {
+  const config = await loadOrCreateConfig(home);
+  return config.uploadPaths === UPLOAD_PATHS.HASHED ? uploadKeyOf(home) : null;
+}
+
 export async function pushEvents(
   home: string,
   account: Account,
@@ -170,7 +179,7 @@ export async function pushEvents(
   const events = read.filter((event) => !sent.has(event.id));
   if (events.length === 0) return NOTHING;
 
-  const { drafts, through } = fitting(events);
+  const { drafts, through } = fitting(events, await pathKeyFor(home));
   const result = await postBatch(account, drafts);
   if (result.outcome !== PUSH_OUTCOME.SENT) return result;
 

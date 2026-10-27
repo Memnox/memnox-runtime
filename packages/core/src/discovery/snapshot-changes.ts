@@ -11,6 +11,7 @@ import type {
   EnvironmentSnapshot,
   SnapshotAgent,
   SnapshotHarness,
+  SnapshotHook,
   SnapshotResource,
   SnapshotServer,
   SnapshotTool,
@@ -50,6 +51,7 @@ export function compareSnapshots(
     ...resourceChanges(before, after, causes),
     ...surfaceChanges(before, after, causes),
     ...harnessChanges(before, after),
+    ...hookChanges(before, after),
   ];
 }
 
@@ -314,6 +316,48 @@ function harnessMoved(
     });
   }
   return changes;
+}
+
+/**
+ * Hooks that arrived or went. Memnox's own are left out, since installing the seam is not
+ * drift, and a side kept before hooks were read compares as nothing rather than as empty.
+ */
+function hookChanges(
+  before: EnvironmentSnapshot,
+  after: EnvironmentSnapshot,
+): EnvironmentChange[] {
+  if (before.hooks === undefined || after.hooks === undefined) return [];
+  const had = new Set(before.hooks.map((hook) => hook.id));
+  const has = new Set(after.hooks.map((hook) => hook.id));
+  return [
+    ...after.hooks
+      .filter((hook) => !hook.own && !had.has(hook.id))
+      .map((hook) => ({
+        subject: CHANGE_SUBJECT.HOOK,
+        name: hook.program,
+        direction: CHANGE_DIRECTION.WIDENS,
+        detail: describeHook(hook),
+        grantedBy: hook.declaredIn,
+      })),
+    ...before.hooks
+      .filter((hook) => !hook.own && !has.has(hook.id))
+      .map((hook) => ({
+        subject: CHANGE_SUBJECT.HOOK,
+        name: hook.program,
+        direction: CHANGE_DIRECTION.NARROWS,
+        detail: `no longer runs on ${hook.host} ${hook.event}`,
+        grantedBy: hook.declaredIn,
+      })),
+  ];
+}
+
+/** "runs on claude-code PreToolUse · can stop a tool call · from ecc@ecc". */
+function describeHook(hook: SnapshotHook): string {
+  const parts = [`runs on ${hook.host} ${hook.event}`];
+  if (hook.gate) parts.push('can stop a tool call');
+  if (hook.feedsModel) parts.push('writes into what the model reads');
+  if (hook.plugin !== undefined) parts.push(`from ${hook.plugin}`);
+  return parts.join(' · ');
 }
 
 function newIn(now: readonly string[], was: readonly string[]): string[] {

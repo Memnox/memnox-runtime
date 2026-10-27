@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "name": "confirm",
+      "inputs": {
+        "subject": "apr_1",
+        "answer": "once",
+        "edited": null
+      },
+      "message": "memnox-confirm:v1:apr_1:once"
+    },
+    {
+      "name": "confirm-proposal",
+      "inputs": {
+        "subject": "prp_1",
+        "answer": "confirmed",
+        "edited": null
+      },
+      "message": "memnox-confirm:v1:prp_1:confirmed"
+    },
+    {
+      "name": "confirm-rewritten",
+      "inputs": {
+        "subject": "prp_2",
+        "answer": "confirmed",
+        "edited": "Shipped: the deploy is out.\nThanks, Bo 🎉"
+      },
+      "message": "memnox-confirm:v2:prp_2:confirmed:Shipped: the deploy is out.\nThanks, Bo 🎉"
+    },
+    {
+      "name": "confirm-rewritten-empty",
+      "inputs": {
+        "subject": "prp_3",
+        "answer": "confirmed",
+        "edited": ""
+      },
+      "message": "memnox-confirm:v2:prp_3:confirmed:"
+    },
+    {
+      "name": "confirm-readdressed",
+      "inputs": {
+        "subject": "prp_4",
+        "answer": "confirmed",
+        "edited": "Shipped: the deploy is out.\nThanks, Bo 🎉",
+        "editedTo": "moise@memnox.com,bo@acme.test"
+      },
+      "message": "memnox-confirm:v3:prp_4:confirmed:moise@memnox.com,bo@acme.test:Shipped: the deploy is out.\nThanks, Bo 🎉"
+    },
+    {
+      "name": "pair",
+      "inputs": {
+        "pairingId": "pr_1",
+        "fingerprint": "fp_1"
+      },
+      "message": "memnox-pair:v1:pr_1:fp_1"
+    },
+    {
+      "name": "grant",
+      "inputs": {
+        "deviceId": "dev_1",
+        "capability": "mac"
+      },
+      "message": "memnox-grant:v1:dev_1:mac"
+    },
+    {
+      "name": "drive",
+      "inputs": {
+        "deviceId": "dev_1",
+        "until": "2026-10-17T10:15:00.000Z"
+      },
+      "message": "memnox-drive:v1:dev_1:2026-10-17T10:15:00.000Z"
+    },
+    {
+      "name": "follow-up",
+      "inputs": {
+        "sessionId": "ses_1",
+        "words": "run the tests: then push"
+      },
+      "message": "memnox-follow-up:v1:ses_1:run the tests: then push"
+    },
+    {
+      "name": "device-proof",
+      "inputs": {
+        "handshakeHash": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+      },
+      "message": "memnox-device:v1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+    }
+  ],
+  "signature": {
+    "point": "BMI5mMngh3KqxEfAfXuQwf30QgFuWXZi1VIy1QiEMSMlLJNB9jw8f6Db1OqegwLdAUJnz4dT8SN9VZfuNkSqJ6M=",
+    "message": "memnox-confirm:v1:apr_vectors:once",
+    "der": "MEUCIQDeeejRtCXDvBnoWXha6Z4cfVBkzLV3bENhM9jKSmLBmAIgGT08sZyAejqhwnW2F8thxDwX4z+gCYUPjxAAhNDysNA=",
+    "p1363": "3nno0bQlw7wZ6Fl4WumeHH1QZMy1d2xDYTPYykpiwZgZPTyxnIB6OqHCdbYXy2HEPBfjP6AJhQ+PEACE0PKw0A=="
+  },
+  "values": {
+    "methods": [
+      "evaluate",
+      "hold",
+      "record",
+      "status",
+      "ping",
+      "subscribe",
+      "waiting",
+      "confirm",
+      "register-key",
+      "ask",
+      "cancel",
+      "locate",
+      "brief",
+      "warm",
+      "vocabulary",
+      "session-view",
+      "sessions-list",
+      "delivered",
+      "trace",
+      "voice-agents",
+      "choose-voice-agent",
+      "learn-words",
+      "seen",
+      "files-list",
+      "person",
+      "person-sign-in",
+      "person-sign-out",
+      "connections-list",
+      "connections-sign-in",
+      "connections-sign-out",
+      "toolkits-search",
+      "machine",
+      "machine-sign-in",
+      "machine-sign-out",
+      "polish",
+      "polish-warm",
+      "follow-up",
+      "pair-begin",
+      "pair-pending",
+      "pair-accept",
+      "pair-decline",
+      "devices-list",
+      "device-revoke",
+      "device-grant",
+      "device-ungrant",
+      "voice-choice",
+      "drive",
+      "voice-release",
+      "speak",
+      "home",
+      "hand-over",
+      "intercept",
+      "intercept-acted",
+      "intercept-ran",
+      "rule"
+    ],
+    "events": [
+      "held",
+      "proposal",
+      "paused",
+      "settled",
+      "show",
+      "notice"
+    ],
+    "askEnds": [
+      "done",
+      "limited",
+      "failed",
+      "cancelled"
+    ],
+    "holdAnswers": [
+      "once",
+      "session",
+      "deny",
+      "edit"
+    ],
+    "proposalAnswers": [
+      "confirmed",
+      "declined"
+    ],
+    "followUpOutcomes": [
+      "queued",
+      "typed",
+      "later"
+    ],
+    "capabilities": [
+      "see",
+      "ask",
+      "answer",
+      "steer",
+      "rules",
+      "rewind",
+      "mac"
+    ],
+    "deviceKinds": [
+      "mac",
+      "phone",
+      "desktop"
+    ]
+  },
+  "frames": [
+    {
+      "name": "request",
+      "frame": "{\"id\":1,\"method\":\"ping\"}\n"
+    },
+    {
+      "name": "response",
+      "frame": "{\"id\":1,\"ok\":true,\"version\":\"0.0.0\"}\n"
+    }
+  ]
+}

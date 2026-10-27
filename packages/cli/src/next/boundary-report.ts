@@ -40,7 +40,7 @@ export interface BoundaryOptions {
 /** Enough of a band to recognise it, and never enough to scroll. */
 const BAND_SHOWN = 12;
 
-const DEFAULT_AGENT = 'claude-code';
+export const DEFAULT_AGENT = 'claude-code';
 
 /** True when the flags asked what an agent may do rather than what to hand over next. */
 export function wantsBoundary(options: BoundaryOptions): boolean {
@@ -62,7 +62,7 @@ export async function renderBoundary(
   }
   renderWhatDidNotLoad(context, rules);
 
-  const candidates = interceptedBinaries().flatMap((binary) => actionsForCli(binary));
+  const candidates = everyCandidate();
   if (options.roles === true) {
     await renderWorkforce(context, rules.policies, candidates, options.json === true);
     return;
@@ -78,14 +78,12 @@ interface AgentBoundaryInput {
 
 function renderAgentBoundary(context: CliContext, input: AgentBoundaryInput): void {
   const { role, json } = input.options;
-  const name = input.options.agent ?? DEFAULT_AGENT;
-  // Evaluated as the job, so a `roles:` rule fires rather than the product's own rules.
-  const gate = new LocalGate([...input.policies], {
-    agentName: name,
-    ...(role === undefined ? {} : { agentRole: role }),
+  const { boundary, radius } = agentBoundary({
+    policies: input.policies,
+    agent: input.options.agent ?? DEFAULT_AGENT,
+    candidates: input.candidates,
+    ...(role === undefined ? {} : { role }),
   });
-  const boundary = boundaryThrough(gate, role ?? name, input.candidates);
-  const radius = blastRadiusOf(boundary, credentialsIn(boundary));
 
   if (json === true) {
     context.out.json({
@@ -97,6 +95,37 @@ function renderAgentBoundary(context: CliContext, input: AgentBoundaryInput): vo
     return;
   }
   render(context, boundary, radius, role);
+}
+
+interface AgentBoundaryOf {
+  policies: readonly Policy[];
+  agent: string;
+  role?: string;
+  /** Every action a known CLI could take, unless a caller narrows it. */
+  candidates?: readonly CandidateAction[];
+}
+
+/** What one agent would do on its own, wait for, and never do, and how far a mistake reaches. */
+export function agentBoundary(input: AgentBoundaryOf): {
+  boundary: Boundary;
+  radius: BlastRadius;
+} {
+  const { role } = input;
+  // Evaluated as the job, so a `roles:` rule fires rather than the product's own rules.
+  const gate = new LocalGate([...input.policies], {
+    agentName: input.agent,
+    ...(role === undefined ? {} : { agentRole: role }),
+  });
+  const boundary = boundaryThrough(
+    gate,
+    role ?? input.agent,
+    input.candidates ?? everyCandidate(),
+  );
+  return { boundary, radius: blastRadiusOf(boundary, credentialsIn(boundary)) };
+}
+
+function everyCandidate(): CandidateAction[] {
+  return interceptedBinaries().flatMap((binary) => actionsForCli(binary));
 }
 
 /** Every candidate asked of the engine, so the screen is what will happen. */

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ACTOR_TYPE, DECISION_EFFECT, EVENT_SURFACE, TOOL_CLASS } from '@memnox/core';
+import {
+  ACTOR_TYPE,
+  DECISION_EFFECT,
+  ENFORCEMENT_MODE,
+  EVENT_SURFACE,
+  TOOL_CLASS,
+} from '@memnox/core';
 import { commandEventFor } from '../src/record';
 import type { InterceptOutcome } from '../src/interceptor';
 
@@ -33,6 +39,23 @@ describe('the row behind why, timeline and trace', () => {
     expect(event.actorType).toBe(ACTOR_TYPE.AGENT);
   });
 
+  /* Signals were found by the gate and dropped before the row, so `why` could name the rule
+     and never which part of the context it was written about. */
+  it('carries what the gate found and who the agent worked for', () => {
+    const event = commandEventFor({
+      outcome: outcome({
+        signals: ['person:only-a-dba-deletes'],
+        principal: 'tier1-sam',
+      }),
+      effect: DECISION_EFFECT.DENY,
+      reason: 'no',
+      at: AT,
+    });
+
+    expect(event.signals).toEqual(['person:only-a-dba-deletes']);
+    expect(event.principal).toBe('tier1-sam');
+  });
+
   /* An argument list is where a secret would be, so the row carries a digest of it and
      the arguments themselves never reach the database. */
   it('carries a digest of the arguments and never the arguments', () => {
@@ -45,6 +68,36 @@ describe('the row behind why, timeline and trace', () => {
 
     expect(event.argsDigest).toBe('abc123');
     expect(JSON.stringify(event)).not.toContain('sk_live');
+  });
+
+  /* Every row said enforce whatever the machine was in, so a deny observe had let through
+     read as a deny that stopped something. */
+  it('records the mode it was ruled under and what enforce would have said', () => {
+    const event = commandEventFor({
+      outcome: outcome({
+        allowed: true,
+        mode: ENFORCEMENT_MODE.OBSERVE,
+        shadowEffect: DECISION_EFFECT.DENY,
+      }),
+      effect: DECISION_EFFECT.ALLOW,
+      reason: 'payments is frozen',
+      at: AT,
+    });
+
+    expect(event.mode).toBe(ENFORCEMENT_MODE.OBSERVE);
+    expect(event.shadowEffect).toBe(DECISION_EFFECT.DENY);
+  });
+
+  it('records enforce when the outcome names no mode, never a softer one', () => {
+    const event = commandEventFor({
+      outcome: outcome(),
+      effect: DECISION_EFFECT.DENY,
+      reason: 'no',
+      at: AT,
+    });
+
+    expect(event.mode).toBe(ENFORCEMENT_MODE.ENFORCE);
+    expect(event.shadowEffect).toBeUndefined();
   });
 
   it('records git under its own surface, so a timeline can be read by it', () => {

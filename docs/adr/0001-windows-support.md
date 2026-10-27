@@ -1,6 +1,6 @@
 # ADR 0001 — Windows support is WSL-only for 1.0
 
-**Status:** accepted
+**Status:** superseded by [ADR 0003](0003-native-windows.md), which keeps WSL and adds native Windows
 **Date:** 2026-09-05
 **Task:** OSS-8.5
 

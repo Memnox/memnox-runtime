@@ -31,6 +31,7 @@ import {
   type CallAuthorizer,
 } from './call-authorizer';
 import { DuplicateWorkAuthorizer } from './duplicate-work';
+import type { GateSource } from './live-gate';
 import { FirewallSession, type FirewallChannel } from './firewall-session';
 import { LineBuffer } from './json-rpc';
 import { ProbationAuthorizer, type ProbationLookup } from './probation-authorizer';
@@ -56,6 +57,10 @@ export interface FirewallOptions {
   sessionId?: string;
   /** Loading is the caller's job because it reads files; see loadLocalGate. */
   gate?: LocalGate;
+  /** Read again on every call, so a pause or a pulled bundle bites at once; wins over `gate`. */
+  gates?: GateSource;
+  /** The wrapped server's environment, which may name the database it reaches. */
+  env?: NodeJS.ProcessEnv;
   log?: (message: string) => void;
   /** The MCP client this wraps, for the row. Never a credential. */
   agent?: string;
@@ -249,8 +254,8 @@ export class McpFirewall {
 
   /** Whether any rule speaks to a call of this tool, under either name the seams use. */
   private ruled(tool: PinnedTool): boolean {
-    const gate = this.options.gate;
-    if (gate === undefined) return false;
+    const gate = this.options.gates?.latest() ?? this.options.gate;
+    if (gate === undefined || gate === null) return false;
     return [`mcp.${tool.name}`, `mcp.${this.options.serverName}.${tool.name}`].some(
       (action) =>
         gate.evaluate({ action, target: this.options.serverName, toolClass: tool.class })
@@ -381,17 +386,23 @@ export class McpFirewall {
     return stopped === undefined ? chain : new StoppedAuthorizer(chain, stopped);
   }
 
+  private buildRules(): CallAuthorizer {
+    const gate = this.options.gates ?? this.options.gate;
+    if (gate === undefined) return new UngovernedAuthorizer();
+    return new LocalGateAuthorizer(
+      gate,
+      this.options.serverName,
+      this.options.sessionId,
+      this.manifest,
+      {
+        command: this.options.command,
+        ...(this.options.env === undefined ? {} : { env: this.options.env }),
+      },
+    );
+  }
+
   private buildChain(): CallAuthorizer {
-    const gate = this.options.gate;
-    const rules =
-      gate === undefined
-        ? new UngovernedAuthorizer()
-        : new LocalGateAuthorizer(
-            gate,
-            this.options.serverName,
-            this.options.sessionId,
-            this.manifest,
-          );
+    const rules = this.buildRules();
     const probation = this.options.probation;
     const judged =
       probation === undefined

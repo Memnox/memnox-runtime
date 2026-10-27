@@ -35,7 +35,7 @@ export class ProbationAuthorizer implements CallAuthorizer {
       { probation },
       classifyTool({ name: call.name }).class,
     );
-    if (asked === null) return verdict;
+    if (asked === null || asked.checkpointed === true) return verdict;
     return {
       effect: DECISION_EFFECT.ASK,
       reason: asked.reason,

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import {
   ownProcessEnv,
   CloudLeases,
@@ -20,8 +20,9 @@ import {
   type HoldService,
   type LeaseHolder,
   type WrittenRegion,
+  workRefsAt,
 } from '@memnox/core';
-import { remoteIdentityOf } from './git-branch';
+import { projectIdentityOf, remoteIdentityOf } from './git-branch';
 import { HookAuthorizer } from './hook-authorizer';
 import { readHookConfig } from './hook-config';
 import { loadHookGate } from './hook-gate-loader';
@@ -90,19 +91,32 @@ export interface UnattendedLeases {
 }
 
 /**
- * The register, when there is a repository to have one about. Undefined outside a
- * checkout, because a lease is repository relative, and an empty register never refuses.
+ * The register, when there is a project to have one about. Outside a checkout only an
+ * editor's hook has one, since a project root there is a guess a shell command should not
+ * be held up by; an empty register never refuses.
  */
 export function buildLeases(
   cwd: string = process.cwd(),
   unattended?: UnattendedLeases,
 ): SeamLeases | undefined {
   const root = repositoryRootOf(cwd);
-  if (root === null) return undefined;
+  if (root === null) {
+    if (unattended === undefined) return undefined;
+    const project = projectRootOf(cwd, homedir());
+    return project === null ? undefined : localLeases(project, unattended);
+  }
   // The daemon watches the repositories seams have
   // seen, so an agent with no hooks is seen too.
   rememberRepository(homedir(), root);
+  return checkoutLeases(root, unattended);
+}
 
+/** Both registers, the workspace's matched by the checkout's remote. */
+function checkoutLeases(
+  root: string,
+  unattended: UnattendedLeases | undefined,
+): SeamLeases {
+  const remote = remoteIdentityOf(root);
   return {
     gate: new LeaseGate({
       registry: new LeaseRegistry(homedir()),
@@ -112,10 +126,13 @@ export function buildLeases(
         globalThis.fetch,
         SHARED_LEASE_TIMEOUT_MS,
         // Named by its remote, so two clones of one project meet and two projects named alike do not.
-        remoteIdentityOf(root),
+        remote,
+        () => workRefsAt(root),
       ),
       // This machine's register serves every checkout on it, so each lease says which.
       repository: root,
+      // And which project, so two worktrees of one repository meet here as they do in the workspace.
+      ...withProject(projectIdentityOf(root, remote)),
       ...(unattended === undefined
         ? { prompt: new TtyLeasePrompt() }
         : { ceilingMs: unattended.waitMs }),
@@ -127,6 +144,60 @@ export function buildLeases(
     repositoryRoot: root,
     isDirectory: (path: string) => isDirectoryIn(root, path),
   };
+}
+
+/**
+ * This machine's register alone: a folder with no remote has nothing that names it on
+ * another machine, and matching two by a relative path would hold up strangers.
+ */
+function localLeases(root: string, unattended: UnattendedLeases): SeamLeases {
+  return {
+    gate: new LeaseGate({
+      registry: new LeaseRegistry(homedir()),
+      repository: root,
+      ceilingMs: unattended.waitMs,
+      ...(unattended.region === undefined ? {} : { region: unattended.region }),
+      now: () => new Date().toISOString(),
+    }),
+    holder: holderFor(unattended),
+    repositoryRoot: root,
+    isDirectory: (path: string) => isDirectoryIn(root, path),
+  };
+}
+
+/** Files that say a folder is a project, which is what two agents in it share. */
+const PROJECT_MARKERS: readonly string[] = [
+  'package.json',
+  'pyproject.toml',
+  'Cargo.toml',
+  'go.mod',
+  'Gemfile',
+  'pom.xml',
+  'build.gradle',
+  'composer.json',
+  'mix.exs',
+  'deno.json',
+];
+
+/**
+ * The outermost folder above `cwd` that is a project, below the home folder, so a package
+ * inside a workspace and the workspace itself land on one root. Null where none is.
+ */
+export function projectRootOf(cwd: string, home: string): string | null {
+  const stop = resolve(home);
+  let found: string | null = null;
+  let at = resolve(cwd);
+  // Only below home: a marker in home itself would make every folder one project.
+  while (at !== stop && at.startsWith(`${stop}/`)) {
+    const here = at;
+    if (PROJECT_MARKERS.some((marker) => existsSync(join(here, marker)))) found = here;
+    at = dirname(at);
+  }
+  return found;
+}
+
+function withProject(project: string | undefined): { project?: string } {
+  return project === undefined ? {} : { project };
 }
 
 /**

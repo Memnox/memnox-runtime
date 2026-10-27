@@ -13,9 +13,13 @@ import {
   type DecisionEffect,
   type EventQuery,
   type MemnoxEvent,
+  helperOf,
+  dropOldRecords,
+  type RecordsDropped,
 } from '@memnox/core';
 
 import type { CliContext } from '../cli-context';
+import type { FlowRow } from '../flow';
 import { DAY_MS, since } from '../duration';
 import { withEvents } from '../event-store';
 import { positiveInteger } from '../positive-integer';
@@ -59,9 +63,15 @@ function cells(context: CliContext, event: MemnoxEvent): string[] {
     timeOfDay(event.at),
     `${style.symbol(event.effect)}${style.effect(event.effect, event.effect)}`,
     // "preview" and "production" are the words that make a deploy line readable.
-    `${what}${verbNote(event.operation)}`,
+    `${what}${verbNote(event.operation)}${helperNote(context, event)}`,
     outcome,
   ];
+}
+
+/** Which helper did it, since a session's rows are otherwise all filed under its agent. */
+function helperNote(context: CliContext, event: MemnoxEvent): string {
+  if (event.subagent === undefined) return '';
+  return context.style.dim(`  ${helperOf(event.subagent, event.subagentType)}`);
 }
 
 function render(context: CliContext, events: readonly MemnoxEvent[]): void {
@@ -109,7 +119,52 @@ export function registerTimelineCommand(
     .option('--limit <n>', 'how many actions', String(DEFAULT_LIMIT))
     .option('--export <format>', 'jsonl | json | bundle')
     .option('--out <path>', 'write the bundle here instead of to the terminal')
-    .action(async (options: TimelineOptions) => runTimeline(context, home, now, options));
+    .option('--follow', 'keep printing each action as it happens, until Ctrl+C')
+    .action(async (options: TimelineOptions) =>
+      options.follow === true
+        ? followTimeline(context, { home, now }, buildFilter(options, now()))
+        : runTimeline(context, home, now, options),
+    );
+}
+
+/** How often a followed ledger is read again: often enough to feel live, cheap enough to leave open. */
+const FOLLOW_EVERY_MS = 1_500;
+
+interface FollowDeps {
+  home: () => string;
+  now: () => Date;
+  wait?: (ms: number) => Promise<void>;
+  /** How many reads before stopping; a test gives one, a person gives none and presses Ctrl+C. */
+  rounds?: number;
+}
+
+/**
+ * Every action as it lands, one line each with its agent and session, for a person with no app
+ * open who still wants to watch an agent work, on a server over SSH above all.
+ */
+export async function followTimeline(
+  context: CliContext,
+  deps: FollowDeps,
+  filter: EventQuery,
+): Promise<void> {
+  const { flow } = context;
+  flow.open('memnox timeline --follow');
+  flow.aside('Following this machine. Ctrl+C stops.');
+  const seen = new Set<string>();
+  const wait = deps.wait ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
+  for (let round = 0; deps.rounds === undefined || round < deps.rounds; round++) {
+    const events = await withEvents(deps.home(), (store) => store.query(filter));
+    for (const event of events) {
+      if (seen.has(event.id)) continue;
+      seen.add(event.id);
+      flow.aside(
+        `${event.agent}  ${cells(context, event)
+          .filter((cell) => cell !== '')
+          .join('  ')}`,
+      );
+    }
+    if (deps.rounds === undefined || round + 1 < deps.rounds) await wait(FOLLOW_EVERY_MS);
+  }
 }
 
 interface TimelineOptions {
@@ -120,6 +175,7 @@ interface TimelineOptions {
   limit: string;
   export?: string;
   out?: string;
+  follow?: boolean;
 }
 
 /** What the agents on this machine actually did, in order, or exported for a reader. */
@@ -199,19 +255,21 @@ async function runPurge(
 ): Promise<void> {
   const { flow } = context;
   flow.open('memnox purge');
-  const config = await loadOrCreateConfig(home());
-  const days =
-    options.days === undefined
-      ? config.retentionDays
-      : positiveInteger(options.days, '--days');
-
+  const days = await retentionDaysOf(home(), options.days);
   const cutoff = new Date(now().getTime() - days * DAY_MS).toISOString();
+  const records = await dropOldRecords({
+    home: home(),
+    cutoff,
+    now: now().toISOString(),
+    ...(options.dryRun === true ? { dryRun: true } : {}),
+  });
   await withEvents(home(), async (store) => {
     if (options.dryRun === true) {
       const doomed = await store.query({ until: cutoff, withConfig: true });
       flow.rows('Would drop', [
         { label: 'older than', value: `${days} days, before ${cutoff}` },
         { label: 'events', value: String(doomed.length) },
+        ...recordRows(records),
       ]);
       flow.close('Nothing was deleted.');
       flow.hint('Run it without --dry-run to drop them.');
@@ -221,9 +279,24 @@ async function runPurge(
     flow.rows('Dropped', [
       { label: 'older than', value: `${days} days, before ${cutoff}` },
       { label: 'events', value: String(dropped) },
+      ...recordRows(records),
     ]);
     flow.close(`${dropped} event(s) older than ${days} days dropped.`);
   });
+}
+
+/** The window asked for, or the one configured, refused unless it is a whole number of days. */
+async function retentionDaysOf(home: string, given: string | undefined): Promise<number> {
+  if (given !== undefined) return positiveInteger(given, '--days');
+  const config = await loadOrCreateConfig(home);
+  return config.retentionDays;
+}
+
+/** The records beside the ledger, one row per kind that had any to drop. */
+function recordRows(records: RecordsDropped): FlowRow[] {
+  return Object.entries(records)
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => ({ label: kind, value: String(count) }));
 }
 
 /** The verb table's own note, so a timeline says which kind of deploy it was. */

@@ -8,10 +8,13 @@
 **What this plan is built toward.** `VISION.md` is the vision all three repositories share,
 written as a strategy note rather than as an architecture, over one move: do not sell protection,
 sell **the ability to safely increase agent autonomy**. The category it names is a **control
-plane for autonomous work**. Part I is the always-on case in twenty sections, Part II the local
-wedge in ten. Cite a section as `I.NN` or `II.NN` when a milestone is answering to one: `I.8` two
-agents on one file, `I.9` agent rollback, `II.2` effective capability, `II.9` cross-agent
-protection.
+plane for autonomous work**, in thirty-three numbered sections. Cite a section by its own number
+when a milestone is answering to one: `9` two agents on one file, `20` agent rollback, `23`
+effective capability, `24` one unified agent layer.
+
+**The `I.NN` and `II.NN` scheme is dead.** It promised a Part I and a Part II that `VISION.md`
+has never had. Any left in a comment or a test points at nothing, and is rewritten to the section
+it answers the next time that line is touched.
 
 **The sixty-five pains and the `§01` to `§12` phase index went with the previous vision.** A
 `2.NN` or `§NN` citation left in this plan, in a source comment or in a test resolves to nothing
@@ -314,7 +317,7 @@ Memnox refuses to let an agent change it, committing included.
 
 ---
 
-## M9 — Recovery and pre-flight (≈ 1.5 weeks) — vision `I.9`
+## M9 — Recovery and pre-flight (≈ 1.5 weeks) — vision `20`
 
 **Milestone demo:** an agent wrecks an uncommitted working tree; `memnox rewind` puts it
 back in one command and the wreckage is still reachable. `memnox check "deploy payments"`
@@ -353,7 +356,7 @@ Slack reader here would mean a token on every laptop and a demo instead of a pro
 
 ---
 
-## M10 — Leases and the broker (≈ 1.5 weeks) — vision `I.8`, `II.9`
+## M10 — Leases and the broker (≈ 1.5 weeks) — vision `9`, `24`
 
 **Milestone demo:** Cursor and Claude Code run in one repository. The second one to write
 `src/billing` is told who holds it and what they have been doing, waits, and proceeds when
@@ -377,7 +380,7 @@ the first session ends. `memnox lock --list` shows both from a third terminal.
 | OSS-10.4 | Reads never wait | Only write-class and destructive actions take or wait on a lease | Conformance row per class | 10.3, 5.11 | S |
 | OSS-10.5 | Reclaim a dead owner | A lease whose pid is gone is reclaimable rather than waited on | Kill a holder, next writer proceeds | 10.2 | M |
 | OSS-10.6 | Take at the seam | The interceptor takes a lease on the paths a command writes, once per session | One session writing ten files takes one lease, not ten | 10.2, 5.1 | M |
-| OSS-10.7 | The held prompt | Names the holder, how long, and what it has done — read from the ledger, not guessed | Matches the `I.8` block | 10.6, 6.5 | M |
+| OSS-10.7 | The held prompt | Names the holder, how long, and what it has done — read from the ledger, not guessed | Matches the section `9` block | 10.6, 6.5 | M |
 | OSS-10.8 | Wait, take, refuse | `[w]` bounded wait, `[t]` recorded override, `[d]` refuse; timeout is a refusal naming the holder | Race test: two writers, first wins, second waits then proceeds | 10.7, 9.9 | L |
 | OSS-10.9 | `memnox lock` | `--list`, `<path> --for <window>`, `--release <id>`; a third terminal sees both | Manual two-agent run | 10.2 | M |
 | OSS-10.10 | Release on session end | Session end releases its leases; `memnox uninstall` leaves none behind | No lease survives its session in the fixture | 10.2, 7.2 | S |
@@ -399,22 +402,28 @@ would otherwise be a hang.
 
 ## What the vision asked for, and where it is
 
-`VISION.md` is thirty sections. These are the ones with a surface, so the next person
+`VISION.md` is thirty-three sections. These are the ones with a surface, so the next person
 does not go looking for something that is not there.
 
 | Section | Where |
 |---|---|
-| `I.3` circuit breaker | `core/session/breaker.ts`, held via `core/session/pause.ts`; the daemon counts outcomes on `RECORD`. `memnox paused` / `memnox resume`. Error loop, no progress, action explosion, scope drift and a reported-spend ceiling. The flat ceilings stay in `core/daemon/limits.ts`. |
-| `I.4` skill quarantine | `core/discovery/skills.ts`, `memnox skills`. A skill whose reach grew since it was accepted is held. |
-| `I.6` progressive autonomy, `I.16` what to automate next, `I.20` the primary screen | `core/session/autonomy.ts`, `memnox next`. |
-| `I.7` role-based authority | `policy.match.roles` was already parsed and matched and nothing ever set the field. `memnox run --role`, `MEMNOX_AGENT_ROLE`. |
-| `I.8` two agents on one file | `core/coordination`, `memnox lock`. |
-| `I.10` black box | `timeline`, `why`, `trace`, and `memnox claims` for what was said against what was recorded. |
-| `I.12` grouped approval | `core/gate/grouping.ts`; `memnox approvals` groups by default, `approve --group`. |
-| `I.13` autonomy budget | `core/session/budget.ts`, `memnox budget`, enforced in the daemon. |
-| `I.15` daily agent CFO | `core/session/operations.ts`, `memnox report`. |
-| `I.1`, `I.2`, `I.5`, `I.14` autopilot and blast radius | `core/session/autopilot.ts`, rendered by `cli/next/boundary-report.ts` under `memnox next --agent`. |
-| `I.3` scope drift, and the task everything compares against | `core/session/session-task.ts`; `memnox run --task/--paths/--expect`. |
+| `15` circuit breaker | `core/session/breaker.ts`, held via `core/session/pause.ts`; the daemon counts outcomes on `RECORD`. `memnox paused` / `memnox resume`. Error loop, no progress, action explosion, scope drift and a reported-spend ceiling. The flat ceilings stay in `core/daemon/limits.ts`. |
+| `17` capability drift, as skill quarantine | `core/discovery/skills.ts`, `memnox skills`. A skill whose reach grew since it was accepted is held. |
+| `13` progressive autonomy, `21` what to automate next and the primary screen | `core/session/autonomy.ts`, `memnox next`. |
+| `10` the agent workforce, as role-based authority | `policy.match.roles` was already parsed and matched and nothing ever set the field. `memnox run --role`, `MEMNOX_AGENT_ROLE`. |
+| `9` two agents on one file | `core/coordination`, `memnox lock`. |
+| `18` black box, `19` `memnox why` | `timeline`, `why`, `trace`, and `memnox claims` for what was said against what was recorded. |
+| grouped approval, which no section of the current vision names | `core/gate/grouping.ts`; `memnox approvals` groups by default, `approve --group`. |
+| `16` agent budgets | `core/session/budget.ts`, `memnox budget`, enforced in the daemon. |
+| the daily report, which no section of the current vision names | `core/session/operations.ts`, `memnox report`. |
+| `14` autopilot, and blast radius | `core/session/autopilot.ts`, rendered by `cli/next/boundary-report.ts` under `memnox next --agent`. |
+| `14` autopilot that acts | `core/session/earned.ts`, run by the keeper in `cli/keeper/keep-autopilot.ts` when `autopilot = true`; grants per agent allowances in `~/.memnox/earned-allowances.json` for seven days, any refusal takes one back. `memnox autopilot` lists and revokes. |
+| `15` scope drift, and the task everything compares against | `core/session/session-task.ts`; `memnox run --task/--paths/--expect`. |
+| `15` circuit breaker, as narrowing rather than stopping | `core/session/strain.ts`, applied in `LocalGate`. Three failures nothing has got past and changes outside the machine, and deletes, ask first; local work goes on. |
+| `13` progressive autonomy, as a question kept for later | `PendingApprovals.park` and `RoutedHoldPrompt`. Unanswered is parked for sixteen hours, the agent carries on, and a later yes lets its retry through. |
+| `18` black box, as one goal over many sessions | `core/session/mission.ts`, `memnox mission`. Sessions join by `--mission`, by inheritance, or by working in the mission's repository and worktrees; `mission show` is the screen for coming back. |
+| `21` the primary screen, reached by a person away | `cli/src/daemon/waiting-feed.ts`. Stopped, struggling and finished while nobody answered, beside every held call, waking a paired phone. |
+| `23` effective capability, as the desktop and the model that approves | `core/discovery/desktop.ts`: a server that both sees the screen and presses keys is a `desktop` surface, which `explain` reports as held by no seam. `APPROVAL_STATE.MODEL_REVIEWED` for Claude Code's `auto` mode. Both are risk rules in `docs/risk-bands.md`. |
 
 **Three rules these all had to obey, and they are worth keeping.**
 
@@ -608,11 +617,92 @@ never a config the agent cannot load. `manageable()` runs the same rewrite as a
 dry run before anybody is asked a question, so an unsupported config is found out
 at the top of the flow rather than after two answers.
 
+**What a desk-driving harness taught, without naming one.** Chat-style harnesses now
+run Claude Code and Codex as children with the permission mode on the command line, a
+model answering the prompt under "approve for me", routines that start turns with
+nobody present, and a bundled driver that clicks and types into any window on the Mac.
+Three generic facts came out of reading one, and no detector did: a server that both
+sees the screen and presses keys is a `desktop` surface and `explain` says no seam holds
+it, since nothing here sits between an MCP tool and the platform's input APIs; Claude
+Code's `auto` mode is `model-reviewed`, a posture of its own, because a model deciding
+what a person would have been asked is neither asking nor acting alone; and a hook in
+user settings is not in force under `--setting-sources project`, which is why
+`protect --project-hook` writes it into the repository's own `settings.local.json` as
+well. No product is named in the code, because a surface read off
+tool names covers the next harness too and a kind keyed to one product covers only it.
+
 **What rendering the boundary found.** The generated baseline's git rule was described
 as "force-pushing, and hard resets" and matched `git.push`, `git.reset`, `git.clean` —
 so it denied every ordinary push and permitted `git push --force`, which is the whole
 point inverted. `domains.ts` now names what the verb table actually produces, and
 `domains.test.ts` asserts every destructive git verb is covered.
+
+**One DELETE, two right answers.** The same statement is routine from an agent working
+for a DBA and a breach from a support assistant whose person may only read, and an agent
+on a shared credential holds whatever every workflow on it needed. Two fields closed that.
+`principal` was parsed, matched by `principals:` and set by nothing, the same gap `roles`
+had; `memnox run --for` sets it, `LocalGate` stamps it over whatever a call claims, and
+self-protection refuses an agent that sets or clears its own identity variables, because
+naming whose authority it holds is the one thing an agent must never do for itself. And
+novelty for an MCP call was keyed by the tool's name, so a thousand reads through `query`
+vouched for its first DELETE. `mcpNovelty` keys on what the call was handed where that
+differs from the name, so the first change asks, and the first DELETE with no WHERE asks
+again after any number of bounded ones. The plain key is kept, so nothing seen before is
+forgotten.
+
+**The context has to survive the decision.** The gate already knew which rules matched,
+whether the call sat inside the task and what noticing saw, and dropped all of it before
+the row, so `why` could quote a rule and never say which part of the context it was
+written about. Every row now keeps `signals`, the gate adds one per agreeing rule naming
+its part (`person:`, `agent:`, `intent:`, `systems:`) plus `scope:`, and
+`ledger/action-context.ts` reads a row back into person, agent, intent, tools, systems
+and history with the part that decided marked. Empty and absent differ on purpose: empty
+is a gate that found nothing, absent is a row older than the column. The proxy had its
+own copy of the old gap, classing a row by the tool's name after ruling on its statement,
+and taking neither `--role` nor `--for`. What it does not do is read the agent's
+reasoning: that takes a model on the enforcement path, and matching words in text the
+agent writes is a check the agent can steer.
+
+**A collision is a conversation between two people, so it travels like one.** A write held
+off by another machine's lease now reaches the notch in about a fifth of a second, because
+`NoticeWatcher.followCollisions` stats the clash folder every 200 ms rather than waiting for
+the ten second news look; a file watch was tried and refused by the sandbox, out of band,
+which in a daemon is a crash. The daemon, not the Mac app, holds the person's workspace
+stream (`daemon/workspace-stream.ts`), because the app polls its inbox every twenty seconds
+and the daemon already speaks to the app instantly. The cloud's `me/handovers` routes carry
+an ask to the holding machine's owner and the answer back, statelessly: only that owner may
+answer, so the fields the answer quotes back can move nobody's lines but their own. Both
+arrive as `collision` notices, which the Mac app already says whatever the speak up setting
+and listens after, so no Swift changed. `ask_for_lines` and `answer_ask_for_lines` act at
+once because a lease is coordination, never a rule. The same stream carries incidents,
+exception requests and calls short of their approvals to whoever can act on them;
+`acknowledge_incident` and `reject_exception` act by voice, and approving an exception stays
+in the console because it loosens a rule.
+
+**Two agents settle it first, and a person hears only what needs them.** A refusal for another
+machine's lease names `memnox_message_agent`, the cloud tool that queues one agent's word on
+the other session's own turn queue, which its hook reads at its next step. Every message
+carries the address its answer goes back to, so nothing is kept. `core/coordination/agents-first.ts`
+keeps the voice quiet about such a hold until the same session is still held off the same
+lease a minute later, because by then the agents could not settle it; a hold between two of
+the person's own agents is still said at once, since no other agent can be asked. People speak
+to each other through `message_person` and `answer_person`, carried as `person.message` on
+the stream, and the stream names its last event id when it comes back, so a blink of the
+network swallows nothing said in it.
+
+**People collaborating on one feature are found, not declared.** A frontend agent on one laptop
+and a backend agent on another rarely touch one file, so a lease never meets them.
+`coordination/work-refs.ts` reads the branch off the checkout, with any ticket key in it, and
+`CloudLeases` sends those refs with every take. The cloud joins two people's sessions when the
+refs are the same, or when the tracker linked their tickets to each other or to one epic,
+parent or spec; a thing linked to more than forty tickets is a list and links nothing, and
+titles that merely look alike link nothing either, because a guessed partner is a stranger
+told about your work. Both agents are introduced on their own turn queue, each is kept up to
+date on what the other is doing at most every quarter hour, and both people get one quiet
+`together` notice. An agent reaches the others by feature, part or person, an ask wakes an
+agent whose turn ended at most every two minutes so two agents can never keep each other
+running, what they said is kept per feature and read back by `memnox_work`, and every message
+an agent picks up is a ledger row.
 ---
 
 ## Sequencing and staffing
@@ -713,7 +803,7 @@ and it is the whole reason this is adoptable.
 
 | ID | Goal | Size |
 |---|---|---|
-| OSS-3.13 | Verb tables as data under `packages/core/verbs/<cli>.toml`, checksum-verified | **Built.** 19 tables, compiled in rather than read from a writable path. |
+| OSS-3.13 | Verb tables as data under `packages/core/verbs/<cli>.toml`, checksum-verified | **Built.** 23 tables, compiled in rather than read from a writable path. |
 | OSS-3.14 | `protect --from-scan` generates CLI rules from the verb tables | **Built.** `protect --yes` writes a baseline; `--for` writes one CLI. |
 | OSS-3.15 | `protect --for <cli or server>` targeted flow | **Built.** Denies the credential file and keeps the CLI working. |
 

@@ -14,15 +14,16 @@ import {
 } from '@memnox/core';
 import {
   installGitHooks,
-  installInterceptors,
-  INTERCEPT_BINARY,
   interceptorDirFor,
+  interceptorPathLine,
+  WINDOWS,
 } from '@memnox/interceptors';
 import type { CliContext } from '../cli-context';
 import { TONE } from '../flow';
 import { listDirectory } from '../landlock';
 import { guardProfilePath, landlockRulesetPath } from '../memnox-paths';
 import { resolvePolicyFile } from '../policy-path';
+import { installOwnInterceptors } from './interceptor-entry';
 import { jsonText } from './json-config';
 import {
   DEFAULT_SHELL,
@@ -45,7 +46,7 @@ const OWNER_ONLY_FILE = 0o600;
 /** PATH is the whole mechanism: `memnox run` sets it, and `protect --path` writes it. */
 export async function runInterceptors(context: CliContext): Promise<void> {
   const home = homedir();
-  const report = await installInterceptors(home, INTERCEPT_BINARY);
+  const report = await installOwnInterceptors(home);
   const { flow } = context;
 
   flow.rows('Installed', [
@@ -191,11 +192,28 @@ export async function runPathLine(
   context: CliContext,
   reverting: boolean,
   env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<void> {
   const home = homedir();
+  if (platform === WINDOWS) return renderWindowsPath(context, home);
   const shell = env['SHELL'] ?? DEFAULT_SHELL;
   if (reverting) return removePathLine(context, profilesFor(shell, home));
   return addPathLine(context, shell, home);
+}
+
+/**
+ * Path on Windows lives in the registry rather than a profile file, and `setx` cuts it at
+ * 1024 characters, so the line is printed for the person to place rather than written.
+ */
+function renderWindowsPath(context: CliContext, home: string): void {
+  const { flow } = context;
+  flow.close('On Windows, Path is not a profile file, so nothing was written.');
+  flow.hint(
+    `${interceptorPathLine(interceptorDirFor(home), WINDOWS)}   for this PowerShell`,
+  );
+  flow.hint(
+    'For every new app, put the same directory first under "Edit environment variables for your account".',
+  );
 }
 
 async function removePathLine(

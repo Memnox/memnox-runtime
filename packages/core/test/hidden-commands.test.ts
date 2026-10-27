@@ -11,6 +11,8 @@ describe('a delete behind something that only runs it', () => {
   it.each([
     'echo $(rm -rf ~/work)',
     'echo `rm -rf ~/work`',
+    'f=$(rm -rf ~/work)',
+    'f=`rm -rf ~/work`; echo $f',
     'env rm -rf build',
     'env -u PATH FOO=1 rm -rf build',
     'sudo -u root rm -rf /opt/app',

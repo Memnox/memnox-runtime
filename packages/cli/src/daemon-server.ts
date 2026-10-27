@@ -1,15 +1,15 @@
-import { createServer, type Server, type Socket } from 'node:net';
-import { chmod, mkdir, rm } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { connect, createServer, type Server, type Socket } from 'node:net';
+import { rm } from 'node:fs/promises';
 import {
   ACTOR_TYPE,
   CircuitBreaker,
   DAEMON_METHOD,
   DECISION_EFFECT,
+  isInterceptMethod,
+  isNamedPipe,
   describePause,
-  encode,
   decodeRequest,
-  LineBuffer,
+  requestReader,
   SessionLimits,
   SessionPauses,
   ENFORCEMENT_MODE,
@@ -19,6 +19,7 @@ import {
   socketPathFor,
   TOOL_CLASS,
   ViolationMemory,
+  DAEMON_EVENT,
   type BreakerBreach,
   type Budget,
   type FleetSpend,
@@ -30,11 +31,79 @@ import {
   UNNAMED_AGENT,
   UNNAMED_SESSION,
 } from '@memnox/core';
+import { CLI_VERSION } from './defaults';
+import {
+  listenOptionsFor,
+  prepareAddress,
+  secureAddress,
+} from './daemon/daemon-endpoint';
+import { InterceptSurface } from './daemon/intercept-surface';
+import { write } from './daemon/socket-write';
+import type { VoiceAgentRoster } from './daemon/voice-agent-calls';
+import { isVoiceMethod, VoiceSurface } from './daemon/voice-surface';
+import { accountSignIns } from './daemon/account-sign-ins';
+import type { Brain } from './operator/brain';
+import { isRemoteMethod, RemoteEndpoint, type RemoteDeps } from './remote/endpoint';
 
 /**
  * The daemon: one process holding the rules, so a seam pays a connect rather than a file
  * read per command. Optional, because every seam falls back to evaluating in process.
  */
+
+/**
+ * Binds the address, or reports that a live daemon holds it. The bind comes first, so of two
+ * daemons starting together the kernel picks one, and a file is only removed once nothing
+ * answers on it, which is a socket left behind by a daemon that was killed.
+ */
+async function claimAddress(server: Server, address: string): Promise<boolean> {
+  try {
+    await bind(server, address);
+    return true;
+  } catch (err) {
+    if (!isAddressInUse(err)) throw err;
+  }
+  if (await answers(address)) return false;
+  // A pipe disappears with its last handle, so one in use that does not answer is held by
+  // something else, and taking it over would mean trusting whoever that is.
+  if (isNamedPipe(address)) {
+    throw new Error(
+      `Something that is not answering holds the daemon's pipe:\n  ${address}\n` +
+        'Find and stop it before starting the daemon. The interceptors still evaluate in process.',
+    );
+  }
+  await rm(address, { force: true });
+  await bind(server, address);
+  return true;
+}
+
+function bind(server: Server, address: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    function failed(err: Error): void {
+      reject(err);
+    }
+    server.once('error', failed);
+    server.listen(listenOptionsFor(address), () => {
+      server.removeListener('error', failed);
+      resolve();
+    });
+  });
+}
+
+function isAddressInUse(err: unknown): boolean {
+  return err instanceof Error && 'code' in err && err.code === 'EADDRINUSE';
+}
+
+/** Whether a process accepts connections on the address, which only a running daemon does. */
+function answers(address: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect(address);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', () => resolve(false));
+  });
+}
 
 interface DaemonDeps {
   gate?: LocalGate;
@@ -49,13 +118,20 @@ interface DaemonDeps {
   /** Spent today, read from the ledger at startup, or killing the daemon clears a budget. */
   spentAlready?: readonly MemnoxEvent[];
   now?: () => string;
+  /** How often subscribers are checked for something new to hear about. */
+  feedIntervalMs?: number;
+  /** The person's own agent CLI, started on the first ASK and kept warm between them. */
+  brain?: () => Brain;
+  /** How long a quiet brain is kept before its process is let go; the conversation resumes. */
+  brainIdleMs?: number;
+  /** Which agents can be the voice, for the Mac app's settings. */
+  voiceAgents?: VoiceAgentRoster;
+  /** Told once the Mac app has connected this machine to a workspace, so sync can start without a restart. */
+  onEnrolled?: () => void;
+  /** The paired phones' tunnel; its relay, cloud and Noise are handed in by a test. */
+  remote?: Omit<RemoteDeps, 'home' | 'now' | 'log' | 'voice'>;
   log: (message: string) => void;
 }
-
-/** The shorter of the two platform limits, so one number is right on both. */
-const SOCKET_PATH_LIMIT = 103;
-const SOCKET_DIR_MODE = 0o700;
-const SOCKET_MODE = 0o600;
 
 export class MemnoxDaemon {
   private readonly limits: SessionLimits;
@@ -67,6 +143,9 @@ export class MemnoxDaemon {
   /** Charged as they happen, on top of what the ledger already held at startup. */
   private readonly charged: MemnoxEvent[] = [];
   private server: Server | null = null;
+  private voice: VoiceSurface | null = null;
+  private remote: RemoteEndpoint | null = null;
+  private intercepts: InterceptSurface | null = null;
 
   constructor(private readonly deps: DaemonDeps) {
     this.limits = deps.limits ?? new SessionLimits();
@@ -75,35 +154,69 @@ export class MemnoxDaemon {
     this.pauses = deps.pauses ?? null;
   }
 
-  async listen(home: string): Promise<string> {
+  /**
+   * The socket path once this process holds it, or null when another daemon already
+   * answers there: two daemons each run an egress proxy, and whichever lost the socket
+   * still hands its port to `memnox run`, which is a port the rules are not behind.
+   */
+  async listen(home: string): Promise<string | null> {
+    // A unix socket here, and on Windows a named pipe, from the one place both are named.
     const path = socketPathFor(home);
-    // Over the kernel's cap `listen` fails with EADDRINUSE, which sends somebody hunting
-    // for a process that does not exist, so the real cause is named here.
-    if (Buffer.byteLength(path) > SOCKET_PATH_LIMIT) {
-      throw new Error(
-        `The daemon's socket path is ${Buffer.byteLength(path)} bytes and the kernel allows ${SOCKET_PATH_LIMIT}:\n  ${path}\n` +
-          'Use a shorter home directory. The interceptors still evaluate in process, which is the same rules.',
-      );
-    }
-    await mkdir(dirname(path), { recursive: true, mode: SOCKET_DIR_MODE });
-    // A stale socket from a killed daemon would refuse every connection.
-    await rm(path, { force: true });
+    await prepareAddress(path);
 
     const server = createServer((socket) => this.serve(socket));
+    if (!(await claimAddress(server, path))) return null;
     this.server = server;
-
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(path, () => resolve());
+    // Built on listening rather than in the constructor, because only listening names the home.
+    this.intercepts = new InterceptSurface({
+      home,
+      report: (request) => void this.record(request),
+      log: this.deps.log,
     });
-    // Owner only, because anything that can talk to this socket can ask about your rules.
-    await chmod(path, SOCKET_MODE);
+    this.voice = this.voiceSurface(home);
+    this.startRemote(home);
+    await secureAddress(path);
     return path;
+  }
+
+  /** What the Mac app and the phones talk to, with the sign ins the app drives for the person and this machine. */
+  private voiceSurface(home: string): VoiceSurface {
+    const { feedIntervalMs, brain, brainIdleMs, voiceAgents, onEnrolled } = this.deps;
+    return new VoiceSurface({
+      home,
+      now: () => this.now(),
+      log: this.deps.log,
+      ...(feedIntervalMs === undefined ? {} : { feedIntervalMs }),
+      ...(brain === undefined ? {} : { brain }),
+      ...(brainIdleMs === undefined ? {} : { brainIdleMs }),
+      ...(voiceAgents === undefined ? {} : { voiceAgents }),
+      ...accountSignIns(home, () => onEnrolled?.()),
+      remote: {
+        driving: (deviceId) => this.remote?.driving(deviceId) ?? false,
+        tell: (deviceId, response) => this.remote?.tell(deviceId, response) ?? false,
+      },
+    });
+  }
+
+  /** The phones' tunnel, off unless sync is enrolled and a phone is paired, so a Mac with no phone opens nothing. */
+  private startRemote(home: string): void {
+    this.remote = new RemoteEndpoint({
+      ...this.deps.remote,
+      home,
+      now: () => this.now(),
+      log: this.deps.log,
+      voice: () => this.voice,
+    });
+    void this.remote.start().catch((err: unknown) => {
+      this.deps.log(`the phone tunnel did not start: ${String(err)}`);
+    });
   }
 
   async close(): Promise<void> {
     const server = this.server;
     if (server === null) return;
+    this.remote?.close();
+    this.voice?.close();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     this.server = null;
   }
@@ -114,12 +227,22 @@ export class MemnoxDaemon {
   }
 
   private serve(socket: Socket): void {
-    const reader = new LineBuffer();
+    const reader = requestReader();
     socket.setEncoding('utf8');
+    // Chained, so a connection that sends two lines gets two answers in the order it asked.
+    let answered: Promise<void> = Promise.resolve();
     socket.on('data', (chunk: string) => {
-      for (const line of reader.push(chunk)) {
-        socket.write(encode(this.answer(line)));
+      const lines = reader.push(chunk);
+      // Too long to be a request, so the connection ends rather than filling memory.
+      if (reader.overflowed) socket.destroy();
+      for (const line of lines) {
+        answered = answered.then(() => this.respond(line, socket));
       }
+    });
+    socket.on('close', () => {
+      this.voice?.drop(socket);
+      // After every line already read, so a report sent just before hanging up is not lost.
+      answered = answered.then(() => this.intercepts?.drop(socket));
     });
     socket.on('error', (err) => {
       // A client that hung up mid-write is ordinary; it must never take the daemon down.
@@ -127,18 +250,49 @@ export class MemnoxDaemon {
     });
   }
 
-  private answer(line: string): DaemonResponse {
+  private async respond(line: string, socket: Socket): Promise<void> {
     const request = decodeRequest(line);
     if (request === null) {
-      return { id: 0, ok: false, error: 'not a request this daemon understands' };
+      write(socket, { id: 0, ok: false, error: 'not a request this daemon understands' });
+      return;
     }
-    if (request.method === DAEMON_METHOD.PING) return { id: request.id, ok: true };
+    if (isRemoteMethod(request.method) && this.remote !== null) {
+      await this.remote.respondLocal(socket, request);
+      return;
+    }
+    // Not listening yet falls through to "no method", which the native wrapper hears as Node.
+    if (isInterceptMethod(request.method) && this.intercepts !== null) {
+      await this.intercepts.respond(socket, request, (response) =>
+        write(socket, response),
+      );
+      return;
+    }
+    if (isVoiceMethod(request.method)) {
+      if (this.voice === null) {
+        write(socket, {
+          id: request.id,
+          ok: false,
+          error: 'the daemon is not listening yet',
+        });
+        return;
+      }
+      await this.voice.respond(socket, request);
+      return;
+    }
+    write(socket, this.answer(request));
+  }
+
+  private answer(request: DaemonRequest): DaemonResponse {
+    if (request.method === DAEMON_METHOD.PING)
+      return { id: request.id, ok: true, version: CLI_VERSION };
     if (request.method === DAEMON_METHOD.RECORD) return this.record(request);
     if (request.method === DAEMON_METHOD.STATUS) {
       return this.heldResponse(request) ?? { id: request.id, ok: true };
     }
     if (request.method === DAEMON_METHOD.EVALUATE) return this.evaluate(request);
-    return { id: request.id, ok: true };
+    if (request.method === DAEMON_METHOD.HOLD) return { id: request.id, ok: true };
+    // Refused rather than answered "ok", which a newer client would read as the method working.
+    return { id: request.id, ok: false, error: `no method ${request.method}` };
   }
 
   private now(): string {
@@ -164,6 +318,7 @@ export class MemnoxDaemon {
       sessionId,
       fingerprint: `${action}:${request.target ?? ''}`,
       action,
+      ...(request.target === undefined ? {} : { target: request.target }),
       at: now,
       failed: request.exitCode !== undefined && request.exitCode !== 0,
       ...(request.exitCode === undefined
@@ -214,6 +369,13 @@ export class MemnoxDaemon {
     };
     this.held.set(sessionId, pause);
     this.deps.log(`paused ${sessionId}: ${breach.reason}`);
+    this.voice?.broadcast({
+      kind: DAEMON_EVENT.PAUSED,
+      subject: sessionId,
+      agent: UNNAMED_AGENT,
+      summary: describePause(pause),
+      at: now,
+    });
     void this.pauses?.pause(pause).catch((err: unknown) => {
       // A pause that could not be written still holds here; say so rather than lose it.
       this.deps.log(`could not write the pause: ${String(err)}`);
@@ -300,7 +462,8 @@ export class MemnoxDaemon {
       };
     }
     const target = request.target === undefined ? {} : { target: request.target };
-    const verdict = gate.evaluate({ action, ...target });
+    const { dataClassification } = request;
+    const verdict = gate.evaluate({ action, ...target, dataClassification });
     if (verdict.effect === DECISION_EFFECT.ALLOW) {
       return { id: request.id, ok: true, effect: verdict.effect, reason: verdict.reason };
     }

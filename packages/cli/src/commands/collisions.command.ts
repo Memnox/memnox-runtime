@@ -5,13 +5,10 @@ import type { Command } from 'commander';
 import {
   concurrentWork,
   overlappingWork,
-  takesLease,
+  workObservationsOf,
   type Collision,
-  type MemnoxEvent,
   type OverlappingWork,
-  type WorkObservation,
 } from '@memnox/core';
-import { DECISION_EFFECT } from '@memnox/core';
 
 import type { CliContext } from '../cli-context';
 import { TONE } from '../flow';
@@ -60,7 +57,7 @@ async function runCollisions(
 
   await withEvents(home(), async (store) => {
     const events = await store.query({ since });
-    const observations = observationsOf(events);
+    const observations = workObservationsOf(events);
     const at = moment.toISOString();
     const concurrent = concurrentWork(observations, { now: at });
     const overlapping = overlappingWork(observations, { now: at, windowDays: days });
@@ -79,24 +76,6 @@ async function runCollisions(
     }
     renderCollisions(context, concurrent, overlapping);
   });
-}
-
-/** Only what actually touched something: a refused attempt is not shared work. */
-function observationsOf(events: readonly MemnoxEvent[]): WorkObservation[] {
-  return events.flatMap((event) =>
-    event.target !== undefined && event.effect === DECISION_EFFECT.ALLOW
-      ? [
-          {
-            agentId: event.sessionId,
-            agentName: event.agent,
-            target: event.target,
-            at: event.at,
-            // Asked of the same function the lease gate asks, so the two agree on what writes.
-            writing: takesLease(event.class),
-          },
-        ]
-      : [],
-  );
 }
 
 function renderCollisions(

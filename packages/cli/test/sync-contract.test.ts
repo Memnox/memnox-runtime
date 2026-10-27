@@ -185,7 +185,7 @@ const asked: MemnoxEvent = {
   rule: { name: 'ask-before-merge', layer: 'org', file: 'org.policies.json' },
   policyHash: 'p1',
   bundleHash: BUNDLE_HASH,
-  authorizedBy: 'tresor',
+  authorizedBy: 'ada',
   exitCode: 0,
   durationMs: 1200,
 };

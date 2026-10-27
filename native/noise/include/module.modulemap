@@ -1,0 +1,4 @@
+module MemnoxNoise {
+    header "memnox_noise.h"
+    export *
+}

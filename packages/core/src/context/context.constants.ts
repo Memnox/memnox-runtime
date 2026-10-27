@@ -58,3 +58,24 @@ export const MOST_DECISIONS_PER_WRITE = 8;
 
 /** Settled facts a session tool answers with, so one lookup never fills a window. */
 export const MOST_FACTS_ANSWERED = 12;
+
+/** Unapproved candidates a session tool answers with: context, so fewer than the facts. */
+export const MOST_CANDIDATES_ANSWERED = 5;
+
+/** Unapproved candidates said at one prompt or before one write, kept to one since none of them decides anything. */
+export const MOST_CANDIDATES_PER_CALL = 1;
+
+/** Under the context directory: one brief per piece of work the voice handed an agent. */
+export const WORK_BRIEFS_DIR = 'work';
+
+/** Messages and tickets one brief carries, enough to work from and few enough to read whole. */
+export const MOST_WORK_SOURCES = 16;
+
+/** Set by `memnox run --brief`, so the agent's own hook hands it the brief before its first turn. */
+export const WORK_BRIEF_VAR = 'MEMNOX_WORK_BRIEF';
+
+/** Items one brief reads whole beside its ticket, so gathering stays inside a spoken read back. */
+export const MOST_WORK_ITEMS_READ_WHOLE = 4;
+
+/** What one item other than the ticket may carry, so a brief stays readable at a session's start. */
+export const MOST_WORK_ITEM_CHARS = 6_000;

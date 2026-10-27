@@ -26,11 +26,36 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The pairing tests drive the real addon, and a server pairs on Linux, so both platforms build it.
+      - run: pnpm --filter @memnox/noise build
       - run: pnpm run format:check
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: pnpm run test
       - run: pnpm run deadcode
+
+  # Android links the same crate through JNI, so the binding is driven from Java and built for both phone ABIs.
+  noise-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh native/noise/scripts/test-jni.sh
+      - run: sh native/noise/scripts/build-android.sh
+
+  # Native Windows runs the daemon too, so its addon is built and tested here rather than first at release.
+  noise-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sh native/noise/scripts/build-node.sh
+      # A folder is read as a module to load on Windows, so the files are named.
+      - run: node --test native/noise/test/*.test.cjs
 
   # Catches a broken manifest at PR time rather than at tag time.
   publish-dry-run:

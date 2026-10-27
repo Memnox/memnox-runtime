@@ -39,6 +39,8 @@ export const ONBOARD = {
   NOT_FOUND: 'not_found',
   NO_ACCOUNT: 'no_account',
   UNSUPPORTED: 'unsupported',
+  /** The workspace's plan is full: governed on this machine, which no plan caps, and not in the workspace. */
+  LOCAL_ONLY: 'local_only',
   FAILED: 'failed',
 } as const;
 
@@ -162,7 +164,7 @@ export async function onboardAgent(input: OnboardInput): Promise<OnboardResult> 
     agentKind,
   });
   if ('outcome' in enrolled && enrolled.outcome === ENROL_FAILED) {
-    return { outcome: ONBOARD.FAILED, because: enrolled.because };
+    return refusedEnrolment(home, agentId, enrolled);
   }
   if (!('machineId' in enrolled)) {
     return { outcome: ONBOARD.FAILED, because: 'the control plane said nothing' };
@@ -183,6 +185,21 @@ export async function onboardAgent(input: OnboardInput): Promise<OnboardResult> 
   // Here rather than in the guided run, so any later onboarding clears an earlier no.
   await undecline(home, agentId);
   return { outcome: ONBOARD.DONE, record, approvedInBrowser: enrolled.approvedInBrowser };
+}
+
+/**
+ * A refusal from the control plane. A full plan caps the workspace and never this machine,
+ * so that one leaves the agent governed here, and the no from an earlier run is gone too.
+ */
+async function refusedEnrolment(
+  home: string,
+  agentId: string,
+  enrolled: { because: string; capped?: boolean },
+): Promise<OnboardResult> {
+  if (enrolled.capped !== true)
+    return { outcome: ONBOARD.FAILED, because: enrolled.because };
+  await undecline(home, agentId);
+  return { outcome: ONBOARD.LOCAL_ONLY, because: enrolled.because };
 }
 
 /** The config to rewrite, or why onboarding stops before anything is asked of the cloud. */

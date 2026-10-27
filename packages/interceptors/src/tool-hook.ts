@@ -7,6 +7,7 @@ import {
   DECISION_EFFECT,
   ENFORCEMENT_MODE,
   FIRST_RUN_MODE,
+  describeAlternative,
   MEMNOX_HOME,
   NodeSnapshotStore,
   openLedger,
@@ -20,12 +21,17 @@ import {
   type EventSink,
   FileGrants,
   grantSubjectFor,
-  APPROVAL_ROUTE,
+  ANSWER_PLACE,
   holdInChat,
   HOLD_ANSWER,
+  pairedCanAnswer,
   openQuestionFor,
   PendingApprovals,
+  readApprovalRoute,
   SessionTasks,
+  voiceListening,
+  waitForAnswer,
+  type AnswerPlace,
   type ApprovalRoute,
   type ChatQuestion,
   type PendingApproval,
@@ -36,6 +42,8 @@ import {
 
 import { HookAuthorizer } from './hook-authorizer';
 import { claimedElsewhere } from './mcp-claims';
+import { containmentFor } from './containment-loader';
+import { withinSession } from './within-session';
 import { readHookConfig } from './hook-config';
 import { loadHookGate } from './hook-gate-loader';
 import { toolCallOf, type ToolCall } from './tool-calls';
@@ -80,7 +88,18 @@ export interface ToolHookSeams {
   sink?: EventSink | null;
   route?: ApprovalRoute;
   declared?: ToolDeclarations;
+  /** Whether the Mac voice is listening, so a held question waits for a spoken answer. */
+  voiceThere?: () => Promise<boolean>;
+  voiceWaitMs?: number;
+  /** Whether a paired phone may answer, so a held question opens no picker it could not close. */
+  pairedThere?: () => Promise<boolean>;
 }
+
+/**
+ * How long a held call waits for the voice to put it and Touch ID to sign the answer, under
+ * the minute the host gives a hook by default, so a spoken yes lets the call straight through.
+ */
+const VOICE_ANSWER_WAIT_MS = 50_000;
 
 /** What the hook decided, and what it says to the host, or null for no reply. */
 export interface ToolAnswer {
@@ -163,10 +182,19 @@ export async function answerToolCall(
     await keep(sink, call, ruling, context);
   }
   const asked = putsQuestion(call, ruling, context.personThere);
-  const held =
+  const raised =
     ruling.effect === DECISION_EFFECT.ASK && !asked
-      ? await heldFor(ruling, sessionId, route, context)
+      ? await heldFor(ruling, { call, sessionId }, route, context)
       : null;
+  const places = raised === null ? [] : await answerPlaces(context, seams);
+  const spoken =
+    raised !== null && places.includes(ANSWER_PLACE.MAC)
+      ? await spokenAnswer(raised, ruling, { sessionId, context, seams })
+      : null;
+  if (spoken !== null) {
+    return { call, ruling: spoken, reply: toolReply(call, spoken, false), asked: false };
+  }
+  const held = raised === null ? null : await alsoOn(raised, places, context.home);
   return {
     call,
     ruling,
@@ -175,25 +203,91 @@ export async function answerToolCall(
   };
 }
 
-/** Where questions go, from `config.toml`; in the session where nothing says otherwise. */
-export async function readApprovalRoute(home: string): Promise<ApprovalRoute> {
+/** Where beside the session this question can be answered: the listening Mac app, a paired phone. */
+async function answerPlaces(
+  context: ToolHookContext,
+  seams: ToolHookSeams,
+): Promise<AnswerPlace[]> {
+  const voice =
+    seams.voiceThere ?? ((): Promise<boolean> => voiceListening(context.home));
+  const paired =
+    seams.pairedThere ?? ((): Promise<boolean> => pairedCanAnswer(context.home));
+  const [mac, phone] = await Promise.all([
+    voice().catch(() => false),
+    paired().catch(() => false),
+  ]);
+  return [...(mac ? [ANSWER_PLACE.MAC] : []), ...(phone ? [ANSWER_PLACE.PAIRED] : [])];
+}
+
+/**
+ * The answer said on the Mac while the call waited, or null where nobody answered in time.
+ * A spoken yes lets the call straight through, so nobody waits for the turn to end.
+ */
+async function spokenAnswer(
+  held: PendingApproval,
+  ruling: ToolRuling,
+  where: { sessionId: string; context: ToolHookContext; seams: ToolHookSeams },
+): Promise<ToolRuling | null> {
+  const { sessionId, context, seams } = where;
+  const answer = await waitForAnswer({
+    approvals: new PendingApprovals(context.home),
+    id: held.id,
+    // Real time on purpose: a wait is wall clock, whatever clock the ruling was made on.
+    deadline: Date.now() + (seams.voiceWaitMs ?? VOICE_ANSWER_WAIT_MS),
+  });
+  if (answer === null) return null;
+  const after = await withChatAnswer(ruling, sessionId, context);
+  return after.effect === DECISION_EFFECT.ASK ? null : after;
+}
+
+/**
+ * The question marked with where else it can be answered, so the agent opens no picker: only a
+ * click closes one, and an answer on the Mac or a phone would leave it on screen asking.
+ */
+async function alsoOn(
+  held: PendingApproval,
+  places: readonly AnswerPlace[],
+  home: string,
+): Promise<PendingApproval> {
+  if (places.length === 0) return held;
+  const approvals = new PendingApprovals(home);
+  // Read again, so an answer landing during the wait is not written over.
+  const latest = (await approvals.read(held.id).catch(() => null)) ?? held;
+  const marked: PendingApproval = { ...latest, alsoOn: [...places] };
+  await approvals.keep(marked).catch(() => undefined);
+  return marked;
+}
+
+/** Best effort and false on any failure, since a call nobody could place asks for the fingerprint. */
+async function staysInSession(
+  call: ToolCall,
+  context: ToolHookContext,
+): Promise<boolean> {
   try {
-    return parseConfig(await readFile(configPathFor(home), 'utf8')).approvals;
+    const containment = await containmentFor({
+      home: context.home,
+      env: context.env,
+      cwd: call.cwd ?? process.cwd(),
+      now: context.now(),
+      agent: context.agent,
+    });
+    return withinSession(call, containment, context.env);
   } catch {
-    return APPROVAL_ROUTE.SESSION;
+    return false;
   }
 }
 
 /** The question written down for a person, or null where it could not be, which refuses as before. */
 async function heldFor(
   ruling: ToolRuling,
-  sessionId: string,
+  { call, sessionId }: { call: ToolCall; sessionId: string },
   route: ApprovalRoute,
   context: ToolHookContext,
 ): Promise<PendingApproval | null> {
   const question = {
     ...questionOf(ruling, sessionId, context.agent),
     ...(await taskOf(context.home, sessionId)),
+    withinSession: await staysInSession(call, context),
   };
   return holdInChat(
     new PendingApprovals(context.home),
@@ -232,10 +326,12 @@ async function withChatAnswer(
       reason: `${by} allowed this (${held.id})`,
     };
   }
+  // Their reason beside the rule's way forward, which `reasonFor` adds, so a no reads as narrow it rather than stop.
+  const said = held.answerReason === undefined ? '' : `, and said: ${held.answerReason}`;
   return {
     ...ruling,
     effect: DECISION_EFFECT.DENY,
-    reason: `${by} said no to this (${held.id})`,
+    reason: `${by} said no to this (${held.id})${said}`,
   };
 }
 
@@ -275,6 +371,10 @@ function questionOf(ruling: ToolRuling, sessionId: string, agent: string): ChatQ
     ...(ruling.target === undefined ? {} : { target: ruling.target }),
     class: ruling.class,
     reason: ruling.reason,
+    ...(ruling.rule === undefined ? {} : { rule: ruling.rule }),
+    ...(ruling.alternative === undefined
+      ? {}
+      : { alternative: describeAlternative(ruling.alternative) }),
   };
 }
 

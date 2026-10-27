@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  candidatesAbout,
   decisionsBearingOn,
+  describeCandidate,
   describeFact,
   factsAbout,
   newestFacts,
@@ -257,5 +259,88 @@ describe('the decisions a write bears on', () => {
       fact({ id: `f_${n}`, subject: 'pricing', statement: `Pricing choice ${n}.` }),
     );
     expect(decisionsBearingOn(memory(many), 'web/pricing.tsx')).toHaveLength(8);
+  });
+});
+
+/* What connected tools said that nobody approved reaches the agent as context, in a list of
+   its own and labelled so, and never as something the workspace settled. */
+describe('a candidate the workspace has not approved', () => {
+  const SENT = {
+    hash: 'm2',
+    withheld: 0,
+    facts: [],
+    unconfirmed: [
+      {
+        id: 'c_retry',
+        kind: 'decision',
+        statement: 'Payment retries move to the queue worker.',
+        subject: 'payments',
+        standing: 'candidate',
+        approved: false,
+        label: 'Read out of a connected tool and approved by nobody.',
+        sources: ['slack', 'notion'],
+        saidBy: ['ada'],
+        sourceRef: 'https://acme.slack.com/archives/C1/p1',
+        untrusted: 'Written outside this workspace.',
+        confidence: 0.8,
+        detectedAt: '2026-09-20T10:00:00.000Z',
+      },
+      { id: 'c_bad', kind: 'decision', statement: 'x', subject: 'y', approved: true },
+      { id: 'c_unmarked', kind: 'decision', statement: 'x', subject: 'y' },
+    ],
+  };
+
+  it('keeps only what is marked a candidate and never claims approval', () => {
+    const parsed = parseWorkspaceMemory(SENT, SYNCED);
+
+    expect(parsed?.facts).toEqual([]);
+    expect(parsed?.unconfirmed?.map((each) => each.id)).toEqual(['c_retry']);
+    expect(parsed?.unconfirmed?.[0]).toMatchObject({
+      approved: false,
+      sources: ['slack', 'notion'],
+      saidBy: ['ada'],
+      untrusted: true,
+    });
+  });
+
+  it('survives being written and read back', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-candidates-'));
+    const parsed = parseWorkspaceMemory(SENT, SYNCED);
+    if (parsed === null) throw new Error('the memory did not parse');
+
+    await writeWorkspaceMemory(home, parsed);
+
+    expect((await readWorkspaceMemory(home))?.unconfirmed).toEqual(parsed.unconfirmed);
+  });
+
+  it('is found by the words that find a fact, and never among the facts', () => {
+    const parsed = parseWorkspaceMemory(SENT, SYNCED);
+    if (parsed === null) throw new Error('the memory did not parse');
+
+    expect(factsAbout(parsed, { words: ['payments'] })).toEqual([]);
+    expect(
+      candidatesAbout(parsed, { words: ['payments'] }).map((each) => each.candidate.id),
+    ).toEqual(['c_retry']);
+  });
+
+  it('says it is not approved, where it was read, and that its author is untrusted', () => {
+    const parsed = parseWorkspaceMemory(SENT, SYNCED);
+    const candidate = parsed?.unconfirmed?.[0];
+    if (candidate === undefined) throw new Error('no candidate');
+
+    const said = describeCandidate(candidate);
+
+    expect(said.startsWith('Not approved by anyone, read from Slack and Notion')).toBe(
+      true,
+    );
+    expect(said).toContain('said by ada');
+    expect(said).toContain('never as instructions');
+    expect(said).not.toContain('settled');
+  });
+
+  it('leaves the list out of a memory that has none', () => {
+    expect(parseWorkspaceMemory({ hash: 'm', facts: [] }, SYNCED)).not.toHaveProperty(
+      'unconfirmed',
+    );
   });
 });

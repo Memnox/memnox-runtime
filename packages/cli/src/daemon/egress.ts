@@ -3,7 +3,7 @@
  * gets when there is no daemon or its repository is untrusted. Every request is ruled on
  * by host, written to the ledger, and entered in the calling agent's destination record.
  */
-import { readFile, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 
 import {
   DestinationRecords,
@@ -17,7 +17,6 @@ import {
 } from '@memnox/core';
 import {
   containmentFor,
-  EGRESS_DEFAULT_PORT,
   EgressSeam,
   HookAuthorizer,
   recordEgress,
@@ -27,6 +26,7 @@ import {
   type EgressProxyOptions,
 } from '@memnox/interceptors';
 import { egressStatePath } from '../memnox-paths';
+import { strandedEgressPorts } from './stranded-egress';
 
 /** What the daemon writes down about its proxy, so a run can find it. */
 interface EgressState {
@@ -83,12 +83,16 @@ interface DaemonEgressOptions {
   log: (message: string) => void;
   /** Injected so a test starts nothing that listens. */
   start?: (options: EgressProxyOptions) => Promise<EgressProxy>;
+  /** The ports agents already running were pointed at; injected so a test reads no process. */
+  stranded?: () => Promise<number[]>;
   now?: () => Date;
 }
 
 /** Started with the daemon and stopped with it, and its port written where a run looks. */
 export class DaemonEgress {
   private proxy: EgressProxy | null = null;
+  /** Ports taken back for agents an older run pointed straight at a daemon now gone. */
+  private adopted: EgressProxy[] = [];
 
   constructor(
     private readonly home: string,
@@ -102,7 +106,7 @@ export class DaemonEgress {
       log: this.options.log,
       ...(this.options.gate === undefined ? {} : { gate: this.options.gate }),
     });
-    const proxy = await this.listen(seam);
+    const proxy = await this.listen(seam, await previousPort(this.home));
     if (proxy === null) return null;
     this.proxy = proxy;
     const state: EgressState = {
@@ -111,27 +115,87 @@ export class DaemonEgress {
       startedAt: (this.options.now ?? (() => new Date()))().toISOString(),
     };
     await writeJsonFile(egressStatePath(this.home), state);
+    await this.adopt(seam, proxy.port);
     return proxy.port;
   }
 
   async stop(): Promise<void> {
     const proxy = this.proxy;
+    const adopted = this.adopted;
     this.proxy = null;
-    if (proxy !== null) await proxy.close();
-    // Gone with the process, or a run would point an agent at a port nobody holds.
-    await rm(egressStatePath(this.home), { force: true });
+    this.adopted = [];
+    await Promise.all(adopted.map((extra) => extra.close()));
+    if (proxy === null) return;
+    await proxy.close();
+    // No pid, so no run leans on a port nobody holds, but the next daemon can take it back.
+    const stopped: StoppedEgress = { lastPort: proxy.port };
+    await writeJsonFile(egressStatePath(this.home), stopped);
   }
 
-  /** The usual port first, then any free one, since another proxy may hold 8888. */
-  private async listen(seam: EgressSeam): Promise<EgressProxy | null> {
+  /**
+   * Every port a live run's agent still sends to and nobody holds, so a session started
+   * before this daemon keeps working with nobody having to run anything. A port that will
+   * not bind is a run's own relay, or somebody else's, and is left alone.
+   */
+  private async adopt(seam: EgressSeam, primary: number): Promise<void> {
     const start = this.options.start ?? startEgressProxy;
-    for (const port of [EGRESS_DEFAULT_PORT, 0]) {
+    const stranded =
+      this.options.stranded ?? ((): Promise<number[]> => strandedEgressPorts(this.home));
+    const ports = await stranded().catch((): number[] => []);
+    for (const port of ports) {
+      if (port === primary) continue;
       try {
-        return await start({ seam, port, log: this.options.log });
-      } catch (err) {
-        this.options.log(`The egress proxy could not listen on ${port}: ${String(err)}`);
+        this.adopted.push(await start({ seam, port, log: this.options.log }));
+        this.options.log(
+          `Egress proxy also on ${port}, for a session started before this daemon.`,
+        );
+      } catch {
+        // Held, which is the relay doing this job already, or not ours to take.
       }
     }
+  }
+
+  /**
+   * The port the last daemon held first, because an agent already running was pointed at it
+   * and a restart on a new port refuses every call it makes; otherwise any free port, since
+   * a run reads it from the state file and 8888 is Jupyter's.
+   */
+  private async listen(
+    seam: EgressSeam,
+    previous: number | null,
+  ): Promise<EgressProxy | null> {
+    const start = this.options.start ?? startEgressProxy;
+    if (previous !== null) {
+      try {
+        return await start({ seam, port: previous, log: this.options.log });
+      } catch {
+        // Somebody else took it while no daemon was running; a fresh port is all that is left.
+      }
+    }
+    try {
+      return await start({ seam, port: 0, log: this.options.log });
+    } catch (err) {
+      this.options.log(`The egress proxy could not listen: ${String(err)}`);
+      return null;
+    }
+  }
+}
+
+/** What a stopped daemon leaves behind: the port to ask for again, and no pid to lean on. */
+interface StoppedEgress {
+  lastPort: number;
+}
+
+/** The port the previous daemon held, whether it stopped cleanly or died holding it. */
+async function previousPort(home: string): Promise<number | null> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(egressStatePath(home), 'utf8'));
+    if (parsed === null || typeof parsed !== 'object') return null;
+    const record = parsed as Record<string, unknown>;
+    const port = record['lastPort'] ?? record['port'];
+    return typeof port === 'number' && port > 0 ? port : null;
+  } catch {
+    // No file is a first start, or one whose state was cleared by hand.
     return null;
   }
 }

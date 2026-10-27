@@ -31,6 +31,12 @@ export interface MatchedPolicy {
   observed?: boolean;
   rateLimit?: RateLimitSpec;
   alternative?: Alternative;
+  /** The workspace published it, so no allowance on this machine stands in for its answer. */
+  workspace?: boolean;
+  decidedBy?: string;
+  decidedAt?: string;
+  /** The ask rules this allow stands in for, by name. */
+  relaxes?: string[];
 }
 
 export interface Decision {

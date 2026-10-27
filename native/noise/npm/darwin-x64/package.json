@@ -1,0 +1,28 @@
+{
+  "name": "@memnox/noise-darwin-x64",
+  "version": "0.1.1",
+  "description": "The Noise addon for Memnox, prebuilt for darwin-x64.",
+  "license": "Apache-2.0",
+  "main": "memnox-noise.darwin-x64.node",
+  "files": [
+    "memnox-noise.darwin-x64.node"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Memnox/memnox.git",
+    "directory": "native/noise/npm/darwin-x64"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

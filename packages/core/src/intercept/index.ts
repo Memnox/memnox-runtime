@@ -1,6 +1,7 @@
 export * from './binary-class';
 export * from './os-guard';
 export * from './sql';
+export * from './sql-file';
 export * from './resolve';
 export * from './actor';
 export * from './untrusted-guard';
@@ -8,3 +9,5 @@ export * from './writers';
 export * from './tool-call';
 export * from './environment-reads';
 export * from './clone-target';
+export * from './credential-broker';
+export * from './database-call';

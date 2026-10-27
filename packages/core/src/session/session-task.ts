@@ -32,6 +32,8 @@ export interface SessionTask {
   intent?: TaskIntent;
   /** `prompt` when read from what the person typed, which a declared task always replaces. */
   declaredBy?: string;
+  /** The person's latest follow up in the session, kept beside the mission rather than over it. */
+  latestAsk?: string;
 }
 
 export const TASK_INTENT = { INVESTIGATE: 'investigate' } as const;

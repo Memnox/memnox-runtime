@@ -43,6 +43,7 @@ export async function pullMemory(
   home: string,
   account: Account,
   now: () => Date = () => new Date(),
+  timeoutMs?: number,
 ): Promise<MemoryPull> {
   const held = await readWorkspaceMemory(home);
   let answer;
@@ -51,6 +52,7 @@ export async function pullMemory(
       baseUrl: account.baseUrl,
       path: `/v1/workspaces/${account.workspaceId}/memory`,
       token: account.token,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
       ...(held === null ? {} : { ifNoneMatch: held.hash }),
     });
   } catch (err) {
@@ -67,6 +69,20 @@ export async function pullMemory(
   if (memory === null) return { outcome: MEMORY_OUTCOME.KEPT };
   await writeWorkspaceMemory(home, memory);
   return { outcome: MEMORY_OUTCOME.APPLIED, facts: memory.facts.length };
+}
+
+/**
+ * The memory pulled again just before somebody reads it, so "the latest" is true when said. Bounded
+ * like a brief, and any failure keeps what this machine already held.
+ */
+export async function refreshMemory(home: string): Promise<void> {
+  const account = await readAccount(home);
+  if (account === null || account.revokedAt !== undefined) return;
+  try {
+    await pullMemory(home, account, () => new Date(), BRIEF_TIMEOUT_MS);
+  } catch {
+    // A refused or broken answer is the same as no answer here: what was pulled before stays.
+  }
 }
 
 /**

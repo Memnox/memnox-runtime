@@ -1,4 +1,6 @@
 import {
+  ruledFor,
+  alternativeFor,
   AGENT_FROZEN_REASON,
   ACTOR_TYPE,
   applyEnforcementMode,
@@ -22,7 +24,13 @@ import {
   type ToolClass,
 } from '@memnox/core';
 
-import { EDIT_HOST, type EditHost } from './agent-edits';
+import {
+  BLOCKING_HOSTS,
+  EDIT_HOST,
+  blockDecision,
+  copilotDenial,
+  type EditHost,
+} from './agent-edits';
 import { EDIT_HOOK_EVENT } from './edit-hook';
 import type { HookAuthorizer, HookVerdict } from './hook-authorizer';
 import { ShellSeam } from './shell-seam';
@@ -49,6 +57,10 @@ export interface ToolRuling {
   alternative?: Alternative;
   /** Outside the task the session declared, which the circuit breaker counts. */
   outOfScope?: boolean;
+  /** What the gate found, as ids, so the row can say which part of the context decided. */
+  signals?: readonly string[];
+  /** The person this was ruled for, as the run named them. */
+  principal?: string;
 }
 
 export interface ToolPolicyDeps {
@@ -98,6 +110,7 @@ export async function ruleOnTool(
     ...(verdict.rule === undefined ? {} : { rule: verdict.rule }),
     ...(verdict.alternative === undefined ? {} : { alternative: verdict.alternative }),
     ...(verdict.outOfScope === true ? { outOfScope: true } : {}),
+    ...ruledFor(verdict),
   };
 }
 
@@ -115,21 +128,42 @@ async function worstOf(
       ...(request.arguments === undefined ? {} : { arguments: request.arguments }),
       ...(request.content === undefined ? {} : { content: request.content }),
       ...(request.environment === undefined ? {} : { environment: request.environment }),
+      ...(request.dataClassification === undefined
+        ? {}
+        : { dataClassification: request.dataClassification }),
       // Where the agent works, so a rule about `{workspace}` can tell inside from outside.
       ...(workingDirectory === undefined ? {} : { workingDirectory }),
     });
     const next = {
       request,
-      verdict:
+      verdict: withStatementAlternative(
         request.environment === undefined
           ? verdict
           : { ...verdict, environment: request.environment },
+        request,
+      ),
     };
     if (worst === null || severityOf(next) > severityOf(worst)) worst = next;
   }
   // A call is only built with at least one request, so this is the unreachable case.
   if (worst === null) throw new Error('a tool call with nothing to rule on');
   return worst;
+}
+
+/** A refused or held statement names the bounded one on its table, as the shell seam does. */
+function withStatementAlternative(
+  verdict: HookVerdict,
+  request: ToolRequest,
+): HookVerdict {
+  if (verdict.effect === DECISION_EFFECT.ALLOW || request.alternative === undefined) {
+    return verdict;
+  }
+  const alternative = alternativeFor(
+    verdict.alternative,
+    request.alternative,
+    request.action,
+  );
+  return alternative === undefined ? verdict : { ...verdict, alternative };
 }
 
 function severityOf(ruled: Ruled): number {
@@ -165,6 +199,7 @@ async function ruleOnLine(call: ToolCall, deps: ToolPolicyDeps): Promise<Ruled> 
         ? {}
         : { environment: decision.environment }),
       ...(decision.outOfScope === true ? { outOfScope: true } : {}),
+      ...ruledFor(decision),
     },
   };
 }
@@ -195,6 +230,10 @@ export function refusalReply(host: EditHost, reason: string): ToolReply {
   if (host === EDIT_HOST.WINDSURF) return { stderr: reason, exitCode: WINDSURF_BLOCK };
   const decision = DECISION_EFFECT.DENY;
   if (host === EDIT_HOST.GEMINI) return { stdout: JSON.stringify({ decision, reason }) };
+  if (BLOCKING_HOSTS.includes(host)) {
+    return { stdout: blockDecision(reason) };
+  }
+  if (host === EDIT_HOST.COPILOT) return { stdout: copilotDenial(reason) };
   if (host === EDIT_HOST.CURSOR) {
     const said = { permission: decision, user_message: reason, agent_message: reason };
     return { stdout: JSON.stringify(said) };
@@ -230,6 +269,8 @@ export function toolReply(
   const decision = asking ? DECISION_EFFECT.ASK : DECISION_EFFECT.DENY;
   if (call.host === EDIT_HOST.GEMINI)
     return { stdout: JSON.stringify({ decision, reason }) };
+  const named = namedHostReply(call.host, asking, reason);
+  if (named !== null) return named;
   if (call.host === EDIT_HOST.CURSOR) {
     const said = { permission: decision, user_message: reason, agent_message: reason };
     return { stdout: JSON.stringify(said) };
@@ -242,6 +283,35 @@ export function toolReply(
   // The host shows this to the person, so a held question never depends on the agent relaying it.
   const shown = held === null || asking ? {} : { systemMessage: heldNotice(held) };
   return { stdout: JSON.stringify({ hookSpecificOutput, ...shown }) };
+}
+
+/**
+ * The reply of a host that reads its own shape: Hermes and OpenClaw take an ask or a block
+ * from Memnox's plugins, Devin and OpenCode only a block, and Copilot its own decision.
+ */
+function namedHostReply(
+  host: EditHost,
+  asking: boolean,
+  reason: string,
+): ToolReply | null {
+  if (host === EDIT_HOST.HERMES || host === EDIT_HOST.OPENCLAW) {
+    return {
+      stdout: JSON.stringify({
+        decision: asking ? DECISION_EFFECT.ASK : 'block',
+        reason,
+      }),
+    };
+  }
+  if (host === EDIT_HOST.DEVIN || host === EDIT_HOST.OPENCODE) {
+    return { stdout: blockDecision(reason) };
+  }
+  if (host === EDIT_HOST.COPILOT) {
+    const permissionDecision = asking ? DECISION_EFFECT.ASK : DECISION_EFFECT.DENY;
+    return {
+      stdout: JSON.stringify({ permissionDecision, permissionDecisionReason: reason }),
+    };
+  }
+  return null;
 }
 
 /** Whether the host shows a person this ruling's question, rather than a refusal in its place. */
@@ -308,6 +378,7 @@ export function toolEventFor(
     sessionId: context.sessionId,
     agent: context.agent,
     actorType: ACTOR_TYPE.AGENT,
+    ...(call.delegation ?? {}),
     surface: surfaceOf(ruling.action),
     operation: ruling.action,
     class: ruling.class,
@@ -325,6 +396,7 @@ export function toolEventFor(
       ? {}
       : { conditionsInForce: context.conditionsInForce }),
     ...(context.refused === true ? { execution: EXECUTION.BLOCKED } : {}),
+    ...ruledFor(ruling),
   };
 }
 

@@ -59,6 +59,15 @@ describe('the seatbelt profile', () => {
     expect(profile).toContain('(allow default)');
   });
 
+  it('keeps a path ending in a backslash inside its string, so it cannot add a rule of its own', () => {
+    const escaped = seatbeltProfile({
+      denyRead: ['/tmp/a\\'],
+      denyWrite: [],
+      allowWrite: [],
+    });
+    expect(escaped).toContain('(deny file-read* (subpath "/tmp/a\\\\"))');
+  });
+
   it('says it is generated, so nobody hand-edits it and loses the edit', () => {
     expect(profile).toContain('Regenerate rather than edit');
   });

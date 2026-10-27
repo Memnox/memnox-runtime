@@ -20,10 +20,14 @@ import { askOnTerminal, type NameAsker } from '../agents/name-prompt';
 import { runPathLine } from '../protect/seam-install';
 import { wireMachine, type Wiring, type WiringSeams } from '../setup-wiring';
 import { reportScan } from './agents/shared';
+import { EDIT_HOOK_TARGETS } from '../protect/agent-hooks';
 import { connectedAccount } from './setup/plane';
 import { offerOne, describeAgent } from './setup/offer';
+import { hookFilesOf, pendingActions, pendingFactsOf, recordChanged } from '../needs-you';
+import { renderPending } from './setup/pending';
 import { askToProtect, describeMachine, renderLocalSummary } from './setup/local';
 import {
+  HOOKED_HERE_REASON,
   STATUS,
   renderSummary,
   describePlane,
@@ -132,6 +136,7 @@ async function runSetup(deps: SetupDeps, options: SetupOptions): Promise<void> {
   }
 
   const results = await offerEach(answering(deps), account, scanned);
+  const before = await hookFilesOf(deps.home());
   const wired = await wireAndRender(deps);
 
   // Onboarding writes credentials and the console's Agents page reads a census, so a
@@ -141,6 +146,18 @@ async function runSetup(deps: SetupDeps, options: SetupOptions): Promise<void> {
   if (deps.interactive()) await offerPathLine(deps);
   if (deps.interactive()) await offerApprovalRoute(deps);
   renderSummary(context, { account, results, reported, wired });
+  await renderWhatNeedsYou(deps, before);
+}
+
+/** Last, so the one thing only the person can do is what the run leaves on screen. */
+async function renderWhatNeedsYou(
+  deps: SetupDeps,
+  before: ReadonlyMap<string, string | null>,
+): Promise<void> {
+  const facts = await pendingFactsOf(deps.home(), deps.project(), before);
+  // Kept, so the Mac app's home says it too, until each agent shows it picked the change up.
+  await recordChanged(deps.home(), facts.changed, new Date().toISOString());
+  renderPending(deps.context, pendingActions(facts));
 }
 
 /**
@@ -160,9 +177,11 @@ async function setUpLocally(
 ): Promise<void> {
   describeMachine(deps, scanned);
   if (!(await askToProtect(deps, scanned, options.yes === true))) return;
+  const before = await hookFilesOf(deps.home());
   const wired = await wireAndRender(deps);
   if (deps.interactive()) await offerPathLine(deps);
   renderLocalSummary(deps, wired);
+  await renderWhatNeedsYou(deps, before);
 }
 
 /**
@@ -285,6 +304,11 @@ async function settledEarlier(
   };
 }
 
+/** Whether setup puts a hook into this agent, which governs it here with no workspace config. */
+function hookedHere(kind: string): boolean {
+  return EDIT_HOOK_TARGETS.some((target) => target.agent === kind);
+}
+
 /** One agent: already done, done elsewhere, ungovernable, or offered. */
 async function offerAgent(deps: SetupDeps, offer: AgentOffer): Promise<Result> {
   const { context, home } = deps;
@@ -295,9 +319,12 @@ async function offerAgent(deps: SetupDeps, offer: AgentOffer): Promise<Result> {
 
   // Checked before anybody is asked, so nobody answers two questions for nothing.
   const config = await manageable(home(), deps.project(), agent.kind);
-  const shown = { context, home: home(), agent, names, config, ...scanned };
+  const hooked = hookedHere(agent.kind);
+  const shown = { context, home: home(), agent, names, config, hooked, ...scanned };
   if (config.because !== undefined) {
     describeAgent(shown);
+    // Its own hook governs it here, so only the workspace half is missing.
+    if (hooked) return { name, status: STATUS.LOCAL, because: HOOKED_HERE_REASON };
     return { name, status: STATUS.CANNOT, because: config.because };
   }
   return offerOne({

@@ -1,16 +1,20 @@
 /**
- * Where a run's agent sends its HTTP: the daemon's egress proxy when one is running, or
- * a proxy of the session's own for as long as the agent lives. An untrusted session
- * always gets its own, since what it may reach is decided for it and not by what it says.
+ * Where a run's agent sends its HTTP: through a relay to the daemon's egress proxy when one
+ * runs, else a proxy of its own. An untrusted session always gets its own, decided for it.
  */
-import { LocalGate } from '@memnox/core';
+import { desktopNotice, LocalGate } from '@memnox/core';
 import {
   log,
   proxyUrlFor,
+  RELAY_STATE,
   startEgressProxy,
+  startEgressRelay,
   type EgressCaller,
   type EgressProxy,
   type EgressProxyOptions,
+  type EgressRelay,
+  type EgressRelayOptions,
+  type RelayState,
 } from '@memnox/interceptors';
 import { daemonEgressPort, egressSeamFor } from '../../daemon/egress';
 import { policySetInForce } from '../../policy-path';
@@ -61,6 +65,10 @@ export interface EgressSeams {
   daemonPort?: (home: string) => Promise<number | null>;
   /** Injected so a test starts nothing that listens. */
   start?: (options: EgressProxyOptions) => Promise<EgressProxy>;
+  /** Injected so a test starts nothing that listens. */
+  relay?: (options: EgressRelayOptions) => Promise<EgressRelay>;
+  /** How the person hears that the daemon went, and that it came back. */
+  notice?: (message: string) => void;
 }
 
 interface SessionEgressInput {
@@ -74,14 +82,9 @@ interface SessionEgressInput {
 export async function sessionEgress(input: SessionEgressInput): Promise<SessionEgress> {
   const { home, caller, seams = {} } = input;
   if (!input.untrusted) {
-    const port = await (seams.daemonPort ?? daemonEgressPort)(home);
-    if (port !== null) {
-      return {
-        url: proxyUrlFor(port, caller),
-        port,
-        source: EGRESS_SOURCE.DAEMON,
-        close: async () => undefined,
-      };
+    const daemonPort = seams.daemonPort ?? daemonEgressPort;
+    if ((await daemonPort(home)) !== null) {
+      return relayedToDaemon({ home, caller, seams, upstream: () => daemonPort(home) });
     }
   }
   const set = await policySetInForce(home);
@@ -102,4 +105,51 @@ export async function sessionEgress(input: SessionEgressInput): Promise<SessionE
     source: EGRESS_SOURCE.SESSION,
     close: proxy.close,
   };
+}
+
+interface RelayInput {
+  home: string;
+  caller: Required<EgressCaller>;
+  seams: EgressSeams;
+  upstream: () => Promise<number | null>;
+}
+
+/**
+ * The daemon's proxy behind a port this run holds, so a daemon that stops or moves never
+ * refuses the agent's calls. Without it the calls go through unruled, and the person is
+ * told Memnox is not watching rather than finding out from an agent that cannot connect.
+ */
+async function relayedToDaemon(input: RelayInput): Promise<SessionEgress> {
+  const { home, caller, seams } = input;
+  let standIn: Promise<EgressProxy> | null = null;
+  const startStandIn = (): Promise<EgressProxy> => {
+    standIn ??= (seams.start ?? startEgressProxy)({
+      seam: egressSeamFor({ home, log, fixed: caller }),
+      port: 0,
+      log,
+    });
+    return standIn;
+  };
+  const notice = seams.notice ?? desktopNotice;
+  const relay = await (seams.relay ?? startEgressRelay)({
+    upstream: input.upstream,
+    standIn: async () => (await startStandIn()).port,
+    changed: (state) => notice(relayNotice(state, caller.agent)),
+  });
+  return {
+    url: proxyUrlFor(relay.port, caller),
+    port: relay.port,
+    source: EGRESS_SOURCE.DAEMON,
+    close: async () => {
+      await relay.close();
+      if (standIn !== null) await (await standIn).close();
+    },
+  };
+}
+
+/** What the person is told when the relay changes where it sends the agent's calls. */
+export function relayNotice(state: RelayState, agent: string): string {
+  return state === RELAY_STATE.UNWATCHED
+    ? `Memnox is not watching ${agent}: its daemon stopped, so the agent's network calls go straight through until it is back. Run memnox daemon to watch again.`
+    : `Memnox is watching ${agent} again: its daemon is back and rules the agent's network calls.`;
 }

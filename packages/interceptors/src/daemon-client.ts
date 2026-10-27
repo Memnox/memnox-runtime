@@ -80,13 +80,54 @@ export function reportToDaemon(
   });
 }
 
+/** Any one request and its first line back, for a command that waits on a person or the cloud. */
+export function askDaemonOnce(
+  home: string,
+  request: DaemonRequest,
+  timeoutMs: number,
+): Promise<DaemonResponse | null> {
+  return speak(home, timeoutMs, request);
+}
+
+/**
+ * Every line a request streams back until the returned stop is called. `gone` runs once if the
+ * daemon hangs up or was never there, so a caller waiting on a stream is never left waiting.
+ */
+export function followDaemon(
+  home: string,
+  request: DaemonRequest,
+  each: (response: DaemonResponse) => void,
+  gone: () => void,
+): () => void {
+  let stopped = false;
+  const socket = connect(socketPathFor(home), () => socket.write(encode(request)));
+  const reader = new LineBuffer();
+  socket.setEncoding('utf8');
+  socket.on('data', (chunk: string) => {
+    for (const line of reader.push(chunk)) {
+      const response = decodeResponse(line);
+      if (response !== null && !stopped) each(response);
+    }
+  });
+  const hungUp = (): void => {
+    if (stopped) return;
+    stopped = true;
+    gone();
+  };
+  socket.on('error', hungUp);
+  socket.on('close', hungUp);
+  return () => {
+    stopped = true;
+    socket.destroy();
+  };
+}
+
 function speak(
   home: string,
   timeout: number | undefined,
   message: DaemonRequest,
 ): Promise<DaemonResponse | null> {
   const path = socketPathFor(home);
-  const timeoutMs = timeout ?? DAEMON_TIMEOUT_MS;
 
   return new Promise((resolve) => {
     let settled = false;
@@ -98,7 +139,7 @@ function speak(
       resolve(value);
     };
 
-    const timer = setTimeout(() => finish(null), timeoutMs);
+    const timer = setTimeout(() => finish(null), timeout ?? DAEMON_TIMEOUT_MS);
     timer.unref?.();
 
     const socket = connect(path, () => {
@@ -110,7 +151,13 @@ function speak(
     socket.on('data', (chunk: string) => {
       for (const line of reader.push(chunk)) finish(decodeResponse(line));
     });
-    // Not running is the ordinary case, not an error worth printing.
+    // A reply the daemon closed on without a newline is still the reply.
+    socket.on('end', () => {
+      for (const line of reader.push('\n')) finish(decodeResponse(line));
+      finish(null);
+    });
+    // Not running is the ordinary case, and an unanswered close would drain the loop with this pending.
+    socket.on('close', () => finish(null));
     socket.on('error', () => finish(null));
   });
 }

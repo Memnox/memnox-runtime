@@ -4,3 +4,4 @@ export * from './sqlite-store';
 export * from './bundle';
 export * from './outcome';
 export * from './seam-row';
+export * from './delegation';

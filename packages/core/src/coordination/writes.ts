@@ -1,5 +1,6 @@
 import { TOOL_CLASS } from '../discovery/classify';
 import { COMMAND_CLASS } from '../intercept/binary-class';
+import { withoutTrailing } from '../domain/plain-text';
 import { normalizeLeasePath } from './lease';
 
 /**
@@ -33,8 +34,8 @@ export function leasePathFor(
 
   const absolute = target.startsWith('/')
     ? target
-    : `${cwd.replace(/\/+$/, '')}/${target}`;
-  const root = repoRoot.replace(/\/+$/, '');
+    : `${withoutTrailing(cwd, '/')}/${target}`;
+  const root = withoutTrailing(repoRoot, '/');
   if (absolute !== root && !absolute.startsWith(`${root}/`)) return null;
 
   return normalizeLeasePath(absolute.slice(root.length));

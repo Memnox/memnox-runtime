@@ -8,6 +8,7 @@ import {
   CLAIM_ANSWER,
   meetingReason,
   TOOL_CLASS,
+  withStatement,
   type IntendedAction,
   type LeaseHolder,
   type SharedActions,
@@ -28,7 +29,8 @@ function mcpActionOf(call: ToolCall): IntendedAction | null {
     if (named === null) continue;
     const server = named[1] ?? '';
     const tool = named[2] ?? '';
-    const args = request.arguments ?? {};
+    // Without the statement the seam stamped, which the proxy's claim never carries.
+    const args = withStatement(request.arguments ?? {}, null);
     const resource = actionResource(server, args);
     const worth =
       changesExternalState(request.class) ||

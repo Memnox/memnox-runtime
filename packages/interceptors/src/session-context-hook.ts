@@ -1,13 +1,16 @@
 /**
- * Memnox inside the session: the boundary said once when a session starts, and a decision
- * somebody already took said where the agent is about to meet it, each at most once a session.
- * Read from the rule files on disk; nothing here calls a network or consults a model.
+ * The boundary said once when a session starts, and a decision already taken said where the agent
+ * meets it. Read from disk, never from a model; the one network call is a logged in machine's
+ * bounded ask at a session's start, and its failure says nothing rather than holding the session.
  */
 import {
   ACTION,
   boundaryContext,
+  candidatesAbout,
+  describeCandidate,
   describeFact,
   factsAbout,
+  MOST_CANDIDATES_PER_CALL,
   MOST_FACTS_PER_CALL,
   MOST_PROMPT_WORDS,
   readWorkspaceMemory,
@@ -31,6 +34,10 @@ import {
   type DecisionSubject,
   type FactQuery,
   type ProtectionStop,
+  isWorkBriefId,
+  renderWorkBrief,
+  WORK_BRIEF_VAR,
+  WorkBriefs,
 } from '@memnox/core';
 
 import { CURSOR_EVENT } from './agent-edits';
@@ -39,6 +46,7 @@ import { EDIT_HOOK_EVENT } from './edit-hook';
 import { readHookConfig } from './hook-config';
 import { cwdOf, fieldsOf, sessionOf } from './hook-payload';
 import { repositoryRootOf } from './seam-runtime';
+import { sessionBriefLine, type SessionBriefFetch } from './session-brief-line';
 import { readMachineMode } from './tool-hook';
 
 /** Who and where, as the hook process reads it once where it starts. */
@@ -50,6 +58,12 @@ export interface SessionContextDeps {
   now: () => Date;
   /** Injected so a test states the repository rather than asking git. */
   rootOf?: (cwd: string) => string | null;
+  /** The `memnox run` session a declared task is filed under, where there is one. */
+  runSession?: string;
+  /** Injected so a test states what the workspace answers rather than asking it. */
+  brief?: SessionBriefFetch;
+  /** Injected so a test names the remote rather than asking git. */
+  remoteOf?: (root: string) => string | undefined;
 }
 
 /** A session that just began, where the host sends one. */
@@ -110,16 +124,40 @@ export async function answerSessionStart(
   const repository = (deps.rootOf ?? repositoryRootOf)(cwd);
   // Picked up the first time an agent works here, so the daemon wraps its MCP servers.
   if (repository !== null) rememberRepository(deps.home, repository);
+  // Started before the reads below, so its one bounded round trip overlaps them.
+  const workspaceBrief = workspaceBriefFor(start, deps, cwd, repository);
   const fingerprint = await fingerprintHere(repository, deps.agent);
-  const text = [
+  const text = linesOf([
     boundaryContext({ mode, rules, containment }),
     await memoryLine(deps.home),
+    await workBriefLine(deps.home, deps.env),
+    await workspaceBrief,
     fingerprint.told,
-  ]
-    .filter((each) => each !== '')
-    .join('\n');
+  ]);
   if (text === '') return '';
   return `${sessionStartReply(start, text, fingerprint.notice)}\n`;
+}
+
+/** The parts that have something to say, one to a line. */
+function linesOf(parts: readonly string[]): string {
+  return parts.filter((each) => each !== '').join('\n');
+}
+
+/** What the workspace says about where this session starts, or nothing on any failure. */
+function workspaceBriefFor(
+  start: SessionStart,
+  deps: SessionContextDeps,
+  cwd: string,
+  root: string | null,
+): Promise<string> {
+  return sessionBriefLine({
+    home: deps.home,
+    sessionId: deps.runSession ?? start.sessionId,
+    cwd,
+    root,
+    ...(deps.brief === undefined ? {} : { brief: deps.brief }),
+    ...(deps.remoteOf === undefined ? {} : { remoteOf: deps.remoteOf }),
+  }).catch(() => '');
 }
 
 /** What the agent is told about the fingerprint, and what its person sees said about it. */
@@ -177,6 +215,17 @@ function sessionStartReply(
   });
 }
 
+/**
+ * The work the person handed this session, read in before its first turn rather than left for it
+ * to fetch, so it starts knowing the ticket, what was said about it and the decisions that bind it.
+ */
+async function workBriefLine(home: string, env: NodeJS.ProcessEnv): Promise<string> {
+  const id = env[WORK_BRIEF_VAR];
+  if (id === undefined || !isWorkBriefId(id)) return '';
+  const brief = await new WorkBriefs(home).read(id).catch(() => null);
+  return brief === null ? '' : renderWorkBrief(brief);
+}
+
 /** Said once a session, so an agent knows to ask what was settled before it plans a change. */
 async function memoryLine(home: string): Promise<string> {
   const memory = await readWorkspaceMemory(home).catch(() => null);
@@ -193,18 +242,19 @@ export async function decisionsAt(
   deps: SessionContextDeps,
 ): Promise<string | null> {
   const rules = await ruleLines(lookup, deps);
-  const facts = await factLines(lookup, deps);
-  if (rules.length === 0 && facts.length === 0) return null;
+  const { facts, candidates } = await factLines(lookup, deps);
+  if (rules.length === 0 && facts.length === 0 && candidates.length === 0) return null;
 
   const store = new SessionContextStore(deps.home);
   const state = await store.read(lookup.sessionId);
   const fresh = [
     ...notYetShown(state, rules.map(idOf)).slice(0, MOST_DECISIONS_PER_CALL),
     ...notYetShown(state, facts.map(idOf)).slice(0, MOST_FACTS_PER_CALL),
+    ...notYetShown(state, candidates.map(idOf)).slice(0, MOST_CANDIDATES_PER_CALL),
   ];
   if (fresh.length === 0) return null;
   await store.write(lookup.sessionId, markShown(state, fresh, deps.now().toISOString()));
-  return [...rules, ...facts]
+  return [...rules, ...facts, ...candidates]
     .filter((each) => fresh.includes(each.id))
     .map((each) => each.text)
     .join('\n');
@@ -243,22 +293,33 @@ const CHANGES: readonly string[] = [ACTION.FILESYSTEM_WRITE, ACTION.FILESYSTEM_D
 /** Prefixed, so a fact and a rule can never be taken for each other in the session's record. */
 const FACT_ID_PREFIX = 'fact:';
 
+/** Prefixed apart from a fact, so approving a candidate later says it again as settled. */
+const CANDIDATE_ID_PREFIX = 'candidate:';
+
 /**
  * What the workspace settled about the words of a prompt, or about the paths a write is
- * about to change. Read from the memory this machine last pulled, with no network near it.
+ * about to change, and apart from it what connected tools said that nobody approved, each
+ * line opening with that. Read from the memory this machine last pulled, with no network.
  */
 async function factLines(
   lookup: DecisionLookup,
   deps: SessionContextDeps,
-): Promise<Line[]> {
+): Promise<{ facts: Line[]; candidates: Line[] }> {
+  const none = { facts: [], candidates: [] };
   const memory = await readWorkspaceMemory(deps.home).catch(() => null);
-  if (memory === null) return [];
+  if (memory === null) return none;
   const query = factQueryOf(lookup);
-  if (query === null) return [];
-  return factsAbout(memory, query).map((found) => ({
-    id: `${FACT_ID_PREFIX}${found.fact.id}`,
-    text: describeFact(found),
-  }));
+  if (query === null) return none;
+  return {
+    facts: factsAbout(memory, query).map((found) => ({
+      id: `${FACT_ID_PREFIX}${found.fact.id}`,
+      text: describeFact(found),
+    })),
+    candidates: candidatesAbout(memory, query).map(({ candidate }) => ({
+      id: `${CANDIDATE_ID_PREFIX}${candidate.id}`,
+      text: describeCandidate(candidate),
+    })),
+  };
 }
 
 /** Context beside a tool call that goes ahead, in Claude Code's words; the prompt still runs. */

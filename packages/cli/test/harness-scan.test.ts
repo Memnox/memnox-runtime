@@ -95,7 +95,7 @@ describe('memnox scan, with a harness on the machine', () => {
       chains: { subject: string; individuallyHarmless: boolean }[];
     };
 
-    expect(inventory.version).toBe(2);
+    expect(inventory.version).toBe(4);
     expect(inventory.harnesses.map((each) => each.kind).sort()).toEqual([
       'hermes',
       'ruflo',

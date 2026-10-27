@@ -1,0 +1,28 @@
+{
+  "name": "@memnox/noise-win32-x64-msvc",
+  "version": "0.1.1",
+  "description": "The Noise addon for Memnox, prebuilt for win32-x64-msvc.",
+  "license": "Apache-2.0",
+  "main": "memnox-noise.win32-x64-msvc.node",
+  "files": [
+    "memnox-noise.win32-x64-msvc.node"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Memnox/memnox.git",
+    "directory": "native/noise/npm/win32-x64-msvc"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

@@ -18,6 +18,8 @@ import {
   interruptions,
   promotable,
   MINIMUM_EVIDENCE,
+  MOST_HANDED_TARGETS,
+  describeHandedReach,
   standingOf,
 } from '../src/session/autonomy';
 
@@ -42,7 +44,7 @@ const event = (over: Partial<MemnoxEvent> = {}): MemnoxEvent => ({
 });
 
 const approved = (n: number, over: Partial<MemnoxEvent> = {}): MemnoxEvent[] =>
-  Array.from({ length: n }, () => event({ authorizedBy: 'tresor', ...over }));
+  Array.from({ length: n }, () => event({ authorizedBy: 'ada', ...over }));
 
 describe('what a person has already decided', () => {
   it('recommends handing over what they keep saying yes to', () => {
@@ -271,5 +273,58 @@ describe('handOverVerdict', () => {
     expect(row !== undefined && handable(row, higher)).toBe(false);
     expect(handOverVerdict('vercel.deploy-preview', found, higher).ready).toBe(false);
     expect(promotable(found, higher)).toEqual([]);
+  });
+});
+
+describe('handing over without reaching past what was approved', () => {
+  it('keeps the targets the yeses named, and only theirs', () => {
+    const [found] = delegations([
+      ...approved(3, { target: 'feature/a' }),
+      ...approved(2, { target: 'feature/b' }),
+      // Held and never answered, so it is no yes and its target is not handed over.
+      event({ target: 'main' }),
+    ]);
+    expect(found?.targets).toEqual(['feature/a', 'feature/b']);
+    expect(found !== undefined && handable(found)).toBe(true);
+    expect(found === undefined ? '' : describeHandedReach(found)).toBe(
+      'only on the 2 targets it was approved for',
+    );
+  });
+
+  it('says so when no approval named a target, since the rule then reaches everywhere', () => {
+    const [found] = delegations(approved(PROMOTION_THRESHOLD));
+    expect(found?.targets).toEqual([]);
+    expect(found === undefined ? '' : describeHandedReach(found)).toContain(
+      'wherever it runs',
+    );
+  });
+
+  it('holds back a target a rule would read as a pattern', () => {
+    const found = delegations(approved(PROMOTION_THRESHOLD, { target: 'src/*' }));
+    const verdict = handOverVerdict('vercel.deploy-preview', found);
+    expect(verdict.ready).toBe(false);
+    expect(verdict.ready ? '' : verdict.because).toContain('read as a pattern');
+    // Still on the screen with its reason, because a person can hand it over by hand.
+    expect(promotable(found)).toHaveLength(1);
+  });
+
+  it('holds back approvals spread over more targets than one rule should list', () => {
+    const spread = Array.from({ length: MOST_HANDED_TARGETS + 1 }, (_, at) =>
+      event({ authorizedBy: 'ada', target: `path/${at}` }),
+    );
+    const verdict = handOverVerdict('vercel.deploy-preview', delegations(spread));
+    expect(verdict.ready ? '' : verdict.because).toContain(
+      `${MOST_HANDED_TARGETS + 1} different targets`,
+    );
+  });
+
+  it('judges the action by the widest class it was recorded under', () => {
+    const [found] = delegations([
+      ...approved(PROMOTION_THRESHOLD),
+      event({ authorizedBy: 'ada', class: TOOL_CLASS.DESTRUCTIVE }),
+    ]);
+    expect(found?.class).toBe(TOOL_CLASS.DESTRUCTIVE);
+    expect(found?.recommendation).toBe(AUTONOMY.SUPERVISED);
+    expect(found !== undefined && handable(found)).toBe(false);
   });
 });

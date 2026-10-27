@@ -51,6 +51,27 @@ export function matchesAny(
   );
 }
 
+/**
+ * `matchesAny` over several names for one value, as a classification and the labels it
+ * implies: excluded when any name is, matched when any name is.
+ */
+export function matchesAnyOf(
+  patterns: readonly string[] | undefined,
+  values: readonly string[],
+): boolean {
+  if (values.length === 0) return matchesAny(patterns, undefined);
+  if (!patterns || patterns.length === 0) return true;
+  const excluded = patterns.filter((pattern) => pattern.startsWith(EXCLUDE));
+  if (
+    values.some((value) =>
+      excluded.some((pattern) => matchesPattern(pattern.slice(EXCLUDE.length), value)),
+    )
+  ) {
+    return false;
+  }
+  return values.some((value) => matchesAny(patterns, value));
+}
+
 /** Stands for the directory the agent is working in, so a rule can say inside or outside it. */
 export const WORKSPACE_TOKEN = '{workspace}';
 

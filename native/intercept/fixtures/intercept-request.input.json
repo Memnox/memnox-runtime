@@ -1,0 +1,12 @@
+{
+  "argv": ["git", "commit", "-m", "say \"hi\"\tand\\then\nnew line", "\u0001\u001f", "café 😀 / \u007f"],
+  "env": [
+    ["PATH", "/usr/local/bin:/usr/bin:/bin"],
+    ["HOME", "/Users/someone"],
+    ["MEMNOX_SESSION", "ses_golden"],
+    ["EMPTY", ""],
+    ["QUOTED", "it's \"quoted\""]
+  ],
+  "cwd": "/Users/someone/work space/repo",
+  "ppid": 4242
+}

@@ -20,7 +20,7 @@ import {
 } from '../../agents/names';
 import type { NameAsker } from '../../agents/name-prompt';
 import { buildEnrolReporter, describeProduct } from '../agents/shared';
-import { STATUS, type Result } from './summary';
+import { LOCAL_ONLY_REASON, STATUS, type Result } from './summary';
 
 /** One agent as the scan found it, and the file onboarding would rewrite. */
 interface DescribeInput {
@@ -31,6 +31,8 @@ interface DescribeInput {
   report: DiscoveryReport;
   snapshot: EnvironmentSnapshot;
   config: Manageable;
+  /** Setup puts its own hook into this agent, so only the workspace half can be missing. */
+  hooked?: boolean;
 }
 
 /** The agent described, plus what it takes to ask about it and enrol it. */
@@ -40,6 +42,10 @@ interface OfferInput extends DescribeInput {
   confirm: Confirm;
   project: string;
 }
+
+/** What the card says of an agent its own hook governs here and the workspace cannot reach. */
+const HOOKED_HERE_ROW =
+  'by its own hook on this machine, and the workspace has no config of its to reach';
 
 /** Enough to make the point without the block becoming the screen. */
 const SHOWN = 4;
@@ -110,6 +116,14 @@ async function enrol(input: OfferInput, name: string): Promise<Result> {
     report: buildEnrolReporter(flow),
     shownAs: name,
   });
+  if (result.outcome === ONBOARD.LOCAL_ONLY) {
+    flow.aside(
+      style.dim(
+        `${name} is governed on this machine. Your workspace did not take it: ${result.because ?? 'its plan is full'}`,
+      ),
+    );
+    return { name, status: STATUS.LOCAL, because: LOCAL_ONLY_REASON };
+  }
   if (result.outcome !== ONBOARD.DONE || result.record === undefined) {
     const because = result.because ?? 'no reason given';
     flow.aside(style.warn(`Did not onboard ${name}: ${because}`));
@@ -148,7 +162,10 @@ export function describeAgent(input: DescribeInput): void {
   }
   rows.push({ label: 'mcp', value: describeServers(input.snapshot, agent) });
   rows.push(...reachOf(agent, input.report, home));
-  if (config.because !== undefined) {
+  // Governed here by its hook, so the workspace's reach is the only thing a missing config says.
+  if (config.because !== undefined && input.hooked === true) {
+    rows.push({ label: 'governed', value: style.dim(HOOKED_HERE_ROW) });
+  } else if (config.because !== undefined) {
     rows.push({ label: 'cannot manage', value: style.warn(config.because) });
   }
   context.flow.rows(displayName(input.names, agent), rows);

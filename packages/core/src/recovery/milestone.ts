@@ -141,3 +141,12 @@ export function milestonesOfSession(
     .filter((milestone) => milestone.sessionId === sessionId)
     .sort((a, b) => a.takenAt.localeCompare(b.takenAt));
 }
+
+/** One file that differs from a milestone. Line counts are null for a binary file. */
+export interface FileChange {
+  path: string;
+  /** A for added, M for modified, D for deleted, as git names them. */
+  status: string;
+  added: number | null;
+  removed: number | null;
+}

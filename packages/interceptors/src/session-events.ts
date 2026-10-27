@@ -21,18 +21,24 @@ import {
   EDIT_HOST,
   GEMINI_EDIT_TOOLS,
   GEMINI_EVENT,
+  HERMES_EDIT_TOOLS,
+  HERMES_EVENT,
   WINDSURF_EVENT,
   type EditHost,
 } from './agent-edits';
 import { parsePatch } from './codex-patch';
+import { OPENCLAW_EVENT } from './openclaw-payload';
+import { COPILOT_EVENT, DEVIN_EVENT, OPENCODE_EVENT } from './named-hosts';
 import { EDIT_HOOK_EVENT, EDIT_TOOLS } from './edit-hook';
 import {
   CODEX_PATCH_TOOL,
   cwdOf,
+  delegationOf,
   fieldsOf,
   firstText,
   folderOf,
   sessionOf,
+  type Delegation,
   type HookFields,
 } from './hook-payload';
 
@@ -63,6 +69,8 @@ export interface SessionEvent {
   input?: Record<string, unknown>;
   /** What the person asked, on a `prompt` event, read for a decision it names. */
   prompt?: string;
+  /** The helper whose tool just ran, where the host names one. */
+  delegation?: Delegation;
 }
 
 /** Which agent sent a pause and which pause it is, by the event name each one uses. */
@@ -97,6 +105,39 @@ const PAUSE_EVENTS: Readonly<Record<string, { host: EditHost; moment: SessionMom
       host: EDIT_HOST.GEMINI,
       moment: SESSION_MOMENT.PROMPT,
     },
+    [HERMES_EVENT.POST_TOOL_CALL]: {
+      host: EDIT_HOST.HERMES,
+      moment: SESSION_MOMENT.AFTER_TOOL,
+    },
+    [HERMES_EVENT.TURN_END]: { host: EDIT_HOST.HERMES, moment: SESSION_MOMENT.TURN_END },
+    [OPENCLAW_EVENT.AFTER_TOOL]: {
+      host: EDIT_HOST.OPENCLAW,
+      moment: SESSION_MOMENT.AFTER_TOOL,
+    },
+    [COPILOT_EVENT.POST_TOOL]: {
+      host: EDIT_HOST.COPILOT,
+      moment: SESSION_MOMENT.AFTER_TOOL,
+    },
+    [COPILOT_EVENT.TURN_END]: {
+      host: EDIT_HOST.COPILOT,
+      moment: SESSION_MOMENT.TURN_END,
+    },
+    [COPILOT_EVENT.PROMPT]: { host: EDIT_HOST.COPILOT, moment: SESSION_MOMENT.PROMPT },
+    [DEVIN_EVENT.POST_TOOL]: { host: EDIT_HOST.DEVIN, moment: SESSION_MOMENT.AFTER_TOOL },
+    [DEVIN_EVENT.TURN_END]: { host: EDIT_HOST.DEVIN, moment: SESSION_MOMENT.TURN_END },
+    [DEVIN_EVENT.PROMPT]: { host: EDIT_HOST.DEVIN, moment: SESSION_MOMENT.PROMPT },
+    [OPENCODE_EVENT.POST_TOOL]: {
+      host: EDIT_HOST.OPENCODE,
+      moment: SESSION_MOMENT.AFTER_TOOL,
+    },
+    [OPENCODE_EVENT.TURN_END]: {
+      host: EDIT_HOST.OPENCODE,
+      moment: SESSION_MOMENT.TURN_END,
+    },
+    [HERMES_EVENT.PRE_LLM_CALL]: {
+      host: EDIT_HOST.HERMES,
+      moment: SESSION_MOMENT.PROMPT,
+    },
   };
 
 /** The pause in this payload, or null where it is not one. */
@@ -114,16 +155,22 @@ export function sessionEventOf(payload: unknown): SessionEvent | null {
   const cwd = cwdOf(hook);
   const base = { ...pause, sessionId, ...(cwd === undefined ? {} : { cwd }) };
   if (pause.moment === SESSION_MOMENT.PROMPT) {
-    const prompt = hook['prompt'];
+    // Hermes carries every event's own fields under `extra`, the person's words among them.
+    const prompt =
+      pause.host === EDIT_HOST.HERMES
+        ? fieldsOf(hook['extra'])?.['user_message']
+        : hook['prompt'];
     return typeof prompt === 'string' ? { ...base, prompt } : base;
   }
   if (pause.moment !== SESSION_MOMENT.AFTER_TOOL) return base;
   const tool = hook['tool_name'];
   const input = fieldsOf(hook['tool_input']);
+  const delegation = delegationOf(hook);
   return {
     ...base,
     ...(typeof tool === 'string' ? { tool } : {}),
     ...(input === null ? {} : { input }),
+    ...(delegation.subagent === undefined ? {} : { delegation }),
   };
 }
 
@@ -184,8 +231,9 @@ const PRE_TOOL_USE_CONTEXT: ContextEvents = {
  */
 export function sessionAnswer(event: SessionEvent, notes: string | null): string {
   // Windsurf reads nothing back from these, so there is nothing to say.
-  if (event.host === EDIT_HOST.WINDSURF) return '';
+  if (!readsNotesAt(event.host, event.moment)) return '';
   if (event.host === EDIT_HOST.CURSOR) return cursorAnswer(event, notes);
+  if (event.host === EDIT_HOST.HERMES) return hermesAnswer(event, notes);
   if (notes === null) return '';
   if (event.moment === SESSION_MOMENT.TURN_END) {
     const decision = event.host === EDIT_HOST.GEMINI ? 'deny' : 'block';
@@ -197,6 +245,27 @@ export function sessionAnswer(event: SessionEvent, notes: string | null): string
   return JSON.stringify({
     hookSpecificOutput: { hookEventName, additionalContext: notes },
   });
+}
+
+/** Hermes reads `{ context }` before a model call and nothing back after a tool or a turn. */
+function hermesAnswer(event: SessionEvent, notes: string | null): string {
+  if (notes === null || event.moment !== SESSION_MOMENT.PROMPT) return '';
+  return JSON.stringify({ context: notes });
+}
+
+/** Whether this host reads a note back at this pause, so one it cannot show is left waiting. */
+export function readsNotesAt(host: EditHost, moment: SessionMoment): boolean {
+  // OpenClaw's and OpenCode's after-tool hooks only observe, and Copilot drops what these print.
+  const silent: readonly string[] = [
+    EDIT_HOST.WINDSURF,
+    EDIT_HOST.OPENCLAW,
+    EDIT_HOST.COPILOT,
+    EDIT_HOST.OPENCODE,
+  ];
+  if (silent.includes(host)) return false;
+  // Devin reads context at a prompt and a block at a stop, and nothing after a tool.
+  if (host === EDIT_HOST.DEVIN) return moment !== SESSION_MOMENT.AFTER_TOOL;
+  return host !== EDIT_HOST.HERMES || moment === SESSION_MOMENT.PROMPT;
 }
 
 function cursorAnswer(event: SessionEvent, notes: string | null): string {
@@ -216,7 +285,12 @@ const READ_TOOLS: readonly string[] = ['Read', 'NotebookRead', 'read_file'];
  * Codex's patch is read apart, since it names several.
  */
 const WRITE_TOOLS: readonly string[] = [
-  ...new Set([...EDIT_TOOLS, ...CURSOR_EDIT_TOOLS, ...GEMINI_EDIT_TOOLS]),
+  ...new Set([
+    ...EDIT_TOOLS,
+    ...CURSOR_EDIT_TOOLS,
+    ...GEMINI_EDIT_TOOLS,
+    ...HERMES_EDIT_TOOLS,
+  ]),
 ];
 
 /** Where any agent's file tool names its file. */
@@ -317,6 +391,7 @@ function fileRow(input: FileRowInput): MemnoxEvent {
     sessionId: event.sessionId,
     agent: input.agent,
     actorType: ACTOR_TYPE.AGENT,
+    ...(event.delegation ?? {}),
     surface: EVENT_SURFACE.FILESYSTEM,
     operation: input.operation,
     class: input.toolClass,

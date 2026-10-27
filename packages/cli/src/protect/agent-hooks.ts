@@ -2,8 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DISCOVERED_AGENT_KIND } from '@memnox/core';
 import {
+  COPILOT_AGENT,
   CURSOR_EDIT_TOOLS,
   CURSOR_EVENT,
+  DEVIN_AGENT,
+  OPENCODE_AGENT,
   EDIT_HOOK_BINARY,
   EDIT_HOOK_EVENT,
   WINDSURF_EVENT,
@@ -18,12 +21,33 @@ import {
   removeClaudeHook,
   removeSettingsHook,
   TURN_END_TIMEOUT_MARK,
+  PRE_TOOL_TIMEOUT_MARK,
   type HookEvent,
 } from './claude-hook';
+import { HERMES_PLUGIN, installHermesPlugin, removeHermesPlugin } from './hermes-plugin';
+import {
+  installOpenClawPlugin,
+  OPENCLAW_PLUGIN,
+  removeOpenClawPlugin,
+} from './openclaw-plugin';
+import {
+  COPILOT_HOOKS,
+  DEVIN_SETTINGS,
+  installCopilotHook,
+  installDevinHook,
+  removeCopilotHook,
+  removeDevinHook,
+} from './named-host-hooks';
+import {
+  installOpenCodePlugin,
+  OPENCODE_PLUGIN,
+  removeOpenCodePlugin,
+} from './opencode-plugin';
 import { isInPlace, REWRITE, rewriteJsonFile } from './json-config';
 
 /**
- * The same lease hook in Codex, Gemini CLI, Windsurf and Cursor, each only where it is
+ * The same lease hook in Codex, Gemini CLI, Windsurf, Cursor, Hermes, OpenClaw, Copilot CLI
+ * and Devin, each only where it is
  * installed. Each command names its agent, so a refusal elsewhere says which one.
  */
 
@@ -34,15 +58,19 @@ const CODEX_HOOKS = join('.codex', 'hooks.json');
  * and its MCP calls are all ruled on, so no pattern syntax has to be guessed.
  */
 function codexEvents(): HookEvent[] {
-  return claudeEvents().map((each) =>
-    each.event === EDIT_HOOK_EVENT.PRE_TOOL_USE ? { event: each.event } : each,
-  );
+  // Notification is Claude Code's own event, which Codex does not raise.
+  return claudeEvents()
+    .filter((each) => each.event !== EDIT_HOOK_EVENT.NOTIFICATION)
+    .map((each) =>
+      each.event === EDIT_HOOK_EVENT.PRE_TOOL_USE ? { event: each.event } : each,
+    );
 }
 
 /** Cursor's user-level hooks, which apply in every repository it opens. */
 const CURSOR_HOOKS = join('.cursor', 'hooks.json');
 const CURSOR_HOOKS_VERSION = 1;
 
+/** Codex's entry names the launcher like every other host's, which keeps its trust through updates. */
 export async function installCodexHook(home: string): Promise<boolean> {
   return installSettingsHook(
     join(home, CODEX_HOOKS),
@@ -226,7 +254,7 @@ export const EDIT_HOOK_TARGETS: readonly EditHookTarget[] = [
     install: installClaudeHook,
     remove: removeClaudeHook,
     currentEvents: STARTS_A_SESSION,
-    currentText: [TURN_END_TIMEOUT_MARK],
+    currentText: [TURN_END_TIMEOUT_MARK, PRE_TOOL_TIMEOUT_MARK],
   },
   {
     name: 'Codex',
@@ -234,7 +262,6 @@ export const EDIT_HOOK_TARGETS: readonly EditHookTarget[] = [
     file: CODEX_HOOKS,
     install: installCodexHook,
     remove: removeCodexHook,
-    currentEvents: STARTS_A_SESSION,
   },
   {
     name: 'Cursor',
@@ -257,6 +284,43 @@ export const EDIT_HOOK_TARGETS: readonly EditHookTarget[] = [
     file: WINDSURF_HOOKS,
     install: installWindsurfHook,
     remove: removeWindsurfHook,
+  },
+  {
+    name: 'Hermes',
+    agent: DISCOVERED_AGENT_KIND.HERMES,
+    // The plugin rather than the config, since the plugin is what spells the hook it runs.
+    file: HERMES_PLUGIN,
+    install: installHermesPlugin,
+    remove: removeHermesPlugin,
+  },
+  {
+    name: 'OpenClaw',
+    agent: DISCOVERED_AGENT_KIND.OPENCLAW,
+    // The plugin rather than the config, since the plugin is what spells the hook it runs.
+    file: OPENCLAW_PLUGIN,
+    install: installOpenClawPlugin,
+    remove: removeOpenClawPlugin,
+  },
+  {
+    name: 'Copilot CLI',
+    agent: COPILOT_AGENT,
+    file: COPILOT_HOOKS,
+    install: installCopilotHook,
+    remove: removeCopilotHook,
+  },
+  {
+    name: 'Devin',
+    agent: DEVIN_AGENT,
+    file: DEVIN_SETTINGS,
+    install: installDevinHook,
+    remove: removeDevinHook,
+  },
+  {
+    name: 'OpenCode',
+    agent: OPENCODE_AGENT,
+    file: OPENCODE_PLUGIN,
+    install: installOpenCodePlugin,
+    remove: removeOpenCodePlugin,
   },
 ];
 

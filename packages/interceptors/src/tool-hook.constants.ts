@@ -1,11 +1,5 @@
 import { ACTION } from '@memnox/core';
 
-/**
- * The job an agent was enrolled under, matched by a
- * rule's `roles:`, which tells a workforce apart.
- */
-export const ENV_AGENT_ROLE = 'MEMNOX_AGENT_ROLE';
-
 /** The agent kind this seam is installed into, used as the default policy identity. */
 export const DEFAULT_AGENT_NAME = 'claude-code';
 

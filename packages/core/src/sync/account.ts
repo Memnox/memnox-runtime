@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import type { ApprovalRoute } from '../constants/approval-route.constants';
 import type { EnforcementMode } from '../constants/enforcement.constants';
+import type { MachineClass } from '../constants/machine-class.constants';
 import { MEMNOX_HOME } from '../config/config';
 import { writeJsonFile } from '../store/json-records';
 
@@ -37,6 +38,10 @@ export interface Account {
   cloudMode?: EnforcementMode;
   /** The last approval route the workspace set, kept for the same reason as the mode. */
   cloudApprovals?: ApprovalRoute;
+  /** What this machine said it was at enrolment, which rules scoped to servers or workstations match on. */
+  machineClass?: MachineClass;
+  /** The person who owns this machine in the workspace, whose questions it holds first. */
+  ownerPersonId?: string;
   /**
    * When the control plane first refused this credential: revoked, or removed from the
    * workspace. Kept so this machine can say who let it go, and stops calling for good.

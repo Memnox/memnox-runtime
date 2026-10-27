@@ -14,10 +14,19 @@ table of where to make each kind of change.
 git clone https://github.com/Memnox/memnox.git
 cd memnox
 pnpm install          # pnpm 11, Node 22 or 24
+pnpm --filter @memnox/noise build   # the native addon pairing runs on; needs Rust
 pnpm build            # every package, in dependency order
 pnpm test             # ~2100 tests, a few seconds
 pnpm bench            # the wall-clock ones, run on purpose
 ```
+
+**Build the Noise addon once, before the first `pnpm test`.** Pairing a phone runs over an
+encrypted tunnel written in Rust (`native/noise`), and its tests load the real addon. A
+release ships it prebuilt for each platform, but a clone has none, so without this step
+about forty pairing tests fail with "Pairing needs the Noise addon". It needs a Rust
+toolchain (`curl https://sh.rustup.rs -sSf | sh`) and, on Linux, a C linker
+(`sudo apt install build-essential`). Run it again only after changing anything under
+`native/noise`.
 
 Run your working copy against your own machine:
 
@@ -29,6 +38,13 @@ node packages/cli/dist/index.js doctor --wiring
 `pnpm build` first, because the `dist/` you just ran is whatever was last built, and a
 change you did not build is a change you did not test.
 
+The pairing tests load `@memnox/noise`, a Rust addon. `pnpm install` fetches the
+published build for your platform (macOS, Linux and Windows on x64, macOS and Linux on
+arm64) and checks it against the registry's integrity, so no Rust is needed to run the
+suite. If you change anything under `native/noise`, or the install said it could not
+fetch one, build it yourself with `pnpm --filter @memnox/noise build`; a local build
+always wins over the fetched one.
+
 Nothing in the suite reads your home directory, spawns an agent, or watches a real
 directory. If a test you write needs one of those, inject it instead; see **Seams**
 in `ARCHITECTURE.md`.
@@ -36,12 +52,15 @@ in `ARCHITECTURE.md`.
 ## Before you open a pull request
 
 ```sh
-pnpm format && pnpm typecheck && pnpm test && pnpm deadcode
+pnpm format          # writes the formatting, then
+pnpm verify          # what CI runs, in its order: format check, typecheck, build, test, deadcode
+pnpm verify:linux    # the same inside a Linux container, with Docker running
 ```
 
-All four, clean. CI runs them on Ubuntu and macOS against Node 22 and 24, plus a
+All clean. CI runs them on Ubuntu and macOS against Node 22 and 24, plus a
 publish dry run, because a shim that works on one platform and not the other is the bug
-that matrix exists to catch.
+that matrix exists to catch. `verify:linux` is that Ubuntu leg on your own machine, as a
+user who is not root, and `NODE_VERSION=22 pnpm verify:linux` is the other Node.
 
 - Unit tests for new logic; an integration test when a command or a flag moves.
 - `docs/` updated when a user-visible command, flag, file or path changes.

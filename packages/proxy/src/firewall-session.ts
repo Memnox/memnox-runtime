@@ -1,5 +1,6 @@
 import {
   classifyToolCall,
+  ruledFor,
   type McpToolDeclaration,
   DECISION_EFFECT,
   describeAlternative,
@@ -118,6 +119,9 @@ export class FirewallSession {
     { call: ToolCall; verdict: CallVerdict }
   >();
 
+  /** The pages of a `tools/list` gathered so far, handed on whole once the last arrives. */
+  private listingSoFar: McpToolDeclaration[] = [];
+
   /** Notes collected and not yet handed over, oldest first. */
   private waiting: SessionNote[] = [];
   /** One collection at a time, so a burst of calls asks once. */
@@ -207,6 +211,8 @@ export class FirewallSession {
     const id = identify(message);
     if (message.method === METHOD_TOOLS_LIST && id !== null) {
       this.listRequestIds.add(id);
+      // No cursor is a listing starting over, whatever an abandoned one had gathered.
+      if (message.params?.['cursor'] === undefined) this.listingSoFar = [];
       return { forward: message };
     }
     if (message.method !== METHOD_TOOLS_CALL) return { forward: message };
@@ -257,6 +263,7 @@ export class FirewallSession {
       // The server's tool, so a yes on one server is not a yes on another with the name.
       grantKey: `mcp.${this.deps.server ?? ''}.${call.name}`,
       ...(this.deps.server === undefined ? {} : { target: this.deps.server }),
+      ...(verdict.rule === undefined ? {} : { rule: verdict.rule }),
     };
 
     if (hold === undefined) {
@@ -270,7 +277,8 @@ export class FirewallSession {
     const result = await hold.hold(request);
     if (holdAllowed(result)) {
       this.deps.authorizer.personAllowed?.(call);
-      return { ...verdict, effect: DECISION_EFFECT.ALLOW, reason: 'a person allowed it' };
+      const who = result.by === undefined ? 'a person' : `a person, ${result.by},`;
+      return { ...verdict, effect: DECISION_EFFECT.ALLOW, reason: `${who} allowed it` };
     }
     return {
       ...verdict,
@@ -297,10 +305,19 @@ export class FirewallSession {
 
   /** One server message, framed and recorded against the call it answers. */
   private replyFor(message: JsonRpcMessage): JsonRpcMessage {
+    // Client and server number their ids apart, so one the server started answers no call
+    // of ours however its id reads: taking it as a result retires the wrong open call.
+    if (!isResponse(message)) return message;
     const id = identify(message);
     if (id !== null && this.listRequestIds.has(id)) {
       this.listRequestIds.delete(id);
-      this.deps.onListing?.(declarationsIn(message));
+      this.listingSoFar.push(...declarationsIn(message));
+      // A page that names a next one is part of a listing, not the whole of it: handing it
+      // on alone wiped the earlier pages from the manifest and the pin file.
+      if (!continues(message)) {
+        this.deps.onListing?.(this.listingSoFar);
+        this.listingSoFar = [];
+      }
       return this.filterListing(message);
     }
 
@@ -344,6 +361,12 @@ export class FirewallSession {
       ...(verdict.rule === undefined ? {} : { rule: verdict.rule }),
       ...(verdict.decisionId === undefined ? {} : { decisionId: verdict.decisionId }),
       ...(result === undefined ? {} : { result }),
+      class: classifyToolCall(
+        call.name,
+        call.arguments ?? {},
+        this.deps.manifest?.declaration(call.name),
+      ).class,
+      ...ruledFor(verdict),
     });
   }
 
@@ -422,10 +445,24 @@ function declarationsIn(message: JsonRpcMessage): McpToolDeclaration[] {
     .filter((tool) => tool.name !== '');
 }
 
+/** Whether the server has more pages of this listing to send. */
+function continues(message: JsonRpcMessage): boolean {
+  const cursor = message.result === undefined ? undefined : message.result['nextCursor'];
+  return typeof cursor === 'string' && cursor !== '';
+}
+
 function toolNameOf(tool: unknown): string {
   if (typeof tool !== 'object' || tool === null) return '';
   const name: unknown = Reflect.get(tool, 'name');
   return String(name ?? '');
+}
+
+/** A response carries no method and does carry a result or an error. */
+function isResponse(message: JsonRpcMessage): boolean {
+  return (
+    message.method === undefined &&
+    (message.result !== undefined || message.error !== undefined)
+  );
 }
 
 function identify(message: JsonRpcMessage): MessageId | null {

@@ -56,6 +56,23 @@ const CASES: readonly [string, string][] = [
   ['reply_comment', TOOL_CLASS.COMMUNICATION],
   ['broadcast_notification', TOOL_CLASS.COMMUNICATION],
   ['send', TOOL_CLASS.COMMUNICATION],
+  // The names real servers give a post, whose first word says nothing about it.
+  ['add_issue_comment', TOOL_CLASS.COMMUNICATION],
+  ['create_pull_request_review', TOOL_CLASS.COMMUNICATION],
+  ['submit_pending_pull_request_review', TOOL_CLASS.COMMUNICATION],
+  ['addCommentToJiraIssue', TOOL_CLASS.COMMUNICATION],
+  ['create_comment', TOOL_CLASS.COMMUNICATION],
+  ['slack_post_message', TOOL_CLASS.COMMUNICATION],
+  ['slack_reply_to_thread', TOOL_CLASS.COMMUNICATION],
+  ['conversations_add_message', TOOL_CLASS.COMMUNICATION],
+  ['GITHUB_CREATE_AN_ISSUE_COMMENT', TOOL_CLASS.COMMUNICATION],
+  ['JIRA_ADD_COMMENT', TOOL_CLASS.COMMUNICATION],
+  ['SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL', TOOL_CLASS.COMMUNICATION],
+  // Reading posts, deleting one and a review app are not speaking to anybody.
+  ['get_pull_request_comments', TOOL_CLASS.READ],
+  ['list_messages', TOOL_CLASS.READ],
+  ['delete_comment', TOOL_CLASS.DESTRUCTIVE],
+  ['create_review_app', TOOL_CLASS.WRITE],
 
   ['frobnicate_widget', TOOL_CLASS.UNKNOWN],
   ['do_the_thing', TOOL_CLASS.UNKNOWN],

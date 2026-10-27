@@ -3,9 +3,11 @@ import { ACTION } from '../constants/action.constants';
 import type { ActionRequest } from '../domain/action-event';
 import type { Alternative, MatchedPolicy } from '../domain/decision';
 import { DECISION_EFFECT, EFFECT_PRECEDENCE } from '../constants/decision.constants';
+import { CONTEXT_SIGNAL_PREFIX } from '../ledger/ledger.constants';
 import { PolicyEngine, type Policy } from '../policy/index';
 import { matchesAny } from '../policy/pattern-matcher';
 import { scopeOf, TASK_INTENT, type SessionTask } from '../session/session-task';
+import { describeStrain, isStrained, type SessionStrain } from '../session/strain';
 import { reachesOutside } from '../notice/turn';
 import { TOOL_CLASS } from '../discovery/classify';
 import { SCOPE_MATCH, type ScopeComparison } from '../domain/task';
@@ -28,6 +30,11 @@ export interface LocalGateOptions {
   /** The job this agent was enrolled under, so a rule's `roles` has something to match. */
   agentRole?: string;
   /**
+   * The person the agent works for. Stamped on every request over whatever the caller
+   * said, since an agent naming who it acts for would name whoever may do the most.
+   */
+  principal?: string;
+  /**
    * What somebody asked for, so a rule can match on `scope`. Null is `undeclared` rather
    * than out of scope, because most sessions declare nothing.
    */
@@ -44,6 +51,8 @@ export interface LocalGateOptions {
   parents?: readonly string[];
   /** Scopes a person allowed for a while, which turn an ask inside them into an allow. */
   allowances?: readonly Allowance[] | (() => readonly Allowance[]);
+  /** What this session has failed at and not got past, read from the ledger by the seam. */
+  strain?: SessionStrain | null;
 }
 
 export interface LocalVerdict {
@@ -58,6 +67,8 @@ export interface LocalVerdict {
   alternative?: Alternative;
   /** How this sat against the declared task, so a caller can report drift. */
   scope?: ScopeComparison;
+  /** The person this was ruled for, as the run named them, so the ledger row can say so. */
+  principal?: string;
 }
 
 /** Evaluated where the call is made, so arguments never travel; only ids and signals do. */
@@ -94,9 +105,12 @@ export class LocalGate {
   }
 
   /** The rules first, then a second look at what they allowed. */
-  evaluate(request: ActionRequest): LocalVerdict {
-    const verdict = this.ruled(request);
-    return this.notice === null ? verdict : this.notice.consider(request, verdict);
+  evaluate(given: ActionRequest): LocalVerdict {
+    const principal = this.options.principal;
+    const request = principal === undefined ? given : { ...given, principal };
+    const ruled = this.ruled(request);
+    const verdict = this.notice === null ? ruled : this.notice.consider(request, ruled);
+    return principal === undefined ? verdict : { ...verdict, principal };
   }
 
   /** Something the agent read addressed it like a prompt. True when a session was marked. */
@@ -120,19 +134,18 @@ export class LocalGate {
       selfProtection(request) ??
       hiddenCode(request) ??
       offIntent(this.options.task ?? null, request, evaluation.effect) ??
+      underStrain(this.options.strain, request, evaluation.effect) ??
       this.contained(request, evaluation.effect);
     const effect = effectUnder(evaluation.effect, contained);
-    const allowed = this.allowedWithin(request, effect, at);
+    const allowed = this.allowedWithin(
+      request,
+      { effect, matchedPolicies: evaluation.matchedPolicies },
+      at,
+    );
     return {
       effect: allowed === null ? effect : DECISION_EFFECT.ALLOW,
       reason: reasonOf(allowed, contained, evaluation.reason),
-      signals: [
-        ...evaluation.matchedPolicies.map(
-          (policy) => `${SIGNAL_POLICY_PREFIX}${policy.name}`,
-        ),
-        ...(contained === null ? [] : [contained.signal]),
-        ...(allowed === null ? [] : [`allowance:${allowed.id}`]),
-      ],
+      signals: this.signalsOf(evaluation, drift, contained, allowed),
       matchedPolicies: evaluation.matchedPolicies,
       ...(evaluation.shadowEffect === undefined
         ? {}
@@ -142,6 +155,25 @@ export class LocalGate {
         : { alternative: evaluation.alternative }),
       ...(drift.match === SCOPE_MATCH.UNDECLARED ? {} : { scope: drift }),
     };
+  }
+
+  /** Rule ids and what decided, never the matched text, so a verdict's signals can travel. */
+  private signalsOf(
+    evaluation: ReturnType<PolicyEngine['evaluate']>,
+    drift: ScopeComparison,
+    contained: ContainmentAsk | null,
+    allowed: Allowance | null,
+  ): string[] {
+    const { matchedPolicies, effect } = evaluation;
+    return [
+      ...matchedPolicies.map((policy) => `${SIGNAL_POLICY_PREFIX}${policy.name}`),
+      ...contextSignals(matchedPolicies, this.engine.rules(), effect),
+      ...(drift.match === SCOPE_MATCH.UNDECLARED
+        ? []
+        : [`${CONTEXT_SIGNAL_PREFIX.SCOPE}${drift.match}`]),
+      ...(contained === null ? [] : [contained.signal]),
+      ...(allowed === null ? [] : [`${ALLOWANCE_SIGNAL_PREFIX}${allowed.id}`]),
+    ];
   }
 
   /**
@@ -186,13 +218,14 @@ export class LocalGate {
     });
   }
 
-  /** Last, and only over an ask: a scope a person allowed for a while. */
+  /** Last, and only over an ask: a scope a person allowed for a while, and never over the workspace's own ask. */
   private allowedWithin(
     request: ActionRequest,
-    effect: DecisionEffect,
+    evaluation: { effect: DecisionEffect; matchedPolicies: readonly MatchedPolicy[] },
     at: Date,
   ): Allowance | null {
-    if (effect !== DECISION_EFFECT.ASK) return null;
+    if (evaluation.effect !== DECISION_EFFECT.ASK) return null;
+    if (askedByWorkspace(evaluation.matchedPolicies)) return null;
     return allowanceFor(allowancesOf(this.options.allowances), request, {
       agentName: this.options.agentName,
       now: at.toISOString(),
@@ -215,7 +248,8 @@ function effectUnder(
   effect: DecisionEffect,
   contained: ContainmentAsk | null,
 ): DecisionEffect {
-  if (contained === null) return effect;
+  // A milestone covers it, so the rules' allow stands and only the reason says why.
+  if (contained === null || contained.checkpointed === true) return effect;
   return contained.refuses === true ? DECISION_EFFECT.DENY : DECISION_EFFECT.ASK;
 }
 
@@ -239,10 +273,39 @@ function offIntent(
   if (!CHANGES.includes(request.toolClass ?? '')) return null;
   return {
     reason: `"${task.statement}" is an investigation, and this changes something outside this machine.`,
-    signal: 'intent:investigate',
+    signal: INVESTIGATE_SIGNAL,
     refuses: true,
   };
 }
+
+/**
+ * A session that keeps failing keeps working on this machine, and asks before it reaches
+ * past it or deletes anything, since a broader change after failed fixes is the moment a
+ * confused agent does the most damage. Only an allow is narrowed.
+ */
+function underStrain(
+  strain: SessionStrain | null | undefined,
+  request: ActionRequest,
+  effect: DecisionEffect,
+): ContainmentAsk | null {
+  if (!isStrained(strain) || effect !== DECISION_EFFECT.ALLOW) return null;
+  const toolClass = request.toolClass ?? '';
+  const destroys = toolClass === TOOL_CLASS.DESTRUCTIVE;
+  const reachesOut = CHANGES.includes(toolClass) && reachesOutside(request.action);
+  if (!destroys && !reachesOut) return null;
+  return { reason: describeStrain(strain), signal: STRAIN_SIGNAL };
+}
+
+export const STRAIN_SIGNAL = 'strain:failures';
+
+/** What a refusal of a change from a session declared an investigation is recorded under. */
+export const INVESTIGATE_SIGNAL = 'intent:investigate';
+
+/** How an ask a person had already allowed for a while names the allowance that answered it. */
+export const ALLOWANCE_SIGNAL_PREFIX = 'allowance:';
+
+/** What a hold on code nobody could read first is recorded under. */
+export const HIDDEN_CODE_SIGNAL = 'hidden-code';
 
 /** A long-lived gate reads them at each decision, since one granted later must count. */
 function allowancesOf(given: LocalGateOptions['allowances']): readonly Allowance[] {
@@ -265,6 +328,46 @@ function hiddenCode(request: ActionRequest): ContainmentAsk | null {
   return {
     reason:
       'this runs code nobody could read before it runs, so a person should look first',
-    signal: 'hidden-code',
+    signal: HIDDEN_CODE_SIGNAL,
   };
+}
+
+/** A workspace rule that asks is the team's question, so a local allowance never answers it. */
+function askedByWorkspace(matched: readonly MatchedPolicy[]): boolean {
+  return matched.some(
+    (policy) =>
+      policy.workspace === true &&
+      policy.observed !== true &&
+      policy.effect === DECISION_EFFECT.ASK,
+  );
+}
+
+/**
+ * Which part of the context each rule that agreed with the verdict was written about, so
+ * the ledger can say a refusal came from who the agent works for rather than from what it ran.
+ */
+function contextSignals(
+  matched: readonly MatchedPolicy[],
+  rules: readonly Policy[],
+  effect: DecisionEffect,
+): string[] {
+  const agreed = matched.filter(
+    (each) => each.effect === effect && each.observed !== true,
+  );
+  return agreed.flatMap((each) => {
+    const match = rules.find((rule) => rule.name === each.name)?.match;
+    if (match === undefined) return [];
+    const said: string[] = [];
+    if (hasAny(match.principals))
+      said.push(`${CONTEXT_SIGNAL_PREFIX.PERSON}${each.name}`);
+    if (hasAny(match.agents) || hasAny(match.roles))
+      said.push(`${CONTEXT_SIGNAL_PREFIX.AGENT}${each.name}`);
+    if (hasAny(match.scope)) said.push(`${CONTEXT_SIGNAL_PREFIX.INTENT}${each.name}`);
+    // A rule about none of those is a rule about the action and where it lands.
+    return said.length > 0 ? said : [`${CONTEXT_SIGNAL_PREFIX.SYSTEMS}${each.name}`];
+  });
+}
+
+function hasAny(patterns: readonly unknown[] | undefined): boolean {
+  return patterns !== undefined && patterns.length > 0;
 }

@@ -6,11 +6,15 @@
 import { homedir } from 'node:os';
 import type { Command } from 'commander';
 import {
+  agentLifecycle,
+  capabilitiesOf,
   failOnValues,
   inventoryOf,
   renderShareCard,
   shareCardFor,
+  tallyOf,
   EXIT,
+  type AgentLifecycle,
   type DiscoveryReport,
 } from '@memnox/core';
 import type { CliContext } from '../cli-context';
@@ -43,6 +47,7 @@ interface ScanOptions {
   from?: string;
   to?: string;
   failOn?: string;
+  sarif?: boolean;
 }
 
 interface ScanInput {
@@ -52,6 +57,9 @@ interface ScanInput {
 
 interface ReportInput {
   report: DiscoveryReport;
+  /** Servers never asked what they hold, which leave the capability count uncounted. */
+  unasked: readonly string[];
+  lifecycle: AgentLifecycle;
   takenAt: string;
   options: ScanOptions;
 }
@@ -88,6 +96,7 @@ export function registerScanCommand(
       '--fail-on <gate>',
       `exit non-zero when something widened: ${failOnValues().join(' | ')}`,
     )
+    .option('--sarif', 'emit a comparison as SARIF 2.1.0, for code scanning')
     .option(
       '--no-probe',
       'do not start MCP servers to ask what they hold; tools go uncounted',
@@ -107,7 +116,12 @@ async function runScan(
   const { unrecognized, options } = input;
   const first = unrecognized[0];
   if (first !== undefined) throw new Error(describeUnknownCommand(program, first));
-  if (options.json !== true) context.flow.open('memnox scan');
+  if (options.sarif === true && !wantsDrift(options)) {
+    throw new Error(
+      '--sarif reports what changed between two scans. Add --fail-on, --since or --from.',
+    );
+  }
+  if (options.json !== true && options.sarif !== true) context.flow.open('memnox scan');
   const seams = deps.buildSeams(deps.cwd());
 
   // Before the scan, because a comparison takes its own later side.
@@ -117,11 +131,18 @@ async function runScan(
   }
 
   // Kept only when asked: a scan every command runs would churn the history.
-  const { report, snapshot } = await scanMachine(seams, {
+  const { report, snapshot, unasked } = await scanMachine(seams, {
     probe: options.probe,
     save: options.save === true,
   });
-  return renderReport(context, deps, { report, takenAt: snapshot.takenAt, options });
+  const lifecycle = agentLifecycle(report.agents, await seams.snapshots.history());
+  return renderReport(context, deps, {
+    report,
+    unasked,
+    takenAt: snapshot.takenAt,
+    options,
+    lifecycle,
+  });
 }
 
 /** The report, as the one view the flags picked. */
@@ -130,7 +151,7 @@ async function renderReport(
   deps: ScanDeps,
   input: ReportInput,
 ): Promise<void> {
-  const { report, takenAt, options } = input;
+  const { report, unasked, takenAt, options, lifecycle } = input;
   const asJson = options.json === true;
   if (options.share === true) return renderShare(context, report, takenAt, asJson);
   if (options.usage !== undefined) {
@@ -141,11 +162,14 @@ async function renderReport(
   }
   if (asJson) {
     // The inventory rather than the raw report: this is the shape that leaves the process.
-    context.out.json(inventoryOf(report, takenAt));
+    context.out.json({
+      ...inventoryOf(report, takenAt),
+      capabilities: tallyOf(capabilitiesOf(report), unasked.length === 0),
+    });
     return;
   }
   if (options.tools === true) return renderTools(context, report);
-  return renderMachine(context, report, await deps.counts());
+  return renderMachine(context, report, await deps.counts(), { lifecycle, unasked });
 }
 
 /** The share card is meant to be pasted elsewhere, so nothing of ours is drawn through it. */

@@ -203,14 +203,38 @@ describe('probation', () => {
     },
   };
 
-  it('asks before any write, even inside the repository', () => {
+  it('lets a write inside the repository run with a milestone rather than asking', () => {
     const asked = containmentAsk(
       { action: 'filesystem.write', target: `${ROOT}/a.ts` },
       { ...probation, root: ROOT },
     );
+    expect(asked?.checkpointed).toBe(true);
+    expect(asked?.signal).toBe(CONTAINMENT_SIGNAL.CHECKPOINTED);
+    expect(asked?.reason).toContain('memnox rewind');
+  });
+
+  it('still asks where no milestone reaches: no repository, or a write outside it', () => {
+    const nowhere = containmentAsk(
+      { action: 'filesystem.write', target: '/somewhere/a.ts' },
+      probation,
+    );
+    expect(nowhere?.signal).toBe(CONTAINMENT_SIGNAL.PROBATION);
+    expect(nowhere?.reason).toContain('Cursor is on probation until 2026-10-01');
+    expect(nowhere?.reason).toContain('memnox agents trust cursor');
+    const outside = containmentAsk(
+      { action: 'filesystem.write', target: '/var/lib/x' },
+      { ...probation, root: ROOT, cwd: ROOT },
+    );
+    expect(outside?.checkpointed).toBeUndefined();
+  });
+
+  it('never lets a delete through on a milestone', () => {
+    const asked = containmentAsk(
+      { action: 'filesystem.delete', target: `${ROOT}/a.ts` },
+      { ...probation, root: ROOT },
+    );
     expect(asked?.signal).toBe(CONTAINMENT_SIGNAL.PROBATION);
-    expect(asked?.reason).toContain('Cursor is on probation until 2026-10-01');
-    expect(asked?.reason).toContain('memnox agents trust cursor');
+    expect(asked?.checkpointed).toBeUndefined();
   });
 
   it('asks before outward and destructive actions, and never before a read', () => {
@@ -228,6 +252,53 @@ describe('the local gate under containment', () => {
     match: { actions: ['filesystem.write'], targets: ['/etc/**'] },
     decision: { effect: 'deny', reason: 'never /etc' },
   } as Policy;
+
+  it('lets a probation write inside the repository run, saying a milestone covers it', () => {
+    const gate = new LocalGate([], {
+      agentName: 'cursor',
+      containment: {
+        root: ROOT,
+        cwd: ROOT,
+        probation: {
+          name: 'Cursor',
+          until: '2026-10-01T00:00:00.000Z',
+          trustCommand: 'memnox agents trust cursor',
+        },
+      },
+    });
+    const verdict = gate.evaluate({
+      action: 'filesystem.write',
+      target: `${ROOT}/src/a.ts`,
+    });
+    expect(verdict.effect).toBe('allow');
+    expect(verdict.signals).toContain(CONTAINMENT_SIGNAL.CHECKPOINTED);
+    expect(verdict.reason).toContain('memnox rewind');
+  });
+
+  it('keeps a rule that asks asking, milestone or not', () => {
+    const asks = {
+      name: 'ask-src',
+      match: { actions: ['filesystem.write'], targets: [`${ROOT}/**`] },
+      decision: { effect: 'ask', reason: 'the team reviews these' },
+    } as Policy;
+    const gate = new LocalGate([asks], {
+      agentName: 'cursor',
+      containment: {
+        root: ROOT,
+        cwd: ROOT,
+        probation: {
+          name: 'Cursor',
+          until: '2026-10-01T00:00:00.000Z',
+          trustCommand: 'memnox agents trust cursor',
+        },
+      },
+    });
+    const verdict = gate.evaluate({
+      action: 'filesystem.write',
+      target: `${ROOT}/src/a.ts`,
+    });
+    expect(verdict.effect).toBe('ask');
+  });
 
   it('turns an allow into an ask, and says which part of containment asked', () => {
     const gate = new LocalGate([], { agentName: 'claude-code', containment: BOUNDARY });

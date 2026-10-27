@@ -5,7 +5,7 @@
  */
 import { digest } from '../domain/digest';
 import { HOLD_ANSWER, type HoldAnswer, type HoldRequest } from './hold';
-import { PendingApprovals, type PendingApproval } from './pending';
+import { ANSWER_PLACE, PendingApprovals, type PendingApproval } from './pending';
 import { plainAsk, type PlainAsk } from './plain-ask';
 import {
   grantPlaceOf,
@@ -32,6 +32,12 @@ export interface ChatQuestion {
   reason: string;
   /** What the person asked for this session, so the question says what it is in service of. */
   task?: string;
+  /** Everything the call changes stays inside the session's repository. */
+  withinSession?: boolean;
+  /** The rule that asked, by name. */
+  rule?: string;
+  /** The rule's way forward, as `describeAlternative` words it. */
+  alternative?: string;
 }
 
 function grantKeyOf(question: Pick<ChatQuestion, 'action' | 'target'>): string {
@@ -94,6 +100,9 @@ export async function holdInChat(
     reason: question.reason,
     class: question.class,
     grantKey: grantKeyOf(question),
+    ...(question.withinSession === true ? { withinSession: true } : {}),
+    ...(question.rule === undefined ? {} : { rule: question.rule }),
+    ...(question.alternative === undefined ? {} : { alternative: question.alternative }),
   };
   const raised = await approvals.raise(request, moment, CHAT_APPROVAL_MS);
   const routed: PendingApproval = {
@@ -194,14 +203,19 @@ export async function markTold(
   for (const each of held) await approvals.keep({ ...each, toldAgentAt: moment });
 }
 
-/** Whether this session has a question sent to a DM that nobody has answered yet. */
+/** Answerable somewhere a picker on screen would never hear of: a DM, the Mac app, a phone. */
+function answeredAway(held: PendingApproval): boolean {
+  return held.route === APPROVAL_ROUTE.BOTH || (held.alsoOn?.length ?? 0) > 0;
+}
+
+/** Whether this session has a question out somewhere else that nobody has answered yet. */
 export async function waitingOnDm(
   approvals: PendingApprovals,
   sessionId: string,
   moment: string,
 ): Promise<boolean> {
   const open = await openInSession(approvals, sessionId, moment);
-  return open.some((each) => each.route === APPROVAL_ROUTE.BOTH);
+  return open.some(answeredAway);
 }
 
 /** A delete is granted on its target only, so its "for this session" has to say so. */
@@ -275,11 +289,29 @@ export function heldIdsIn(text: string): string[] {
 }
 
 /**
- * Only Claude Code has the picker, and only while the question is not also in a DM: nothing
- * outside can close a picker, so a DM answer would leave it on screen asking for nothing.
+ * Only Claude Code has the picker, and only while the question is nowhere else: nothing
+ * outside can close a picker, so an answer there would leave it asking for nothing.
  */
 function hasPicker(held: PendingApproval): boolean {
-  return held.request.agent === 'claude-code' && held.route !== APPROVAL_ROUTE.BOTH;
+  return held.request.agent === 'claude-code' && !answeredAway(held);
+}
+
+/** Where else the question was put, in the words the session shows. */
+function elsewhere(
+  held: PendingApproval,
+  whose: 'their' | 'your',
+  joined: 'and' | 'or',
+): string | null {
+  const places = [
+    ...(held.alsoOn?.includes(ANSWER_PLACE.MAC) === true ? ['the Memnox Mac app'] : []),
+    ...(held.alsoOn?.includes(ANSWER_PLACE.PAIRED) === true
+      ? [`${whose} paired phone`]
+      : []),
+    ...(held.route === APPROVAL_ROUTE.BOTH ? [`${whose} Slack or Discord DM`] : []),
+  ];
+  const last = places.pop();
+  if (last === undefined) return null;
+  return places.length === 0 ? last : `${places.join(', ')} ${joined} ${last}`;
 }
 
 /** The only question a picker may put for this held call, word for word. */
@@ -347,7 +379,18 @@ export function answeredText(held: PendingApproval): string {
           : '';
     return `Memnox: ${by} said yes for the rest of this session: you may ${what} (${held.id}).${scope} Try the same call again now and carry on.`;
   }
-  return `Memnox: ${by} said no: do not ${what}, and do not get the same result another way (${held.id}). Carry on without it, or tell them what you need instead.`;
+  return `Memnox: ${by} said no: do not ${what}, and do not get the same result another way (${held.id}).${saidWithNo(held)} Carry on without it, or tell them what you need instead.`;
+}
+
+/** The person's reason and the rule's way forward, which together are how a no becomes a narrower try. */
+function saidWithNo(held: PendingApproval): string {
+  const reason =
+    held.answerReason === undefined
+      ? ''
+      : ` They said: ${held.answerReason.replace(/[.!?]+$/, '')}.`;
+  const instead =
+    held.request.alternative === undefined ? '' : ` ${held.request.alternative}`;
+  return `${reason}${instead}`;
 }
 
 /**
@@ -356,10 +399,11 @@ export function answeredText(held: PendingApproval): string {
  */
 export function heldNotice(held: PendingApproval): string {
   const plain = plainOf(held);
+  const away = elsewhere(held, 'your', 'and');
   const dm =
-    held.route === APPROVAL_ROUTE.BOTH
-      ? ' It was also sent to your Slack or Discord: answer there and the agent carries on by itself.'
-      : '';
+    away === null
+      ? ''
+      : ` It was also sent to ${away}: answer there and the agent carries on by itself.`;
   return [
     `Memnox needs your OK (${held.id})`,
     plain.summary,
@@ -373,17 +417,18 @@ export function heldNotice(held: PendingApproval): string {
 /** What the agent is told when its question is held: how to ask, and how to wait. */
 export function heldText(held: PendingApproval): string {
   const plain = plainOf(held);
-  const dm = held.route === APPROVAL_ROUTE.BOTH;
+  const away = elsewhere(held, 'their', 'or');
+  const dm = away !== null;
   const ask = hasPicker(held)
     ? [pickerAsk(held)]
     : dm
       ? [
-          'Tell them in one line that you are waiting on their answer, here or in their Slack or Discord DM, and end your turn. Do not open a picker or ask them any other way.',
+          `Tell them in one line that you are waiting on their answer, here or from ${away}, and end your turn. Do not open a picker or ask them any other way.`,
         ]
       : [
           'Show them these choices, in these words, and wait for their reply:',
           ...choices(held),
-          `They answer by typing 1, 2 or 3, or the words, in this session${dm ? ' or in their Slack or Discord DM' : ''}. Only their own reply counts, so never answer for them.`,
+          'They answer by typing 1, 2 or 3, or the words, in this session. Only their own reply counts, so never answer for them.',
         ];
   return [
     `Memnox is holding this until your person answers (${held.id}): ${plain.summary}`,

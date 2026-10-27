@@ -1,3 +1,5 @@
+import type { AgentHost, HostLocation, HostSignatureState } from './agent-host';
+import type { ApprovalState } from './approval-posture';
 import type { DiscoveryReport } from './discover';
 import { URL_SERVER_COMMAND } from './detectors/mcp-config';
 import type { McpServerLaunch, Surface } from './surface';
@@ -21,6 +23,21 @@ export interface EnvironmentSnapshot {
   agents: SnapshotAgent[];
   servers: SnapshotServer[];
   resources: SnapshotResource[];
+  /** Absent on a snapshot kept before hooks were read, so none of them reads as new. */
+  hooks?: SnapshotHook[];
+}
+
+/** A hook as it is kept: what runs and when, never the command line. */
+export interface SnapshotHook {
+  id: string;
+  host: string;
+  event: string;
+  program: string;
+  declaredIn: string;
+  plugin?: string;
+  gate: boolean;
+  feedsModel: boolean;
+  own: boolean;
 }
 
 export interface SnapshotAgent {
@@ -35,6 +52,16 @@ export interface SnapshotAgent {
    * per-agent roster cannot see, so the membership is kept rather than the count.
    */
   harness?: SnapshotHarness;
+  /** Whether it asks before acting. Absent on a scan kept before this was read. */
+  approval?: ApprovalState;
+  /** Where its binary lives and who signed it, never the path, which names the user. */
+  host?: SnapshotHost;
+}
+
+export interface SnapshotHost {
+  location: HostLocation;
+  signature: HostSignatureState;
+  signer?: string;
 }
 
 export interface SnapshotHarness {
@@ -94,30 +121,7 @@ export function snapshotOf(
 ): EnvironmentSnapshot {
   return {
     takenAt,
-    agents: report.agents.map((agent) => {
-      const harness = report.harnesses.find((each) => each.agentId === agent.id);
-      return {
-        id: agent.id,
-        kind: agent.kind,
-        ...(agent.version === undefined ? {} : { version: agent.version }),
-        surfaces: report.surfaces
-          .filter((surface) => surface.agentId === agent.id)
-          .map((surface) => ({
-            kind: surface.kind,
-            detectedFrom: surface.detectedFrom,
-          })),
-        ...(harness === undefined
-          ? {}
-          : {
-              harness: {
-                runtimes: [...harness.runtimes],
-                roles: [...harness.roles],
-                hooks: [...harness.hooks],
-                federated: harness.federated,
-              },
-            }),
-      };
-    }),
+    agents: report.agents.map((agent) => snapshotAgentOf(report, agent)),
     servers: serversIn(report),
     resources: report.resources.map((resource) => ({
       id: resource.id,
@@ -126,6 +130,54 @@ export function snapshotOf(
       sensitivity: resource.sensitivity,
       reachableBy: resource.reachableBy.map((ref) => ref.id),
     })),
+    hooks: report.hooks.map((hook) => ({
+      id: hook.id,
+      host: hook.host,
+      event: hook.event,
+      program: hook.program,
+      declaredIn: hook.declaredIn,
+      ...(hook.plugin === undefined ? {} : { plugin: hook.plugin }),
+      gate: hook.gate,
+      feedsModel: hook.feedsModel,
+      own: hook.own,
+    })),
+  };
+}
+
+/** One agent as it is kept: its surfaces by kind, a harness's membership, and its standing. */
+function snapshotAgentOf(
+  report: DiscoveryReport,
+  agent: DiscoveryReport['agents'][number],
+): SnapshotAgent {
+  const harness = report.harnesses.find((each) => each.agentId === agent.id);
+  return {
+    id: agent.id,
+    kind: agent.kind,
+    ...(agent.version === undefined ? {} : { version: agent.version }),
+    ...(agent.approval === undefined ? {} : { approval: agent.approval.state }),
+    ...(agent.host === undefined ? {} : { host: snapshotHostOf(agent.host) }),
+    surfaces: report.surfaces
+      .filter((surface) => surface.agentId === agent.id)
+      .map((surface) => ({ kind: surface.kind, detectedFrom: surface.detectedFrom })),
+    ...(harness === undefined
+      ? {}
+      : {
+          harness: {
+            runtimes: [...harness.runtimes],
+            roles: [...harness.roles],
+            hooks: [...harness.hooks],
+            federated: harness.federated,
+          },
+        }),
+  };
+}
+
+/** The binary without its path, which names the user. */
+function snapshotHostOf(host: AgentHost): SnapshotHost {
+  return {
+    location: host.location,
+    signature: host.signature.state,
+    ...(host.signature.signer === undefined ? {} : { signer: host.signature.signer }),
   };
 }
 

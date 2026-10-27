@@ -4,11 +4,13 @@ import {
   compareSnapshots,
   failOnValues,
   isFailOn,
+  sarifOf,
   summarizeChanges,
   type EnvironmentChange,
   type EnvironmentSnapshot,
 } from '@memnox/core';
 import type { CliContext } from '../cli-context';
+import { CLI_VERSION } from '../defaults';
 import { TONE } from '../flow';
 import { scanMachine, type ScanSeams } from '../machine-scan';
 
@@ -25,6 +27,8 @@ interface DriftOptions {
   to?: string;
   failOn?: string;
   json?: boolean;
+  /** The comparison as SARIF, for a pipeline's code scanning rather than a person. */
+  sarif?: boolean;
   probe: boolean;
 }
 
@@ -62,6 +66,10 @@ export async function renderDrift(
     throw new Error(`No scan was kept at or before ${options.to ?? 'now'}.`);
   }
   if (before === null) {
+    if (options.sarif === true) {
+      context.out.json(sarifFor(seams, [], []));
+      return false;
+    }
     renderNoBaseline(context, options.json === true);
     return false;
   }
@@ -69,17 +77,45 @@ export async function renderDrift(
   const changes = compareSnapshots(before, snapshot);
   const failing =
     options.failOn === undefined ? [] : changesFailing(changes, options.failOn);
-  if (options.json === true) {
-    context.out.json({ baseline: before.takenAt, changes, failing });
-  } else {
-    render(context, {
-      baselineAt: before.takenAt,
-      changes,
-      failing,
-      failOn: options.failOn,
-    });
-  }
+  output(context, seams, options, {
+    baselineAt: before.takenAt,
+    changes,
+    failing,
+    failOn: options.failOn,
+  });
   return failing.length > 0;
+}
+
+/** The comparison in whichever form was asked for: SARIF, JSON, or the rail. */
+function output(
+  context: CliContext,
+  seams: ScanSeams,
+  options: DriftOptions,
+  view: DriftView,
+): void {
+  if (options.sarif === true) {
+    context.out.json(sarifFor(seams, view.changes, view.failing));
+  } else if (options.json === true) {
+    const { changes, failing } = view;
+    context.out.json({ baseline: view.baselineAt, changes, failing });
+  } else {
+    render(context, view);
+  }
+}
+
+/** Paths inside the checkout are named relative to it, which is how code scanning finds them. */
+function sarifFor(
+  seams: ScanSeams,
+  changes: readonly EnvironmentChange[],
+  failing: readonly EnvironmentChange[],
+): ReturnType<typeof sarifOf> {
+  const root = seams.projectDirs[0];
+  return sarifOf({
+    changes,
+    failing,
+    toolVersion: CLI_VERSION,
+    ...(root === undefined ? {} : { root }),
+  });
 }
 
 /** An explicit --to compares two kept scans; without it the later side is this machine now. */

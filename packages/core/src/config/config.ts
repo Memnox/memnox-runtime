@@ -46,6 +46,24 @@ export interface MemnoxConfig {
    * session, and with `both` the person's Slack or Discord DM as well.
    */
   approvals: ApprovalRoute;
+  /**
+   * What a file path or a command line becomes when an action is sent to the workspace:
+   * `full` as written, or `hashed` under a key only this machine holds.
+   */
+  uploadPaths: UploadPaths;
+  /**
+   * Hand an agent, for a week, an action a person approved again and again with no refusal.
+   * Off until a person turns it on, because it widens what an agent may do unasked.
+   */
+  autopilot: boolean;
+}
+
+export const UPLOAD_PATHS = { FULL: 'full', HASHED: 'hashed' } as const;
+
+export type UploadPaths = (typeof UPLOAD_PATHS)[keyof typeof UPLOAD_PATHS];
+
+function isUploadPaths(value: string): value is UploadPaths {
+  return Object.values<string>(UPLOAD_PATHS).includes(value);
 }
 
 export const DEFAULT_CONFIG: MemnoxConfig = {
@@ -57,6 +75,9 @@ export const DEFAULT_CONFIG: MemnoxConfig = {
   noticeUnusual: true,
   noticeWarmupDays: DEFAULT_NOTICE_WARMUP_DAYS,
   approvals: APPROVAL_ROUTE.SESSION,
+  // As it always was, since what a workspace already shows is not changed under it.
+  uploadPaths: UPLOAD_PATHS.FULL,
+  autopilot: false,
 };
 
 const KEYS = [
@@ -68,6 +89,8 @@ const KEYS = [
   'noticeUnusual',
   'noticeWarmupDays',
   'approvals',
+  'uploadPaths',
+  'autopilot',
 ] as const;
 export type ConfigKey = (typeof KEYS)[number];
 
@@ -102,8 +125,10 @@ export function parseConfig(raw: string): MemnoxConfig {
     }
     if (key === 'failOpen') config.failOpen = value === 'true';
     if (key === 'telemetry') config.telemetry = value === 'true';
+    if (key === 'autopilot') config.autopilot = value === 'true';
     if (key === 'approvedAgents') config.approvedAgents = splitList(value);
     if (key === 'noticeUnusual') config.noticeUnusual = value !== 'false';
+    if (key === 'uploadPaths' && isUploadPaths(value)) config.uploadPaths = value;
     if (key === 'noticeWarmupDays' && isWholeDays(value)) {
       config.noticeWarmupDays = Number(value);
     }
@@ -156,11 +181,27 @@ export function renderConfig(config: MemnoxConfig): string {
     '# Days after setup when those are only recorded, so day one is not a wall of asks.',
     `noticeWarmupDays = ${config.noticeWarmupDays}`,
     '',
+    ...renderRouting(config),
+  ].join('\n');
+}
+
+/** Where questions and paths go, and the autopilot: the half of the file added later. */
+function renderRouting(config: MemnoxConfig): string[] {
+  return [
     '# session | both. A question the agent cannot show its own prompt for is always',
     '# asked in the agent session; both also sends it to your Slack or Discord DM.',
     `approvals = "${config.approvals}"`,
     '',
-  ].join('\n');
+    '# full | hashed. File paths and command lines sent to the workspace: as written,',
+    '# or hashed under a key only this machine holds, so the same file still matches.',
+    `uploadPaths = "${config.uploadPaths}"`,
+    '',
+    '# Hand an agent, for a week, an action you approved for it again and again with no',
+    '# refusal. Only what "memnox next --hand-over" would offer, never production, and',
+    '# any refusal takes it back. "memnox autopilot" lists what it granted.',
+    `autopilot = ${config.autopilot}`,
+    '',
+  ];
 }
 
 export interface ConfigParse {
@@ -169,6 +210,15 @@ export interface ConfigParse {
 }
 
 /** Validation lives beside the schema, so the CLI only has to print what it is told. */
+function validUploadPaths(value: string): ConfigParse {
+  return isUploadPaths(value)
+    ? { value }
+    : {
+        value,
+        error: `uploadPaths must be one of ${Object.values(UPLOAD_PATHS).join(', ')}`,
+      };
+}
+
 export function validateConfigValue(key: ConfigKey, value: string): ConfigParse {
   if (key === 'mode') {
     if (!isEnforcementMode(value)) {
@@ -195,6 +245,7 @@ export function validateConfigValue(key: ConfigKey, value: string): ConfigParse 
           error: `approvals must be one of ${Object.values(APPROVAL_ROUTE).join(', ')}`,
         };
   }
+  if (key === 'uploadPaths') return validUploadPaths(value);
   if (key === 'noticeWarmupDays') {
     return isWholeDays(value)
       ? { value }
@@ -217,9 +268,12 @@ export function applyConfigValue(
   if (key === 'failOpen') return { ...config, failOpen: value === 'true' };
   if (key === 'approvedAgents') return { ...config, approvedAgents: splitList(value) };
   if (key === 'noticeUnusual') return { ...config, noticeUnusual: value === 'true' };
+  if (key === 'autopilot') return { ...config, autopilot: value === 'true' };
   if (key === 'noticeWarmupDays') return { ...config, noticeWarmupDays: Number(value) };
   if (key === 'approvals')
     return { ...config, approvals: approvalRouteOf(value) ?? config.approvals };
+  if (key === 'uploadPaths')
+    return { ...config, uploadPaths: isUploadPaths(value) ? value : config.uploadPaths };
   return { ...config, telemetry: value === 'true' };
 }
 

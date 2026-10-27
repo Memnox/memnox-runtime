@@ -8,7 +8,9 @@ import {
   WORKSPACE_TOOL_ANNOTATIONS,
 } from '@memnox/core';
 
-import { CURSOR_EVENT, GEMINI_EVENT, WINDSURF_EVENT } from './agent-edits';
+import { CURSOR_EVENT, GEMINI_EVENT, HERMES_EVENT, WINDSURF_EVENT } from './agent-edits';
+import { OPENCLAW_EVENT } from './openclaw-payload';
+import { COPILOT_EVENT, DEVIN_EVENT, OPENCODE_EVENT } from './named-hosts';
 import { EDIT_HOOK_EVENT } from './edit-hook';
 import type { HookAuthorizer } from './hook-authorizer';
 import { fieldsOf, type HookFields } from './hook-payload';
@@ -62,12 +64,23 @@ function afterToolOf(hook: HookFields): AfterTool | null {
   const event = hook['hook_event_name'];
   const tool = hook['tool_name'];
   if (typeof tool === 'string') {
-    // Claude Code and Codex, and Gemini CLI, name the result the same way.
-    if (event === EDIT_HOOK_EVENT.POST_TOOL_USE || event === GEMINI_EVENT.AFTER_TOOL) {
+    // Claude Code and Codex, Gemini CLI, and Memnox's OpenClaw plugin name the result the same way.
+    const same: readonly unknown[] = [
+      EDIT_HOOK_EVENT.POST_TOOL_USE,
+      GEMINI_EVENT.AFTER_TOOL,
+      OPENCLAW_EVENT.AFTER_TOOL,
+      COPILOT_EVENT.POST_TOOL,
+      DEVIN_EVENT.POST_TOOL,
+      OPENCODE_EVENT.POST_TOOL,
+    ];
+    if (same.includes(event)) {
       return { tool, result: hook['tool_response'] };
     }
     if (event === CURSOR_EVENT.POST_TOOL_USE)
       return { tool, result: hook['tool_output'] };
+    // Hermes hands every event's own fields over under `extra`, the result among them.
+    if (event === HERMES_EVENT.POST_TOOL_CALL)
+      return { tool, result: fieldsOf(hook['extra'])?.['result'] };
   }
   if (hook['agent_action_name'] !== WINDSURF_EVENT.POST_MCP) return null;
   const info = fieldsOf(hook['tool_info']);

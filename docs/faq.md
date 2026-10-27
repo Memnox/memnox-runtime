@@ -12,7 +12,12 @@ guessing at them.
 
 No. There is no account, no telemetry by default, and no network call on any path.
 `memnox scan` starts MCP servers to ask what they hold, which is local. The network
-probe reads environment variables and never dials out.
+probe reads environment variables and never dials out. Two things you ask for reach
+Memnox Cloud with no account: connecting an app from the catalogue, and pairing a phone.
+The first time either happens this Mac registers a private personal space holding two public
+keys and nothing that names you, and signing in later moves it into your account. Tools your
+agents already use, and command line tools you are signed in to, are run from this Mac with
+no cloud between.
 
 ### Will it store my secrets?
 

@@ -160,6 +160,21 @@ describe('the row a proxied call becomes', () => {
     expect(callEventFor(record, at).operation).toBe('mcp.merge_pull_request');
   });
 
+  it('records the class the statement gave the call, and what the gate found', () => {
+    const deletion: McpCallRecord = {
+      ...record,
+      tool: 'query',
+      class: 'destructive',
+      signals: ['person:only-a-dba-deletes'],
+      principal: 'tier1-sam',
+    };
+    const event = callEventFor(deletion, at);
+    expect(event.class).toBe('destructive');
+    expect(event.signals).toEqual(['person:only-a-dba-deletes']);
+    expect(event.principal).toBe('tier1-sam');
+    expect(callEventFor({ ...record, tool: 'query' }, at).class).toBe('read');
+  });
+
   it('records the server as what the call reached through', () => {
     expect(callEventFor(record, at).target).toBe('github');
   });

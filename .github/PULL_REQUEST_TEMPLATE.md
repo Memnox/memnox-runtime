@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] `pnpm format && pnpm typecheck && pnpm test && pnpm deadcode` all pass
+- [ ] `pnpm verify` passes, and `pnpm verify:linux` for a change that could differ on Linux
 - [ ] Behaviour change ships with a test
 - [ ] No `any`, no magic values, no `console.*` outside `cli-output.ts`
 - [ ] If this touches the decision path: still deterministic — no LLM, network, or randomness

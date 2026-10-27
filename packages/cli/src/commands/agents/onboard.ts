@@ -124,6 +124,8 @@ function renderOnboarding(
   result: OnboardResult,
 ): void {
   const { flow, style } = context;
+  if (result.outcome === ONBOARD.LOCAL_ONLY)
+    return renderLocalOnly(context, shown, result);
   if (result.outcome !== ONBOARD.DONE || result.record === undefined) {
     flow.close(style.warn(`Did not onboard ${shown}.`));
     flow.hint(result.because ?? 'no reason given');
@@ -153,6 +155,21 @@ function renderOnboarding(
     'Authority is unchanged: what this agent may do is still decided on this machine.',
   );
   flow.hint(`Take it back out with "memnox agents offboard ${quoted(shown)}".`);
+}
+
+/** Governed here and not in the workspace, whose plan is full: still a non-zero exit, since the workspace is what was asked for. */
+function renderLocalOnly(
+  context: CliContext,
+  shown: string,
+  result: OnboardResult,
+): void {
+  const { flow, style } = context;
+  flow.close(style.warn(`${shown} is governed on this machine, not in your workspace.`));
+  flow.hint(result.because ?? 'the workspace plan is full');
+  flow.hint(
+    'Every gate on this machine holds it the same, and only the workspace does not see it.',
+  );
+  process.exitCode = 1;
 }
 
 /** Put one agent's config back and revoke the credential it was given. */

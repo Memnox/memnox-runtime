@@ -55,6 +55,11 @@ const offline: WiringSeams = {
   cursorHook: async () => false,
   geminiHook: async () => false,
   windsurfHook: async () => false,
+  hermesHook: async () => false,
+  openClawHook: async () => false,
+  copilotHook: async () => false,
+  devinHook: async () => false,
+  openCodeHook: async () => false,
   mcp: async () => ({ wrapped: 0, skipped: false }),
   keep: async () => undefined,
 };

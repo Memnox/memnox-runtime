@@ -23,12 +23,16 @@ import {
   ENV_PARENT_AGENTS,
   parentAgentsOf,
   SESSION_VAR,
-} from '@memnox/core';
-import {
-  DEFAULT_AGENT_NAME,
   ENV_AGENT_ROLE,
-  repositoryRootOf,
-} from '@memnox/interceptors';
+  ENV_PRINCIPAL,
+  isWorkBriefId,
+  WORK_BRIEF_VAR,
+  MISSION_VAR,
+  Missions,
+  type Mission,
+  type SessionHost,
+} from '@memnox/core';
+import { DEFAULT_AGENT_NAME, repositoryRootOf } from '@memnox/interceptors';
 import { transcriptPathFor } from '../../memnox-paths';
 import { NodeGit, NodeWorktree } from '../../node-git';
 import { familiarityOf, untrustedHint, type Familiarity } from './familiar';
@@ -71,11 +75,19 @@ export interface RunDeps {
   /** Injected so a test says what is installed rather than reading the runner's home. */
   interceptorsIn?: (home: string) => readonly string[];
   cwd?: () => string;
+  /** Injected so a test states the tab it runs in rather than walking `ps` from the test runner. */
+  terminalOf?: () => Pick<SessionHost, 'app' | 'appPath' | 'tty'>;
   /** Injected so a test states the repository rather than asking git. */
   rootOf?: (cwd: string) => string | null;
   familiarity?: (home: string, root: string) => Familiarity | null;
   egress?: EgressSeams;
   guard?: GuardSeams;
+  /** Injected so a test holds credentials without listening on a socket. */
+  broker?: (
+    home: string,
+    sessionId: string,
+    held: Readonly<Record<string, string>>,
+  ) => Promise<{ path: string; held: number; close: () => Promise<void> }>;
 }
 
 export interface RunOptions {
@@ -91,7 +103,12 @@ export interface RunOptions {
   envs?: string;
   expect?: string;
   role?: string;
+  /** The person this agent works for, so it never does what they may not. */
+  for?: string;
+  brief?: string;
   investigate?: boolean;
+  holdCredentials?: boolean;
+  mission?: string;
 }
 
 /** Everything the run set up before the agent took the terminal, and what the rail says about it. */
@@ -102,6 +119,8 @@ export interface PreparedRun {
   agent: string;
   env: NodeJS.ProcessEnv;
   declared: SessionTask | null;
+  /** The goal this session is one run of, named or inherited from the run that started it. */
+  mission: Mission | null;
   kept: string | null;
   sandbox: Sandboxed;
   egress: SessionEgress | null;
@@ -162,12 +181,23 @@ function startingPoint(input: PrepareRunInput): StartingPoint {
       : untrustedHint((deps.familiarity ?? familiarityOf)(home, root));
   const env = input.environment(home, sessionId);
   if (options.role !== undefined) env[ENV_AGENT_ROLE] = options.role;
+  if (options.for !== undefined) env[ENV_PRINCIPAL] = options.for;
+  if (options.brief !== undefined) env[WORK_BRIEF_VAR] = briefIdOf(options.brief);
   const agent = agentOfRun(env, binary);
   // Every seam the agent's children reach reads this, so none of them reports it anonymous.
   env[ENV_AGENT_NAME] = agent;
   const parents = parentsOfRun(agent);
   if (parents.length > 0) env[ENV_PARENT_AGENTS] = parents.join(',');
   return { binary, home, sessionId, agent, env, cwd, root, hint };
+}
+
+/** Refused rather than passed on, so a mistyped id is said at the start and never read as a path. */
+function briefIdOf(id: string): string {
+  if (!isWorkBriefId(id))
+    throw new Error(
+      `--brief takes the id the voice gathered, such as wrk_1a2b3c, not "${id}"`,
+    );
+  return id;
 }
 
 /**
@@ -194,10 +224,14 @@ async function settle(
   input: PrepareRunInput,
   base: StartingPoint,
   egress: SessionEgress | null,
-): Promise<Pick<PreparedRun, 'declared' | 'kept' | 'sandbox' | 'transcript'>> {
+): Promise<
+  Pick<PreparedRun, 'declared' | 'mission' | 'kept' | 'sandbox' | 'transcript'>
+> {
   const { options, deps } = input;
   const { home, sessionId, agent, root, env } = base;
   const untrusted = options.untrusted === true;
+  // First, so a mistyped or closed mission is said before anything is kept for this run.
+  const mission = await joinMission(home, sessionId, options.mission, env);
   // Declared before the agent starts, because every drift check compares against it.
   const declared = await declareTask(home, sessionId, options, deps);
   await declareContainment({ home, sessionId, agent, root, untrusted, deps });
@@ -210,7 +244,32 @@ async function settle(
   const sandbox = wallFor({ input, home, sessionId, workspace, egress, env });
   const transcript =
     options.transcript === true ? transcriptPathFor(home, sessionId) : undefined;
-  return { declared, kept, sandbox, transcript };
+  return { declared, mission, kept, sandbox, transcript };
+}
+
+/**
+ * A mission named on the command line must exist and be open. One inherited from the run
+ * that started this one is joined when it can be, and a closed one is left without a word,
+ * since the child did not choose it.
+ */
+async function joinMission(
+  home: string,
+  sessionId: string,
+  named: string | undefined,
+  env: NodeJS.ProcessEnv,
+): Promise<Mission | null> {
+  const id = named ?? env[MISSION_VAR];
+  if (id === undefined || id === '') return null;
+  let mission: Mission;
+  try {
+    mission = await new Missions(home).attach(id, sessionId);
+  } catch (err) {
+    if (named !== undefined) throw err;
+    delete env[MISSION_VAR];
+    return null;
+  }
+  env[MISSION_VAR] = mission.id;
+  return mission;
 }
 
 function newSessionId(): string {

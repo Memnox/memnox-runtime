@@ -31,10 +31,10 @@ describe('a hold something else can answer', () => {
     const approvals = new PendingApprovals(await home());
     const raised = await approvals.raise(REQUEST, NOW, 120_000);
 
-    const outcome = await approvals.answer(raised.id, HOLD_ANSWER.ONCE, 'tresor', NOW);
+    const outcome = await approvals.answer(raised.id, HOLD_ANSWER.ONCE, 'ada', NOW);
     expect(outcome).not.toBeNull();
     expect((outcome as { answered: { answeredBy?: string } }).answered.answeredBy).toBe(
-      'tresor',
+      'ada',
     );
   });
 
@@ -50,6 +50,21 @@ describe('a hold something else can answer', () => {
     const already = (second as { alreadyAnswered: { answeredBy?: string } })
       .alreadyAnswered;
     expect(already.answeredBy).toBe('first');
+  });
+
+  it('takes exactly one of five answers that arrive at once', async () => {
+    const approvals = new PendingApprovals(await home());
+    const raised = await approvals.raise(REQUEST, NOW, 120_000);
+
+    const outcomes = await Promise.all(
+      ['phone', 'workspace', 'terminal', 'mac', 'chat'].map((by) =>
+        approvals.answer(raised.id, HOLD_ANSWER.ONCE, by, NOW),
+      ),
+    );
+
+    expect(outcomes.filter((each) => each !== null && 'answered' in each)).toHaveLength(
+      1,
+    );
   });
 
   it('is null for something nobody raised', async () => {
@@ -80,7 +95,7 @@ describe('waiting for somebody to answer', () => {
       sleep: async () => {
         ticks += 1;
         if (ticks === 2) {
-          await approvals.answer(raised.id, HOLD_ANSWER.SESSION, 'tresor', NOW);
+          await approvals.answer(raised.id, HOLD_ANSWER.SESSION, 'ada', NOW);
         }
       },
       intervalMs: 0,

@@ -13,8 +13,16 @@ export const STATUS = {
   /** Onboarded into a control plane that is not the one this run is pointed at. */
   ELSEWHERE: 'elsewhere',
   CANNOT: 'cannot',
+  /** Governed on this machine, which no plan caps, and left out of a workspace whose plan is full. */
+  LOCAL: 'this machine',
   FAILED: 'failed',
 } as const;
+
+/** The reason column for a local row, short because the cloud's own sentence was said above it. */
+export const LOCAL_ONLY_REASON = 'workspace plan is full';
+
+/** The reason column for an agent its own hook governs here, with no config the workspace can reach. */
+export const HOOKED_HERE_REASON = 'its hook governs it; no workspace config to reach';
 
 export interface Result {
   name: string;
@@ -34,7 +42,11 @@ interface SetupOutcome {
 export function renderSummary(context: CliContext, outcome: SetupOutcome): void {
   const { flow, style } = context;
   const { results } = outcome;
-  const done = results.filter((each) => each.status === STATUS.ONBOARDED);
+  const onboarded = results.filter((each) => each.status === STATUS.ONBOARDED);
+  const local = results.filter((each) => each.status === STATUS.LOCAL);
+  // A full plan caps the workspace, never this machine, so a local agent is as governed here.
+  const already = results.filter((each) => each.status === STATUS.ALREADY);
+  const done = [...onboarded, ...already, ...local];
 
   flow.table(
     `In ${workspaceShown(outcome.account.workspaceId)}`,
@@ -51,6 +63,11 @@ export function renderSummary(context: CliContext, outcome: SetupOutcome): void 
       ? 'Nothing was onboarded, and nothing on this machine changed.'
       : style.ok(`${describeCount(done.length, 'agent is', 'agents are')} under Memnox.`),
   );
+  if (local.length > 0) {
+    context.flow.hint(
+      `${local.length} of them ${local.length === 1 ? 'is' : 'are'} governed on this machine only. Every gate here holds them the same, and only the workspace does not see them.`,
+    );
+  }
   renderLeftBehind(context, results);
   if (done.length === 0) return;
   renderWhatIsInPlace(context, outcome);
@@ -153,15 +170,23 @@ export function describeDaemon(wired: Wiring): string {
   return 'daemon not started';
 }
 
+/** Enough of a workspace id to tell two apart at a glance. */
+const ID_SHOWN = 8;
+
 /** Which control plane a record was written against, for the row that says so. */
 export function describePlane(record: {
   workspaceId?: string;
   baseUrl?: string;
 }): string {
+  // An id too long to read is shown by its start, since "your workspace" here would say the opposite of true.
+  const shown =
+    record.workspaceId === undefined ? undefined : workspaceShown(record.workspaceId);
   const which =
     record.workspaceId === undefined
       ? 'another workspace'
-      : workspaceShown(record.workspaceId);
+      : shown === record.workspaceId.trim()
+        ? `the workspace ${shown}`
+        : `another workspace, ${record.workspaceId.slice(0, ID_SHOWN)}`;
   return record.baseUrl === undefined
     ? `under ${which}`
     : `under ${which} at ${record.baseUrl}`;
@@ -170,7 +195,7 @@ export function describePlane(record: {
 /** The status word in the colour its meaning calls for; the table does the padding. */
 function mark(context: CliContext, status: Result['status']): string {
   const { style } = context;
-  if (status === STATUS.ONBOARDED) return style.ok(status);
+  if (status === STATUS.ONBOARDED || status === STATUS.LOCAL) return style.ok(status);
   const warned: readonly string[] = [STATUS.FAILED, STATUS.CANNOT, STATUS.ELSEWHERE];
   if (warned.includes(status)) return style.warn(status);
   return style.dim(status);

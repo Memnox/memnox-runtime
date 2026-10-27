@@ -1,6 +1,6 @@
 /**
- * What governs an agent, as paths: Memnox's own home and rule files, and the Claude Code
- * settings that install its hooks. An agent that could write any of them could turn Memnox
+ * What governs an agent, as paths: Memnox's own home and rule files, the Claude Code
+ * settings that install its hooks, and the record an agent host keeps of its sessions. An agent that could write any of them could turn Memnox
  * off, answer its own questions, or take the hooks out, so these are a person's alone.
  */
 import { realpathSync } from 'node:fs';
@@ -8,6 +8,13 @@ import { basename, dirname, join, resolve } from 'node:path';
 
 /** Claude Code's settings, which hold the hooks and could switch every one of them off. */
 const CLAUDE_SETTINGS = /(^|\/)\.claude\/settings(\.local)?\.json$|(^|\/)\.claude\.json$/;
+
+/**
+ * An agent host's own record of its sessions, which the daemon reads a session back from.
+ * An agent that rewrote or deleted it would be editing the evidence against it.
+ */
+const SESSION_RECORDS =
+  /(^|\/)\.claude\/projects\/.+\.jsonl$|(^|\/)\.codex\/sessions(\/|$)/;
 
 /** The binaries a hook runs by name, so replacing one would answer for Memnox. */
 const MEMNOX_BINARY = /\/(bin|\.bin)\/memnox(-[\w-]+)?$/;
@@ -27,7 +34,9 @@ export function isProtectedPath(target: string): boolean {
     /\.policies\.toml$/.test(name)
   )
     return true;
-  return CLAUDE_SETTINGS.test(path) || MEMNOX_BINARY.test(path);
+  return (
+    CLAUDE_SETTINGS.test(path) || MEMNOX_BINARY.test(path) || SESSION_RECORDS.test(path)
+  );
 }
 
 /**

@@ -22,6 +22,7 @@ const SHAPES: readonly RegExp[] = [
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\bAIza[0-9A-Za-z_-]{30,}\b/g,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
 ];
 
 /**
@@ -104,3 +105,33 @@ export function redactSecrets(text: string): string {
   for (const shape of SHAPES) safe = safe.replace(shape, REDACTED);
   return safe;
 }
+
+/**
+ * The values `redactSecrets` would mask, read with the same patterns, for a reader asking
+ * whether text carries a credential rather than wanting it masked.
+ */
+export function secretValuesIn(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.matchAll(URL_PASSWORD)) found.push(match[0]);
+  for (const match of text.matchAll(AUTH_SCHEME)) found.push(match[0]);
+  for (const match of text.matchAll(NAMED_VALUE)) {
+    found.push(valueOf(match[2], match[3], match[5]));
+  }
+  for (const match of text.matchAll(FLAG_THEN_VALUE)) {
+    found.push(valueOf(match[2], match[3], match[4]));
+  }
+  for (const shape of SHAPES) {
+    for (const match of text.matchAll(shape)) found.push(match[0]);
+  }
+  return found.filter(
+    (value) =>
+      value !== '' && value !== REDACTED && !SCHEME_WORDS.includes(value.toLowerCase()),
+  );
+}
+
+/** Whether a field's name says its value is a secret, as `api_key` or `dbPassword`. */
+export function isSecretName(name: string): boolean {
+  return SECRET_NAME_WHOLE.test(name);
+}
+
+const SECRET_NAME_WHOLE = new RegExp(`^${SECRET_NAME}$`, 'i');

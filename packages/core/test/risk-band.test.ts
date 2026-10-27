@@ -16,6 +16,7 @@ function report(overrides: Partial<DiscoveryReport> = {}): DiscoveryReport {
     harnesses: [],
     combined: [],
     definitions: [],
+    hooks: [],
     browsers: [],
     envFiles: [],
     authenticated: [],
@@ -118,6 +119,54 @@ describe('the risk band', () => {
     expect(withTools.fired.map((rule) => rule.rule)).toContain(
       RISK_RULE.UNRESTRICTED_EGRESS,
     );
+  });
+
+  it('names an agent that lets a model approve its actions, apart from one that asks nobody', () => {
+    const band = bandFor(
+      report({
+        agents: [
+          { id: 'agt_1', kind: 'claude-code', approval: { state: 'model-reviewed' } },
+        ] as never,
+      }),
+    );
+    const fired = band.fired.find((rule) => rule.rule === RISK_RULE.MODEL_APPROVES);
+    expect(fired?.contributes).toBe('high');
+    expect(fired?.because).toBe('1 agent(s) let a model approve their actions');
+    expect(band.fired.map((rule) => rule.rule)).not.toContain(RISK_RULE.AUTO_APPROVE);
+  });
+
+  it('is high when an agent can drive the desktop, since nothing here holds that', () => {
+    const band = bandFor(
+      report({
+        agents: [
+          { id: 'agt_1', kind: 'claude-code', approval: { state: 'asks' } },
+        ] as never,
+        surfaces: [
+          { agentId: 'agt_1', kind: 'desktop', detectedFrom: '.claude.json' },
+        ] as never,
+      }),
+    );
+    const fired = band.fired.find((rule) => rule.rule === RISK_RULE.DESKTOP_CONTROL);
+    expect(band.level).toBe('high');
+    expect(fired?.because).toBe(
+      '1 agent(s) can drive this desktop, which nothing here holds',
+    );
+  });
+
+  it('is critical when the agent driving the desktop asks nobody first', () => {
+    for (const state of ['auto', 'model-reviewed']) {
+      const band = bandFor(
+        report({
+          agents: [{ id: 'agt_1', kind: 'claude-code', approval: { state } }] as never,
+          surfaces: [
+            { agentId: 'agt_1', kind: 'desktop', detectedFrom: '.claude.json' },
+          ] as never,
+        }),
+      );
+      expect(
+        band.fired.find((rule) => rule.rule === RISK_RULE.DESKTOP_CONTROL)?.contributes,
+      ).toBe('critical');
+    }
   });
 
   it('takes the strongest rule that fired, never a sum', () => {

@@ -1,6 +1,7 @@
 import { accessSync, constants } from 'node:fs';
 import { delimiter, join } from 'node:path';
-import { DISCOVERED_AGENT_KIND } from '@memnox/core';
+import { DISCOVERED_AGENT_KIND, pathValueOf } from '@memnox/core';
+import { WINDOWS, windowsCandidatesIn } from '@memnox/interceptors';
 
 /**
  * Whether a binary is on PATH, walked here rather than asked of a shell: `command -v`
@@ -8,14 +9,22 @@ import { DISCOVERED_AGENT_KIND } from '@memnox/core';
  */
 export function onPath(
   binary: string,
-  path = process.env['PATH'] ?? '',
+  path = pathValueOf(process.env),
   isFound: (candidate: string) => boolean = executable,
+  platform: NodeJS.Platform = process.platform,
 ): boolean {
+  const windows = platform === WINDOWS;
   // An explicit path is not a PATH lookup: the caller already said where it is.
-  if (binary.includes('/')) return isFound(binary);
+  if (binary.includes('/') || (windows && binary.includes('\\'))) return isFound(binary);
   return path
-    .split(delimiter)
-    .some((entry) => entry !== '' && isFound(join(entry, binary)));
+    .split(windows ? ';' : delimiter)
+    .some((entry) => entry !== '' && candidatesIn(entry, binary, windows).some(isFound));
+}
+
+/** On Windows `claude` is `claude.exe` or `claude.cmd`, found through PATHEXT as a shell would. */
+function candidatesIn(entry: string, binary: string, windows: boolean): string[] {
+  if (!windows) return [join(entry, binary)];
+  return windowsCandidatesIn(entry, binary, process.env['PATHEXT']);
 }
 
 function executable(candidate: string): boolean {

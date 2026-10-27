@@ -39,6 +39,8 @@ export const DRIFT_GROUP = {
   SERVER_GONE: 'server-gone',
   /** An agent may now do more in a system, a CLI logged in, or a credential names production. */
   AUTHORITY: 'authority',
+  /** A command an agent now runs on its own events, which its permission prompt never sees. */
+  HOOK: 'hook',
 } as const;
 
 export type DriftGroup = (typeof DRIFT_GROUP)[keyof typeof DRIFT_GROUP];
@@ -74,6 +76,7 @@ const GROUP_OF_ALERT: Readonly<Record<string, DriftGroup>> = {
   [ALERT.AGENT_WIDENED]: DRIFT_GROUP.WIDENED,
   [ALERT.HARNESS_WIDENED]: DRIFT_GROUP.WIDENED,
   [ALERT.SERVER_GONE]: DRIFT_GROUP.SERVER_GONE,
+  [ALERT.NEW_HOOK]: DRIFT_GROUP.HOOK,
 };
 
 /** Never a lister that starts anything: the daemon reads configs and never runs a server. */
@@ -210,6 +213,8 @@ function noticeFor(group: DriftGroup, items: readonly DriftItem[]): string {
       return `New skill or agent definition: ${names}. "memnox skills" reviews it.`;
     case DRIFT_GROUP.WIDENED:
       return `${names} reaches more than it did. "memnox timeline --since 1h" shows what moved.`;
+    case DRIFT_GROUP.HOOK:
+      return `New hook: ${names} now runs on an agent's events without asking. "memnox scan" shows where it came from.`;
   }
 }
 

@@ -58,3 +58,34 @@ describe('whether the interceptor binary can be found', () => {
     expect(facts.interceptBinaryFound).toBe(false);
   });
 });
+
+describe('what the doctor counts as routed through the proxy', () => {
+  /* `doctor` counted Memnox's own session server and servers declared by URL as missed,
+     which `mcp wrap` never touches, so its suggested fix could never clear the warning. */
+  it('counts only what mcp wrap would act on', async () => {
+    const dir = await home();
+    await writeFile(
+      join(dir, '.claude.json'),
+      JSON.stringify({
+        mcpServers: {
+          'memnox-session': {
+            command: 'memnox-session',
+            args: ['--agent', 'claude-code'],
+          },
+          memnox: { type: 'http', url: 'https://api.memnox.com/mcp' },
+          github: {
+            command: 'memnox-mcp-proxy',
+            args: ['--memnox-wrapped', '--', 'gh-mcp'],
+          },
+          slack: { command: 'npx', args: ['slack-mcp'] },
+        },
+      }),
+      'utf8',
+    );
+
+    const facts = await readHealth(dir, dir, { PATH: '' });
+
+    expect(facts.mcpServers).toBe(2);
+    expect(facts.mcpWrapped).toBe(1);
+  });
+});

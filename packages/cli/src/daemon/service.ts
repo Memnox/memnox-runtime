@@ -6,6 +6,14 @@ import { delimiter, dirname, join } from 'node:path';
 import { MEMNOX_HOME } from '@memnox/core';
 import { interceptorDirFor } from '@memnox/interceptors';
 import { describeError } from '../cli-errors';
+import { chooseNode } from '../node-choice';
+import {
+  registerTask,
+  removeTask,
+  taskLauncherFor,
+  taskLauncherPath,
+  WINDOWS_MANAGER,
+} from './service-windows';
 
 /**
  * The daemon, started by the machine rather than a terminal somebody keeps open, or a
@@ -25,31 +33,44 @@ interface ServiceState {
   path: string;
   /** What the platform calls this, for the sentence a person reads. */
   manager: string;
+  /** Set under Task Scheduler, which starts it at logon and does not restart it after a crash. */
+  onlyAtLogon?: boolean;
 }
 
-/** The two platforms that ship a per-user service manager this can write a file for. */
+/** The platforms that ship a per-user service manager this can write a file for. */
 const MACOS = 'darwin';
 const LINUX = 'linux';
+const WINDOWS = 'win32';
 
 /** macOS means launchd and a plist; everything else supported means systemd and a unit. */
 function isMac(): boolean {
   return platform() === MACOS;
 }
 
-function servicePath(home: string): string {
-  return isMac()
+function servicePath(home: string, os: NodeJS.Platform): string {
+  if (os === WINDOWS) return taskLauncherPath(home);
+  return os === MACOS
     ? join(home, 'Library', 'LaunchAgents', `${SERVICE_LABEL}.plist`)
     : join(home, '.config', 'systemd', 'user', LINUX_UNIT);
 }
 
-export function serviceState(home: string): ServiceState {
-  const path = servicePath(home);
-  const supported = isMac() || platform() === LINUX;
+function managerOn(os: NodeJS.Platform): string {
+  if (os === WINDOWS) return WINDOWS_MANAGER;
+  return os === MACOS ? 'launchd' : 'systemd';
+}
+
+export function serviceState(
+  home: string,
+  os: NodeJS.Platform = platform(),
+): ServiceState {
+  const path = servicePath(home, os);
+  const supported = os === MACOS || os === LINUX || os === WINDOWS;
   return {
     supported,
     installed: supported && existsSync(path),
     path,
-    manager: isMac() ? 'launchd' : 'systemd',
+    manager: managerOn(os),
+    ...(os === WINDOWS ? { onlyAtLogon: true } : {}),
   };
 }
 
@@ -58,12 +79,13 @@ export function serviceState(home: string): ServiceState {
  * a global install leaves behind, because a service file naming `~/.local/bin/memnox`
  * stops working the moment the package manager replaces that link.
  */
-function resolveCommandParts(): { node: string; entry: string } {
-  const entry = process.argv[1] ?? '';
-  return {
-    node: process.execPath,
-    entry: entry === '' ? entry : realpathSync(entry),
-  };
+function resolveCommandParts(pick: (entry: string) => string = chooseNode): {
+  node: string;
+  entry: string;
+} {
+  const given = process.argv[1] ?? '';
+  const entry = given === '' ? given : realpathSync(given);
+  return { node: entry === '' ? process.execPath : pick(entry), entry };
 }
 
 /**
@@ -83,8 +105,8 @@ function escapeXml(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-function plistFor(home: string): string {
-  const { node, entry } = resolveCommandParts();
+function plistFor(home: string, seams: ServiceSeams): string {
+  const { node, entry } = resolveCommandParts(seams.node);
   const log = join(home, MEMNOX_HOME, 'daemon.log');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -110,8 +132,8 @@ function plistFor(home: string): string {
 `;
 }
 
-function unitFor(home: string): string {
-  const { node, entry } = resolveCommandParts();
+function unitFor(home: string, seams: ServiceSeams): string {
+  const { node, entry } = resolveCommandParts(seams.node);
   return `[Unit]
 Description=Memnox daemon: holds the rules and pulls what the workspace publishes
 
@@ -144,6 +166,24 @@ function load(path: string): string | null {
   } catch (error) {
     // Already loaded is the common one, and it is not a failure worth a stack trace.
     return describeError(error);
+  }
+}
+
+/** Null once systemd keeps this user's services after logout, otherwise the one line that would. */
+function keepAfterLogout(): string | null {
+  const user = userInfo().username;
+  const enable = `sudo loginctl enable-linger ${user}`;
+  try {
+    const said = execFileSync('loginctl', ['show-user', user, '--property=Linger'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    if (said.trim() === 'Linger=yes') return null;
+    execFileSync('loginctl', ['enable-linger', user], { stdio: 'ignore' });
+    return null;
+  } catch {
+    // Not allowed without a password here, or no loginctl at all: the person runs it once.
+    return enable;
   }
 }
 
@@ -217,29 +257,69 @@ export interface InstallResult {
   state: ServiceState;
   /** Set when the file was written but the manager would not take it. */
   warning?: string;
+  /** On Linux, the command that keeps it running after the person logs out, when it could not be run here. */
+  linger?: string;
 }
 
 /** Injected, so a test never asks the real service manager to load the test runner. */
 interface ServiceSeams {
   load?: (path: string) => string | null;
+  linger?: () => string | null;
   unload?: () => string | null;
+  /** Whether the manager holds the daemon now, injected so a test never asks the real one. */
+  loaded?: () => boolean;
+  /** Injected, so a test on a Mac installs what Windows would. */
+  platform?: NodeJS.Platform;
+  /** The Node the service runs on, injected so a test starts no Node to find one. */
+  node?: (entry: string) => string;
+}
+
+/** A Scheduled Task's launcher, then the task: the file is the install, as everywhere else. */
+async function installWindowsTask(
+  state: ServiceState,
+  home: string,
+  seams: ServiceSeams,
+): Promise<InstallResult> {
+  await mkdir(dirname(state.path), { recursive: true });
+  const { node, entry } = resolveCommandParts(seams.node);
+  const log = join(home, MEMNOX_HOME, 'daemon.log');
+  await writeFile(
+    state.path,
+    taskLauncherFor({ node, entry, log, path: installingPath(home) }),
+  );
+  const warning = (seams.load ?? registerTask)(state.path);
+  return {
+    state: { ...state, installed: true },
+    ...(warning === null ? {} : { warning }),
+  };
 }
 
 export async function installService(
   home: string,
   seams: ServiceSeams = {},
 ): Promise<InstallResult> {
-  const state = serviceState(home);
+  const os = seams.platform ?? platform();
+  const state = serviceState(home, os);
   if (!state.supported) return { state };
+  if (os === WINDOWS) return installWindowsTask(state, home, seams);
 
+  // A loaded daemon keeps running whatever it started on, so it is stopped first to come back on this build.
+  const stopped = (seams.loaded ?? isLabelLoaded)() ? (seams.unload ?? unload)() : null;
   await mkdir(dirname(state.path), { recursive: true });
-  await writeFile(state.path, isMac() ? plistFor(home) : unitFor(home), {
-    mode: SERVICE_FILE_MODE,
-  });
-  const warning = (seams.load ?? load)(state.path);
+  await writeFile(
+    state.path,
+    os === MACOS ? plistFor(home, seams) : unitFor(home, seams),
+    {
+      mode: SERVICE_FILE_MODE,
+    },
+  );
+  const warning = stopped ?? (seams.load ?? load)(state.path);
+  // A user unit stops with the last login otherwise, which on a server reached over SSH is the first logout.
+  const linger = os === MACOS ? null : (seams.linger ?? keepAfterLogout)();
   return {
     state: { ...state, installed: true },
     ...(warning === null ? {} : { warning }),
+    ...(linger === null ? {} : { linger }),
   };
 }
 
@@ -253,11 +333,12 @@ export async function uninstallService(
   home: string,
   seams: ServiceSeams = {},
 ): Promise<UninstallResult> {
-  const state = serviceState(home);
+  const os = seams.platform ?? platform();
+  const state = serviceState(home, os);
   if (!state.installed) return { state };
 
   // Stopped before the file goes, or a running process is left that nothing admits to.
-  const warning = (seams.unload ?? unload)();
+  const warning = (seams.unload ?? (os === WINDOWS ? removeTask : unload))();
   await rm(state.path, { force: true });
   return {
     state: { ...state, installed: false },

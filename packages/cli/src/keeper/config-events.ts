@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   ACTOR_TYPE,
   DECISION_EFFECT,
+  EARNED_ALLOWANCES_FILE,
   EVENT_SCHEMA_VERSION,
   EVENT_SURFACE,
   loadOrCreateConfig,
@@ -35,6 +36,11 @@ export const CONFIG_RULE = {
   KEPT: { name: 'keep the boundary setup drew', file: KEPT_FILE },
   /** Nothing was changed: the daemon noticed an agent's reach move. */
   DRIFT: { name: 'watch for capability drift', file: KEEPER_STATE_FILE },
+  /** The autopilot handed an agent what it earned, or took it back. */
+  AUTOPILOT: {
+    name: 'autopilot: hand over what was earned',
+    file: EARNED_ALLOWANCES_FILE,
+  },
 } as const;
 
 type ConfigRule = (typeof CONFIG_RULE)[keyof typeof CONFIG_RULE];

@@ -2,6 +2,7 @@ import type { DecisionEffect } from '../constants/decision.constants';
 import type { Alternative, RateLimitSpec } from '../domain/decision';
 import type { ScopeMatch } from '../domain/task';
 import type { TimeWindow } from './time-window';
+import type { DataPattern } from '../domain/sensitive-data';
 
 /** All match fields are lists of wildcard patterns; omitted fields match anything. */
 export interface PolicyMatch {
@@ -95,6 +96,12 @@ export interface PolicyDecision {
    * which is what makes redirection reliable enough for an agent to take.
    */
   alternative?: Alternative;
+  /**
+   * On an allow only: the ask rules, by name, it stands in for where both match, so a call a
+   * person has said yes to often enough stops asking. Never over a deny, and only within one
+   * layer, so nothing on this machine relaxes what the workspace asks.
+   */
+  relaxes?: string[];
 }
 
 export interface Policy {
@@ -106,6 +113,11 @@ export interface Policy {
   decision: PolicyDecision;
   /** Unset = every project, so a single-project deployment is unaffected. */
   project?: string;
+  /** Published by the workspace, so nothing on this machine may loosen it, `memnox allow` included. */
+  workspace?: boolean;
+  /** Who in the workspace approved it and when, so the reason an agent is given names a person and a day. */
+  decidedBy?: string;
+  decidedAt?: string;
 }
 
 export interface PolicyDocument {
@@ -113,6 +125,8 @@ export interface PolicyDocument {
   /** Repos declaring the same project share one policy and memory scope. */
   project?: string;
   policies: Policy[];
+  /** The team's own patterns for sensitive data, each under the classification it adds. */
+  classifications?: DataPattern[];
 }
 
 export const POLICY_DOCUMENT_VERSION = 1;

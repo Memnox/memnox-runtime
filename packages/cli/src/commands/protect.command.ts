@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 /**
  * `memnox protect`: propose, apply, revert. Every step prints its undo before it runs,
  * and a single command puts the machine back.
@@ -12,7 +13,8 @@ import {
   runInteractive,
   type DomainAsker,
 } from '../protect/interactive-rules';
-import { runClaudeHook } from '../protect/claude-hook';
+import { runClaudeHook, runProjectClaudeHook } from '../protect/claude-hook';
+import { runVscodeTerminals } from '../protect/vscode-terminals';
 import { runNative } from '../protect/native-permissions';
 import {
   runHooks,
@@ -23,6 +25,7 @@ import {
 import { runAllow, runDecide, runForCli, runFromUsage } from '../protect/written-rules';
 import { runMode } from '../protect/mode';
 import { runRevert } from '../protect/revert';
+import { runManagedHook } from '../protect/managed-hook';
 import { runPropose } from '../protect/propose';
 
 /** Every flag `protect` takes. One shape, so the router and the action cannot drift. */
@@ -38,6 +41,13 @@ interface ProtectOptions {
   hooks?: boolean;
   claudeHook?: boolean;
   revertClaudeHook?: boolean;
+  projectHook?: boolean;
+  revertProjectHook?: boolean;
+  managed?: boolean;
+  revertManaged?: boolean;
+  exclusive?: boolean;
+  vscode?: boolean;
+  revertVscode?: boolean;
   osGuard?: boolean;
   interactive?: boolean;
   yes?: boolean;
@@ -105,6 +115,24 @@ const BRANCHES: readonly Branch[] = [
   {
     chosen: (o) => o.claudeHook === true || o.revertClaudeHook === true,
     run: ({ context }, o) => runClaudeHook(context, o.revertClaudeHook === true),
+  },
+  {
+    chosen: (o) => o.projectHook === true || o.revertProjectHook === true,
+    run: ({ context, cwd }, o) =>
+      runProjectClaudeHook(context, o.revertProjectHook === true, cwd()),
+  },
+  {
+    chosen: (o) => o.managed === true || o.revertManaged === true,
+    run: ({ context }, o) =>
+      runManagedHook(context, {
+        reverting: o.revertManaged === true,
+        exclusive: o.exclusive === true,
+      }),
+  },
+  {
+    chosen: (o) => o.vscode === true || o.revertVscode === true,
+    run: ({ context }, o) =>
+      runVscodeTerminals(context, homedir(), o.revertVscode === true),
   },
   {
     chosen: (o) => o.osGuard === true,
@@ -183,13 +211,13 @@ export function registerProtectCommand(
 
 /** The flags that install or remove a seam, choose rules, or set the mode. */
 function declareSeamFlags(protect: Command): void {
+  declareHookFlags(protect);
   protect
-    .option('--hooks', 'install git pre-push and pre-commit hooks in this repository')
     .option(
-      '--claude-hook',
-      'make Claude Code take a lease before it writes a file, so two sessions never write one at once',
+      '--vscode',
+      'install the extension that lets the voice show the exact VS Code, Cursor or Windsurf terminal a session runs in',
     )
-    .option('--revert-claude-hook', 'take that hook back out of Claude Code')
+    .option('--revert-vscode', 'take that extension back out of those editors')
     .option('--os-guard', 'write the kernel sandbox profile from your filesystem rules')
     .option('--interactive', 'walk the six domains and write the rules you choose')
     .option('--yes', 'take the recommended answer for every domain, asking nothing')
@@ -205,6 +233,31 @@ function declareSeamFlags(protect: Command): void {
       'put the interceptors on your login PATH, so a windowed editor meets them too',
     )
     .option('--revert-path', 'take that line back out of your shell profile');
+}
+
+/** The flags that put a hook in front of an agent's own tool calls, in git or in Claude Code. */
+function declareHookFlags(protect: Command): void {
+  protect
+    .option('--hooks', 'install git pre-push and pre-commit hooks in this repository')
+    .option(
+      '--claude-hook',
+      'make Claude Code take a lease before it writes a file, so two sessions never write one at once',
+    )
+    .option('--revert-claude-hook', 'take that hook back out of Claude Code')
+    .option(
+      '--project-hook',
+      "put that hook in this repository's own settings too, which a Claude Code started with project setting sources only still reads",
+    )
+    .option('--revert-project-hook', 'take the hook back out of this repository')
+    .option(
+      '--managed',
+      "put Claude Code's hook in its managed settings, where no local config can remove it",
+    )
+    .option('--revert-managed', 'move that hook back into your own settings')
+    .option(
+      '--exclusive',
+      'with --managed, run only managed hooks, so none a repository ships can',
+    );
 }
 
 /** Picks the branch the flags chose, or proposes what the doctor found. */

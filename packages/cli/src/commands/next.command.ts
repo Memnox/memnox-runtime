@@ -8,7 +8,10 @@ import {
   describeLevel,
   ENFORCEMENT_MODE,
   handable,
+  handOverVerdict,
   interruptions,
+  weeksOfWork,
+  type WeekOfWork,
   loadOrCreateConfig,
   LocalGate,
   promotable,
@@ -41,6 +44,9 @@ const DEFAULT_WINDOW_DAYS = 7;
 /** The worst few interruptions, because a table nobody scrolls is one nobody finishes. */
 const INTERRUPTIONS_SHOWN = 5;
 
+/** Four weeks fit inside the default thirty day window, so every week shown was read whole. */
+const WEEKS_SHOWN = 4;
+
 type Interruptions = ReturnType<typeof interruptions>;
 
 /** What the ledger says could be handed over, and where this machine stands. */
@@ -49,6 +55,7 @@ interface Delegable {
   found: readonly Delegation[];
   ready: readonly Delegation[];
   asked: Interruptions;
+  weeks: WeekOfWork[];
 }
 
 export function registerNextCommand(
@@ -108,8 +115,8 @@ async function runNext(
     return;
   }
   if (options.json === true) {
-    const { standing, ready, asked } = delegable;
-    context.out.json({ standing, promotable: ready, interruptions: asked });
+    const { standing, ready, asked, weeks } = delegable;
+    context.out.json({ standing, promotable: ready, interruptions: asked, weeks });
     return;
   }
   renderDelegable(context, delegable);
@@ -130,7 +137,8 @@ async function readDelegable(
   const found = delegations(events);
   const asked = interruptions(events, week);
   const standing = await readStanding(home, events, { asked, week });
-  return { standing, found, ready: promotable(found), asked };
+  const weeks = weeksOfWork(events, WEEKS_SHOWN, moment);
+  return { standing, found, ready: promotable(found), asked, weeks };
 }
 
 /** Where this machine sits on the autonomy ladder, from its mode, its rules and its week. */
@@ -158,6 +166,7 @@ function renderDelegable(context: CliContext, delegable: Delegable): void {
   const { standing, ready, asked, found } = delegable;
 
   flow.rows('Where you are', [{ label: standing, value: describeLevel(standing) }]);
+  renderWeeks(context, delegable.weeks);
   if (ready.length > 0) renderReady(context, ready);
   if (asked.total > 0) {
     flow.table(
@@ -171,6 +180,21 @@ function renderDelegable(context: CliContext, delegable: Delegable): void {
   renderVerdict(context, ready, found.length);
 }
 
+/** Questions against work, week by week, so asking less is read off the ledger rather than claimed. */
+function renderWeeks(context: CliContext, weeks: readonly WeekOfWork[]): void {
+  if (weeks.every((week) => week.actions === 0)) return;
+  context.flow.table(
+    'Week by week',
+    ['Week of', 'Actions', 'Questions', 'Sessions that asked nothing'],
+    weeks.map((week) => [
+      week.from.slice(0, 10),
+      String(week.actions),
+      String(week.asked),
+      `${week.unasked} of ${week.sessions}`,
+    ]),
+  );
+}
+
 function renderReady(context: CliContext, ready: readonly Delegation[]): void {
   context.flow.list(
     'What you could hand over',
@@ -181,10 +205,16 @@ function renderReady(context: CliContext, ready: readonly Delegation[]): void {
         each.because,
         handable(each)
           ? `memnox protect --allow ${each.action}  (or keep being asked)`
-          : 'stays a question: nothing hands this one over',
+          : `stays a question: ${heldBecause(each)}`,
       ],
     })),
   );
+}
+
+/** The same sentence `--allow` would print for it, so the screen and the command agree. */
+function heldBecause(each: Delegation): string {
+  const verdict = handOverVerdict(each.action, [each]);
+  return verdict.ready ? 'nothing holds it back' : verdict.because;
 }
 
 function renderVerdict(

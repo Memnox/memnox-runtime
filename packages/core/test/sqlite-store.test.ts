@@ -44,7 +44,9 @@ describe('the event store', () => {
   it('round-trips every field, including the rule and the alternative', async () => {
     const db = await store();
     const original = event({
-      principal: 'tresor',
+      principal: 'ada',
+      subagent: 'a1b2c3d4e5f6',
+      subagentType: 'Explore',
       target: 'memnox/runtime#41',
       shadowEffect: 'allow',
       rule: { name: 'no-merge-on-friday', layer: 'project', file: 'p.yaml', line: 12 },
@@ -93,11 +95,11 @@ describe('the event store', () => {
     const db = await store();
     await db.append(event({ effect: 'ask' }));
 
-    await db.recordAuthorization('evt_1', 'tresor');
-    expect((await db.query({}))[0]?.authorizedBy).toBe('tresor');
+    await db.recordAuthorization('evt_1', 'ada');
+    expect((await db.query({}))[0]?.authorizedBy).toBe('ada');
 
     await db.recordAuthorization('evt_1', 'somebody-else');
-    expect((await db.query({}))[0]?.authorizedBy).toBe('tresor');
+    expect((await db.query({}))[0]?.authorizedBy).toBe('ada');
     db.close();
   });
 
@@ -160,6 +162,19 @@ describe('the event store', () => {
 
     expect(await db.pruneBefore('2026-06-01T00:00:00.000Z')).toBe(1);
     expect((await db.query({})).map((e) => e.id)).toEqual(['new']);
+    db.close();
+  });
+
+  it('keeps what the gate found, and tells nothing found from never kept', async () => {
+    const db = await store();
+    await db.append(event({ id: 'evt_s', signals: ['policy:a, b', 'person:a, b'] }));
+    await db.append(event({ id: 'evt_e', signals: [] }));
+    await db.append(event({ id: 'evt_o' }));
+    const rows = await db.query({ limit: 10 });
+    const of = (id: string): MemnoxEvent | undefined => rows.find((row) => row.id === id);
+    expect(of('evt_s')?.signals).toEqual(['policy:a, b', 'person:a, b']);
+    expect(of('evt_e')?.signals).toEqual([]);
+    expect(of('evt_o')?.signals).toBeUndefined();
     db.close();
   });
 
@@ -230,9 +245,9 @@ describe('what a release may and may not carry with it', () => {
     const db = await store();
     await db.append(event({ effect: 'ask' }));
 
-    await db.recordAuthorization('evt_1', 'tresor');
+    await db.recordAuthorization('evt_1', 'ada');
 
-    expect((await db.query({}))[0]?.authorizedBy).toBe('tresor');
+    expect((await db.query({}))[0]?.authorizedBy).toBe('ada');
     db.close();
   });
 

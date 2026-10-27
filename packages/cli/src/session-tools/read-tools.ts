@@ -6,6 +6,7 @@ import {
   ACTION,
   buildReplay,
   DECISION_EFFECT,
+  delegationChain,
   LEDGER_LATEST_ONLY,
   LEDGER_RECENT_LIMIT,
   LEDGER_SESSION_LIMIT,
@@ -15,15 +16,32 @@ import {
   SessionPauses,
   targetsRuledOn,
   type ActionRequest,
+  type DisplayDelivery,
+  type Sight,
   type LocalVerdict,
+  type EditorApp,
+  type StartableAgent,
   type MemnoxEvent,
   type Milestone,
+  type PersonStanding,
+  type ToolConnection,
 } from '@memnox/core';
+import type { SourceQuery, SourceRead, SourcesRead } from '../sync/workspace-reads';
+import type {
+  CheckedAccount,
+  PersonalAnswer,
+  PersonalRun,
+  GithubRead,
+  PersonalTools,
+  WorkspaceRepositories,
+} from '../sync/personal-work';
 
 import { withEvents } from '../event-store';
+import type { CommandRun } from './voice-commands';
 import { policySetInForce } from '../policy-path';
 import { readLocalDecisions } from '../sync/local-decisions';
 import { scopeOf, type SessionScope } from './session-scope';
+import type { PaneSeams } from './multiplexer';
 
 /** What the tools read the machine through, injected so a test never reads the real one. */
 export interface SessionToolDeps {
@@ -37,6 +55,64 @@ export interface SessionToolDeps {
   milestonesAt: (place: string) => Promise<Milestone[]>;
   /** The live brief from the workspace, or null where it cannot be asked just now. */
   brief: (resources: readonly string[], repository?: string) => Promise<unknown>;
+  /** Pulls the workspace memory again before it is read; absent where nothing can reach the workspace. */
+  refreshMemory?: () => Promise<void>;
+  /** Messages and tickets from the systems the workspace connects, or null where it cannot be asked. */
+  sources?: (query: SourceQuery) => Promise<SourcesRead | null>;
+  /** Who in the workspace answers to a name, or everybody; null where it cannot be asked. */
+  people?: (name: string | undefined) => Promise<Record<string, unknown> | null>;
+  /** Whether this Mac is enrolled in another workspace than the one the person signed in to. */
+  personElsewhere?: () => Promise<boolean>;
+  /** One item read whole by its link, or null where the workspace will not or cannot say. */
+  source?: (link: string) => Promise<SourceRead | null>;
+  /** The person's own accounts in their own tools; absent where nothing can reach the workspace. */
+  personalWork?: {
+    find: (what: string, toolkit?: string) => Promise<PersonalAnswer<PersonalTools>>;
+    /** Unsigned, so the control plane runs only what reads. */
+    run: (tool: string, argumentsText: string) => Promise<PersonalAnswer<PersonalRun>>;
+    /** The page that signs the person in to one tool, opened by nobody. */
+    link: (toolkit: string) => Promise<PersonalAnswer<string>>;
+    /** Whose accounts their sign ins reached, each checked against them. */
+    accounts: () => Promise<PersonalAnswer<CheckedAccount[]>>;
+    /** The repositories the workspace connected through its GitHub App. */
+    repositories?: (all?: boolean) => Promise<PersonalAnswer<WorkspaceRepositories>>;
+    /** One read of a repository through that App: pull requests, issues, files, comments, commits. */
+    github?: (read: GithubRead) => Promise<PersonalAnswer<unknown>>;
+    /** The apps the workspace connected to the person, the same list the Mac's Tools panel shows. */
+    connections?: () => Promise<PersonalAnswer<ToolConnection[]>>;
+    /** Signs out of every sign in to one tool, answering how many were undone. */
+    signOut: (toolkit: string) => Promise<PersonalAnswer<number>>;
+    /** Opens the provider's one time sign in for any tool, which every person may connect as themselves. */
+    signIn: (
+      toolkit: string,
+    ) => Promise<PersonalAnswer<{ url: string; opened: boolean }>>;
+  };
+  /** Starts the person's own Memnox sign in on the daemon, as the Mac's Account row does; null when no daemon answered. */
+  memnoxSignIn?: () => Promise<PersonStanding | null>;
+  /** The workspace's own name, or null when it has none or cannot be asked. */
+  workspaceName?: () => Promise<string | null>;
+  /** How the Mac says an instruction it typed landed, or null when it never said; absent where nobody types. */
+  delivered?: (requestId: string, waitMs?: number) => Promise<DisplayDelivery | null>;
+  /** Whether a session began in that repository since then, from its own start hook; absent where nothing can tell. */
+  startSeen?: (repository: string, since: string) => Promise<string | null>;
+  /** Where an app the person named by voice is installed, or null; absent means the folders apps are kept in. */
+  findApp?: (name: string) => string | null;
+  /** Ends an agent's process as closing its terminal would; absent means signalling it for real. */
+  endAgent?: (pid: number) => Promise<boolean>;
+  /** How tmux and WezTerm are asked about their panes and typed into; absent means the programs themselves. */
+  panes?: PaneSeams;
+  /** What the Mac saw for a LOOK, or null when it said nothing in time; absent means waiting on the file. */
+  seen?: (requestId: string) => Promise<Sight | null>;
+  /** Where an agent's command is, from the person's own shell or where it is installed, or null. */
+  resolveCommand?: (agent: StartableAgent) => string | null;
+  /** Where an agent's desktop app is installed, or null when it has none on this Mac. */
+  resolveApp?: (agent: StartableAgent) => string | null;
+  /** Where an editor is installed, so a test names one without it being on the machine. */
+  resolveEditor?: (editor: EditorApp) => string | null;
+  /** How a memnox command is run for the voice; absent means memnox itself, beside this module. */
+  runMemnox?: (argv: readonly string[], timeoutMs: number) => Promise<CommandRun>;
+  /** What a login by voice names this machine when they named nothing; the hostname outside tests. */
+  machineName?: () => string;
 }
 
 /** Tool arguments as the host sent them, read field by field. */
@@ -65,6 +141,7 @@ function decisionOf(event: MemnoxEvent): Record<string, unknown> {
         }),
     ...(event.alternative === undefined ? {} : { instead: event.alternative }),
     ...(event.authorizedBy === undefined ? {} : { releasedBy: event.authorizedBy }),
+    ...(event.subagent === undefined ? {} : { by: delegationChain(event) }),
   };
 }
 
@@ -77,7 +154,7 @@ export async function whyTool(deps: SessionToolDeps, args: ToolArgs): Promise<un
       const found = rows.find((each) => each.id === id);
       return found === undefined ? { found: false, event: id } : decisionOf(found);
     }
-    const scope = await scopeOf(store, deps.agent, deps.env, textArg(args, 'session'));
+    const scope = await scopeOf(store, deps, textArg(args, 'session'));
     if (scope.sessionId === null) return { ...scope, found: false };
     const rows = await store.query({
       sessionId: scope.sessionId,
@@ -105,7 +182,7 @@ export async function replayTool(
   args: ToolArgs,
 ): Promise<unknown> {
   const { scope, events } = await withEvents(deps.home, async (store) => {
-    const found = await scopeOf(store, deps.agent, deps.env, textArg(args, 'session'));
+    const found = await scopeOf(store, deps, textArg(args, 'session'));
     const rows =
       found.sessionId === null
         ? []
@@ -137,7 +214,7 @@ async function compactReplay(
     ...(replay.endReason === undefined ? {} : { endReason: replay.endReason }),
     steps: replay.steps.map(
       (step) =>
-        `${step.at} ${step.leadUp === true ? '> ' : ''}${step.summary}${step.eventId === undefined ? '' : ` [${step.eventId}]`}`,
+        `${step.at} ${step.leadUp === true ? '> ' : ''}${step.summary}${step.by === undefined ? '' : `, by the ${step.by}`}${step.eventId === undefined ? '' : ` [${step.eventId}]`}`,
     ),
   };
 }

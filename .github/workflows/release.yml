@@ -18,12 +18,58 @@ permissions:
   id-token: write
 
 jobs:
+  # The Noise addon is native, so each platform builds its own on its own runner and the
+  # release job publishes each one inside the package npm installs on that platform only.
+  noise:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: linux-x64-gnu
+            runner: ubuntu-22.04
+          - target: linux-arm64-gnu
+            runner: ubuntu-22.04-arm
+          - target: win32-x64-msvc
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    # Git Bash on the Windows runner, so the same build script runs on every platform.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sh native/noise/scripts/build-node.sh
+      - run: cp native/noise/memnox-noise.*.node "memnox-noise.${{ matrix.target }}.node"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: noise-${{ matrix.target }}
+          path: memnox-noise.${{ matrix.target }}.node
+          if-no-files-found: error
+
   release:
+    needs: noise
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: noise-*
+          path: noise-builds
+      # Each build goes into the package named for its platform, which is all that package ships.
+      - run: |
+          for dir in noise-builds/noise-*; do
+            target="${dir#noise-builds/noise-}"
+            cp "$dir/memnox-noise.$target.node" "native/noise/npm/$target/"
+          done
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

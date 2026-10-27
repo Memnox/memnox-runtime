@@ -13,6 +13,9 @@ Evaluated in order. All of them run; the band is the strongest one that fired.
 
 | Rule | Fires when | Band |
 |---|---|---|
+| `auto-approve` | an agent's own setting says it acts without asking | HIGH, CRITICAL with a secret in reach |
+| `model-approves` | an agent's own setting hands the permission prompt to a model | HIGH |
+| `desktop-control` | an agent holds a server that both sees the screen and presses keys | HIGH, CRITICAL when that agent asks nobody first |
 | `destructive-tool` | any tool is classified `destructive` | CRITICAL |
 | `secret-reachable` | a path above `ordinary` sensitivity is reachable by an agent here | CRITICAL |
 | `combined-capability` | a set of individually ordinary tools opens a path together | HIGH |
@@ -37,6 +40,22 @@ containing a step that is already destructive fires `destructive-tool` instead. 
 left is the case with no other rule behind it: every step passes review on its own, so
 without this rule the band would be decided as though the path were not there. See
 [Harnesses](harnesses.md#combined-capability) for how a chain is read.
+
+**A model answering the prompt is its own fact.** Under Claude Code's `auto` mode a
+model decides what a person would have been asked, and the person sees only what it
+leaves. That is neither asking nor acting alone, so it is neither `asks` nor `auto` in
+the posture and has its own rule. This product keeps models off every decision path,
+and the one place a model is deciding on this machine deserves its own line.
+
+**The desktop is a surface nothing here holds.** A server whose tools both see the
+screen and press keys reaches every window on the machine, the password manager and
+the terminal included, through the platform's own accessibility and input APIs. No
+wrapper, proxy or kernel profile sits in front of that, so `memnox explain` prints the
+seam as absent rather than open, with no next step, and the band says HIGH on its own.
+Held by an agent that asks nobody first it is CRITICAL, because then nothing stands
+between a prompt injection and the keyboard. It is read off tool names after a probe,
+so a server nobody started cannot produce it, and a browser driver's clicks stay with
+the browser seam that already holds them.
 
 **A credential raises a write tool but does not create one.** `write-tool-with-credential`
 is HIGH because the pair is what turns a mistake into somebody else's incident. Either

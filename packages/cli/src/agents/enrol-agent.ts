@@ -28,9 +28,17 @@ export interface EnrolledAgent {
 
 export const ENROL_FAILED = 'enrol_failed';
 
+/** The control plane's refusal codes this acts on, spelled as it sends them. */
+export const CLOUD_REFUSAL = {
+  /** The plan holds no more agent credentials, a cap on the workspace and never on this machine. */
+  AGENTS_EXHAUSTED: 'agents_exhausted',
+} as const;
+
 interface EnrolFailure {
   outcome: typeof ENROL_FAILED;
   because: string;
+  /** The workspace is full, so the agent is governed on this machine and only here. */
+  capped?: boolean;
 }
 
 /**
@@ -146,7 +154,11 @@ function readSponsoredAnswer(answer: {
     return { outcome: FALL_BACK, because: "this machine's own credential was refused" };
   }
   if (answer.status !== HTTP.OK && answer.status !== HTTP.CREATED) {
-    return { outcome: ENROL_FAILED, because: refusalOf(answer) };
+    return {
+      outcome: ENROL_FAILED,
+      because: refusalOf(answer),
+      ...(isCapped(answer) ? { capped: true } : {}),
+    };
   }
   const body = answer.body;
   if (body?.id === undefined || body.token === undefined) {
@@ -180,6 +192,14 @@ function refusalOf(answer: { status: number; body?: unknown }): string {
   const said = (answer.body as { message?: unknown } | undefined)?.message;
   if (typeof said === 'string' && said !== '') return said;
   return `the control plane refused the request (${answer.status})`;
+}
+
+/** The plan's cap on credentials, told apart from every other refusal by its code. */
+function isCapped(answer: { status: number; body?: unknown }): boolean {
+  if (answer.status !== HTTP.CONFLICT) return false;
+  // Read defensively: the body is the control plane's, and only its `error` is asked about.
+  const code = (answer.body as { error?: unknown } | undefined)?.error;
+  return code === CLOUD_REFUSAL.AGENTS_EXHAUSTED;
 }
 
 /**

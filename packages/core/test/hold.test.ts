@@ -245,7 +245,7 @@ describe('the terminal prompt', () => {
   it('shows the evidence that produced the verdict', () => {
     const shown = questionFor({
       ...REQUEST,
-      evidence: ['    state  freeze:payments — troubleshooting (1h left, moise)'],
+      evidence: ['    state  freeze:payments — troubleshooting (1h left, maya)'],
     });
 
     expect(shown).toContain('freeze:payments');

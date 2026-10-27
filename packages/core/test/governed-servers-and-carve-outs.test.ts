@@ -20,6 +20,7 @@ function reportOf(surfaces: DiscoveryReport['surfaces']): DiscoveryReport {
     surfaces,
     resources: [],
     harnesses: [],
+    hooks: [],
   } as unknown as DiscoveryReport;
 }
 

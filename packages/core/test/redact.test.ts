@@ -63,7 +63,7 @@ describe('what leaves the machine, with its credentials masked', () => {
   it.each([
     'git commit -m "fix the token refresh race"',
     'rm -rf build',
-    'author=moise pnpm test',
+    'author=maya pnpm test',
     'Claude Code wants to delete finish-cloud.patch.',
   ])('leaves %s as it is', (input) => {
     expect(redactSecrets(input)).toBe(input);

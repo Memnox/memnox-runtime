@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 
 import {
+  ruledFor,
   DECISION_EFFECT,
   digest,
   ENV_AGENT_NAME,
@@ -26,6 +27,7 @@ import {
   pidSessionId,
 } from './seam-runtime';
 import {
+  commandShellArgs,
   parseShellInvocation,
   realShell,
   SHELL_MODE,
@@ -112,6 +114,7 @@ async function keep(ran: ShellRun): Promise<void> {
       class: decision.class,
       argsDigest: digest(ran.line),
       ...(decision.target === undefined ? {} : { target: decision.target }),
+      ...ruledFor(decision),
     },
     effect: decision.effect,
     reason: decision.reason,
@@ -171,7 +174,7 @@ async function gateAndRun(
   await keepBeforeDestroying(line);
   const status =
     invocation.mode === SHELL_MODE.COMMAND
-      ? await run(shell, [...invocation.flags, '-c', invocation.line ?? ''])
+      ? await run(shell, commandShellArgs(invocation))
       : await runResolved(outcome.run);
   if (status === null) return SHELL_EXIT_OK;
   await keep({ decision: outcome.decision, line, exitCode: status, startedAt });

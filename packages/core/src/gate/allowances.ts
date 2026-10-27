@@ -13,6 +13,9 @@ import { readJsonArray, writeJsonFile } from '../store/json-records';
 
 const ALLOWANCES_FILE = 'allowances.json';
 
+/** What the autopilot granted, kept apart so `memnox allow` never writes or caps it. */
+export const EARNED_ALLOWANCES_FILE = 'earned-allowances.json';
+
 /** The longest an allowance may stand, so one somebody forgot still ends the same day. */
 export const MOST_ALLOWANCE_MINUTES = 8 * 60;
 
@@ -61,15 +64,15 @@ export function describeAllowance(allowance: Allowance): string {
   return `${allowance.by} allowed this until ${allowance.until}${why}, allowance ${allowance.id}`;
 }
 
-export class FileAllowances {
-  constructor(private readonly home: string) {}
+/** The records in one allowances file, ended ones included, and the way back to it. */
+class AllowanceFile {
+  constructor(
+    private readonly home: string,
+    private readonly file: string,
+  ) {}
 
   all(): Promise<Allowance[]> {
     return readJsonArray<Allowance>(this.path());
-  }
-
-  async inForce(now: string): Promise<Allowance[]> {
-    return (await this.all()).filter((each) => inForceAt(each, now));
   }
 
   /** Ended ones are kept a day for the record, then dropped, so the file stays small. */
@@ -107,6 +110,71 @@ export class FileAllowances {
   }
 
   private path(): string {
-    return join(this.home, MEMNOX_HOME, ALLOWANCES_FILE);
+    return join(this.home, MEMNOX_HOME, this.file);
+  }
+}
+
+/**
+ * What a person allowed with `memnox allow`, and what the gate reads: those together with
+ * what the autopilot granted, since both turn an ask into an allow the same way.
+ */
+export class FileAllowances {
+  private readonly given: AllowanceFile;
+  private readonly earned: EarnedAllowances;
+
+  constructor(home: string) {
+    this.given = new AllowanceFile(home, ALLOWANCES_FILE);
+    this.earned = new EarnedAllowances(home);
+  }
+
+  all(): Promise<Allowance[]> {
+    return this.given.all();
+  }
+
+  async inForce(now: string): Promise<Allowance[]> {
+    const given = (await this.given.all()).filter((each) => inForceAt(each, now));
+    return [...given, ...(await this.earned.inForce(now))];
+  }
+
+  add(allowance: Allowance): Promise<void> {
+    return this.given.add(allowance);
+  }
+
+  /** Ends one a person gave, or one the autopilot granted, whichever holds the id. */
+  async revoke(id: string, now: string): Promise<Allowance | null> {
+    return (await this.given.revoke(id, now)) ?? this.earned.revoke(id, now);
+  }
+
+  inForceNow(now: string): Allowance[] {
+    return [...this.given.inForceNow(now), ...this.earned.inForceNow(now)];
+  }
+}
+
+/** The autopilot's grants: written only by the daemon, read by every gate beside the rest. */
+export class EarnedAllowances {
+  private readonly file: AllowanceFile;
+
+  constructor(home: string) {
+    this.file = new AllowanceFile(home, EARNED_ALLOWANCES_FILE);
+  }
+
+  all(): Promise<Allowance[]> {
+    return this.file.all();
+  }
+
+  async inForce(now: string): Promise<Allowance[]> {
+    return (await this.file.all()).filter((each) => inForceAt(each, now));
+  }
+
+  add(allowance: Allowance): Promise<void> {
+    return this.file.add(allowance);
+  }
+
+  revoke(id: string, now: string): Promise<Allowance | null> {
+    return this.file.revoke(id, now);
+  }
+
+  inForceNow(now: string): Allowance[] {
+    return this.file.inForceNow(now);
   }
 }

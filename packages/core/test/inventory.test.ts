@@ -56,6 +56,7 @@ const REPORT = {
   authenticated: [],
   harnesses: [],
   combined: [],
+  hooks: [],
 } as unknown as DiscoveryReport;
 
 const TAKEN_AT = '2026-09-05T00:00:00.000Z';

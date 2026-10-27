@@ -5,10 +5,7 @@ import {
   discoverDefinitions,
   ENFORCEMENT_MODE,
   fleetBudgets,
-  HOLD_ANSWER,
   goesToWorkspace,
-  approvalRouteOf,
-  isEnforcementMode,
   loadOrCreateConfig,
   MEMNOX_HOME,
   NodeFindingsStore,
@@ -24,15 +21,12 @@ import {
   readBudgets,
   readJsonFile,
   reviewSkills,
-  saveConfig,
   SqliteEventStore,
   windowHoursOf,
   writeFleetSpend,
-  writeAccount,
   type Account,
   type Budget,
   type EnforcementMode,
-  type HoldAnswer,
   type PendingApproval,
   type SkillFinding,
 } from '@memnox/core';
@@ -41,7 +35,14 @@ import { CLI_VERSION } from '../defaults';
 import { kindOf, listRecords, sponsoredBy } from '../agents/onboarding';
 import { orgPolicyPath, PULL_OUTCOME, pullBundle, type PullResult } from './bundle';
 import { callCloud, CloudUnreachable } from './client';
+import {
+  applyAnswers,
+  applyApprovalRoute,
+  applyMode,
+  type HeartbeatAnswer,
+} from './heartbeat-reply';
 import { pullMemory, type MemoryPull } from './memory';
+import type { HeartbeatBeats } from './beat';
 import { BACKOFF_MS, HEARTBEAT_MS, waitUntilDue } from './pace';
 import {
   pushCensus,
@@ -58,8 +59,6 @@ import {
  * One pass: pull the rules, send what happened, say you are alive. Pull first, so a
  * machine given a stricter rule set is governed by it before it reports anything.
  */
-
-const ANSWERS: readonly string[] = Object.values(HOLD_ANSWER);
 
 export interface Pass {
   pull?: PullResult;
@@ -90,11 +89,6 @@ interface Send {
 }
 
 /** What the control plane may say back about a call this machine is holding. */
-interface HeartbeatAnswer {
-  id: string;
-  answer: string;
-  by?: string;
-}
 
 interface HeartbeatReply {
   answers?: HeartbeatAnswer[];
@@ -114,9 +108,9 @@ interface BeatState {
   asking: Budget[];
 }
 
-/** What one pass does. The daemon's early passes send, and leave the pulls to the minute. */
+/** What one pass does. The daemon's early passes send, and leave the pulls to the minute or a beat. */
 interface PassOptions {
-  /** Pull the rules and the memory. Only a beat due on the minute needs to. */
+  /** Pull the rules and the memory. Only a pass due on the minute, or one a relay beat brought, needs to. */
   pull: boolean;
 }
 
@@ -127,7 +121,9 @@ interface LoopSeams {
   pass?: (home: string, options: PassOptions) => Promise<Pass>;
   log?: (message: string) => void;
   /** Injected so a test states what is held rather than writing files to say it. */
-  holding?: (home: string) => Promise<number>;
+  holding?: (home: string) => Promise<readonly string[]>;
+  /** The relay's beats; absent, or with no link up, a held call is polled every two seconds. */
+  beats?: HeartbeatBeats;
   /** Whether an agent here did something since then, so it is sent at once. */
   active?: (home: string, since: number) => Promise<boolean>;
 }
@@ -161,15 +157,22 @@ export async function syncLoop(
   running: () => boolean,
   seams: LoopSeams = {},
 ): Promise<void> {
-  const sleep = seams.sleep ?? sleepFor;
+  const beats = seams.beats;
+  const sleep = seams.sleep ?? (beats === undefined ? sleepFor : (ms) => beats.sleep(ms));
   const pass = seams.pass ?? onePass;
+  const holding = seams.holding ?? heldHere;
 
   // Counted in the time this loop waited rather than off a clock, so the minute is the
   // same minute however the waits are served.
   let sincePull: number | undefined;
+  // A beat means a rule, a condition or an answer changed, so the pass it brings pulls whatever the minute says.
+  let beaten = false;
   while (running()) {
     const passStarted = Date.now();
-    const pulling = sincePull === undefined || sincePull >= HEARTBEAT_MS;
+    const pulling = beaten || sincePull === undefined || sincePull >= HEARTBEAT_MS;
+    beaten = false;
+    // Read before the pass, so a call raised during it still counts as not yet carried up.
+    const carried = new Set(await holding(home));
     let result: Pass;
     try {
       result = await pass(home, { pull: pulling });
@@ -177,7 +180,8 @@ export async function syncLoop(
       // A pass that throws must not end the daemon; the gate is what matters.
       seams.log?.(err instanceof Error ? err.message : String(err));
       await sleep(BACKOFF_MS);
-      // A quarter of an hour away, so the pass after it pulls whatever changed meanwhile.
+      // A quarter of an hour away, so the pass after it pulls whatever changed meanwhile, a beat included.
+      beats?.take();
       sincePull = undefined;
       continue;
     }
@@ -188,19 +192,25 @@ export async function syncLoop(
     // Waited out whole, because polling fast for an answer with nowhere to come from changes nothing.
     if (result.unreachable === true) {
       await sleep(BACKOFF_MS);
+      beats?.take();
       sincePull = undefined;
       continue;
     }
     if (pulling) sincePull = 0;
-    const waited = await waitUntilDue({
+    const due = await waitUntilDue({
       home,
       idleMs: HEARTBEAT_MS - (sincePull ?? 0),
       since: passStarted,
       sleep,
-      holding: seams.holding ?? heldHere,
+      holding,
       active: seams.active ?? activitySince,
+      carried,
+      ...(beats === undefined
+        ? {}
+        : { relayed: () => beats.linked(), beaten: () => beats.take() }),
     });
-    sincePull = (sincePull ?? 0) + waited;
+    sincePull = (sincePull ?? 0) + due.waited;
+    beaten = due.beaten;
   }
 }
 
@@ -300,7 +310,7 @@ async function beat(
     body: await heartbeatBody(home, account, state),
   });
 
-  await applyAnswers(approvals, response.body?.answers ?? [], moment);
+  await applyAnswers(home, approvals, response.body?.answers ?? [], moment);
   await applyMode({ home, account, running: state.running, told: response.body?.mode });
   await applyApprovalRoute(home, response.body?.approvals);
 
@@ -398,70 +408,9 @@ function describeHeld(each: PendingApproval): Record<string, unknown> {
     ...(each.request.target === undefined
       ? {}
       : { target: redactSecrets(each.request.target) }),
+    // The rule by name, so the workspace can put the question to that rule's approvers.
+    ...(each.request.rule === undefined ? {} : { ruleId: each.request.rule }),
   };
-}
-
-/**
- * Moving this machine along the ramp when the control plane says to, in either direction.
- * Applied on a change only, so a deliberate edit to `config.toml` is not reverted a minute later.
- */
-async function applyMode(input: {
-  home: string;
-  account: Account;
-  running: EnforcementMode;
-  told: string | undefined;
-}): Promise<void> {
-  const { home, account, running, told } = input;
-  // A word from a newer control plane is not a mode the gate here can read.
-  if (told === undefined || !isEnforcementMode(told)) return;
-  if (told === account.cloudMode) return;
-
-  try {
-    // The account first, so a failed config write is not retried every minute.
-    await writeAccount(home, { ...account, cloudMode: told });
-    if (told === running) return;
-    const config = await loadOrCreateConfig(home);
-    await saveConfig(home, { ...config, mode: told });
-  } catch {
-    // Silent, because a machine that cannot be graduated must still beat.
-  }
-}
-
-/**
- * Where questions go, when the workspace sets it. Set here or there, whichever changed
- * last: applied on a change only, so an edit to `config.toml` holds until the workspace
- * says something different. Read afresh, since `applyMode` may have just written the account.
- */
-async function applyApprovalRoute(home: string, told: string | undefined): Promise<void> {
-  const route = told === undefined ? null : approvalRouteOf(told);
-  if (route === null) return;
-  try {
-    const account = await readAccount(home);
-    if (account === null || route === account.cloudApprovals) return;
-    await writeAccount(home, { ...account, cloudApprovals: route });
-    const config = await loadOrCreateConfig(home);
-    if (config.approvals !== route)
-      await saveConfig(home, { ...config, approvals: route });
-  } catch {
-    // Silent, for the reason a mode is: a machine that cannot be told must still beat.
-  }
-}
-
-/**
- * Written into the file the seam is already polling, so a remote answer and a second
- * terminal arrive by the same route. An id this machine did not raise is dropped.
- */
-async function applyAnswers(
-  approvals: PendingApprovals,
-  answers: readonly HeartbeatAnswer[],
-  at: string,
-): Promise<void> {
-  for (const answer of answers) {
-    if (!ANSWERS.includes(answer.answer)) continue;
-    // Checked against HOLD_ANSWER on the line above.
-    const said = answer.answer as HoldAnswer;
-    await approvals.answer(answer.id, said, answer.by ?? 'the workspace', at);
-  }
 }
 
 /** The hash of what is already on disk, so an unchanged bundle costs one 304. */
@@ -470,13 +419,15 @@ async function heldHash(home: string): Promise<string | undefined> {
   return document?.bundleHash;
 }
 
-/** How many calls this machine is stopped on. Local, so it costs no request to ask. */
-async function heldHere(home: string): Promise<number> {
+/** The calls this machine is stopped on. Local, so it costs no request to ask. */
+async function heldHere(home: string): Promise<readonly string[]> {
   try {
-    return (await new PendingApprovals(home).list(new Date().toISOString())).length;
+    return (await new PendingApprovals(home).list(new Date().toISOString())).map(
+      (each) => each.id,
+    );
   } catch {
     // No queue is the same answer as an empty one, and neither is worth a fast loop.
-    return 0;
+    return [];
   }
 }
 

@@ -41,6 +41,8 @@ export interface LeasePrompt {
     wanted: string,
     moment: string,
     waitMs: number,
+    /** The asker's checkout, so a holder in another worktree is named by where it is. */
+    from?: string,
   ): Promise<LeaseAsked | null>;
 }
 
@@ -70,6 +72,11 @@ export interface LeaseVerdict {
   sharedLeaseId?: string;
   /** The refusal without the command to type, for a host that asks its person itself. */
   asked?: string;
+  /**
+   * Said when the write goes ahead but the workspace could not be asked, so nobody is told a
+   * collision with another machine was ruled out when it was not.
+   */
+  unconfirmed?: string;
 }
 
 export function proceeds(verdict: LeaseVerdict): boolean {
@@ -89,15 +96,23 @@ export interface LeaseGateDeps {
   region?: (path: string) => Promise<WrittenRegion>;
   /** The checkout this gate claims in, so one machine's register keeps its repositories apart. */
   repository?: string;
+  /** What every checkout of this repository shares, so two worktrees of it meet. */
+  project?: string;
   /** The clock, injected so a replay gives the same answer twice. */
   now: () => string;
   sleep?: (ms: number) => Promise<void>;
   /** How long a wait may run at most, whatever the lease says. */
   ceilingMs?: number;
+  /** How often this machine's register is asked again while a local holder writes. */
   pollMs?: number;
+  /** How soon the workspace is first asked again, doubling to a ceiling, so a crowd does not hammer it. */
+  sharedPollMs?: number;
 }
 
-const DEFAULT_POLL_MS = 500;
+/** Short, since a release is a file going away and the waiter should notice it at once. */
+const DEFAULT_POLL_MS = 150;
+const DEFAULT_SHARED_POLL_MS = 250;
+const SLOWEST_SHARED_POLL_MS = 2_000;
 /** Matches the local default, so one window is not quietly longer than the other. */
 const DEFAULT_SHARED_MINUTES = 30;
 
@@ -120,7 +135,12 @@ function heldElsewhere(result: HeldElsewhere, now: string): string {
     result.leaseId === undefined
       ? ''
       : ` A person can free them now by running \`memnox lock --free ${result.leaseId}\`.`;
-  return `${held}${quiet(result, now)}${free}`;
+  // Agents settle it between themselves first, so a person is only brought in when they must be.
+  const ask =
+    result.leaseId === undefined
+      ? ''
+      : ` Ask it directly with memnox_message_agent, lease "${result.leaseId}".`;
+  return `${held}${quiet(result, now)}${ask}${free}`;
 }
 
 /** The same answer with no lease to name, so no command to free it is offered. */
@@ -168,6 +188,23 @@ interface HeldClaim {
   holding: Lease;
 }
 
+/** Another machine's hold as a refusal, and when it lapses where the workspace said. */
+interface SharedHeld {
+  verdict: LeaseVerdict;
+  until?: number;
+}
+
+/** The workspace's answer: in the way, unconfirmed, or neither, which is free. */
+interface SharedAsked {
+  held?: SharedHeld;
+  unconfirmed?: string;
+}
+
+/** Plain, because the agent goes ahead and must not read the silence as safety. */
+function unconfirmedFor(path: string, because: string): string {
+  return `Could not check whether another machine is writing ${path}, because ${because}. The write went ahead, but a collision with another machine was not ruled out.`;
+}
+
 export class LeaseGate {
   constructor(private readonly deps: LeaseGateDeps) {}
 
@@ -190,61 +227,140 @@ export class LeaseGate {
       minutes,
       ...(region === undefined ? {} : { region }),
       ...(this.deps.repository === undefined ? {} : { repository: this.deps.repository }),
+      ...(this.deps.project === undefined ? {} : { project: this.deps.project }),
     };
+    const ceiling = this.deps.ceilingMs ?? LEASE_MAX_WAIT_MS;
+    // One window for both registers, so waiting here and then on another machine is never twice it.
+    const deadline = this.deadlineIn(ceiling);
     const first = await this.deps.registry.take(request, this.deps.now());
     if (first.outcome === LEASE_OUTCOME.TAKEN)
-      return this.confirmShared(request, first.lease);
+      return this.confirmShared(request, first.lease, deadline, false);
     // A path this cannot reason about gets no invented lease, and refusing would block work over a spelling.
     if (first.outcome === LEASE_OUTCOME.UNUSABLE_PATH)
       return { outcome: LEASE_GATE.TAKEN };
 
     const held: HeldClaim = { request, holding: first.holding };
-    const ceiling = this.deps.ceilingMs ?? LEASE_MAX_WAIT_MS;
     const budget = waitFor(held.holding, this.deps.now(), ceiling);
     const asked = await this.ask(held.holding, path, budget);
     if (asked === null || asked.answer === LEASE_ANSWER.WAIT)
-      return this.waitOut(held, budget);
+      return this.waitOut(held, budget, deadline);
     if (asked.answer === LEASE_ANSWER.TAKE)
       return this.takeOver(held, asked.reason ?? '');
     return {
       outcome: LEASE_GATE.REFUSED,
       holding: held.holding,
-      message: `Stood down: ${describeLease(held.holding, this.deps.now())}`,
+      message: `Stood down: ${describeLease(held.holding, this.deps.now(), this.deps.repository)}`,
     };
   }
 
-  // Another machine holding it means the local lease goes straight back, or the register goes stale.
-  private async confirmShared(
-    request: LeaseRequest,
-    lease: Lease,
-  ): Promise<LeaseVerdict> {
-    const elsewhere = await this.claimShared(request);
-    if (elsewhere === null) return { outcome: LEASE_GATE.TAKEN, lease };
-    await this.deps.registry.release(lease.id, request.holder, this.deps.now());
-    return elsewhere;
+  private deadlineIn(ms: number): number {
+    return Date.parse(this.deps.now()) + ms;
   }
 
   /**
-   * Null when the workspace knows of no holder, which includes not knowing at all: a
-   * lease is coordination and not safety, so a network hiccup must not block work.
+   * Another machine holding it means the local lease goes straight back, or the register
+   * goes stale, and the writer waits for that machine as it would for one here.
    */
-  private async claimShared(request: LeaseRequest): Promise<LeaseVerdict | null> {
+  private async confirmShared(
+    request: LeaseRequest,
+    lease: Lease,
+    deadline: number,
+    waited: boolean,
+  ): Promise<LeaseVerdict> {
+    const asked = await this.claimShared(request);
+    if (asked.held === undefined) {
+      return {
+        outcome: waited ? LEASE_GATE.WAITED : LEASE_GATE.TAKEN,
+        lease,
+        ...(asked.unconfirmed === undefined ? {} : { unconfirmed: asked.unconfirmed }),
+      };
+    }
+    await this.deps.registry.release(lease.id, request.holder, this.deps.now());
+    return this.waitShared(request, asked.held, deadline);
+  }
+
+  /**
+   * Polls the workspace with a doubling pause until the other machine lets go, bounded by
+   * the deadline, by when its lease lapses, and by a count, as the local wait is.
+   */
+  private async waitShared(
+    request: LeaseRequest,
+    held: SharedHeld,
+    deadline: number,
+  ): Promise<LeaseVerdict> {
+    const end = Math.min(deadline, held.until ?? deadline);
+    const budget = end - Date.parse(this.deps.now());
+    if (budget <= 0) return held.verdict;
+    let poll = this.deps.sharedPollMs ?? DEFAULT_SHARED_POLL_MS;
+    const attempts = Math.max(1, Math.ceil(budget / poll));
+    let last = held.verdict;
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const left = end - Date.parse(this.deps.now());
+      if (left <= 0) break;
+      await this.sleep(Math.min(poll, left));
+      poll = Math.min(poll * 2, SLOWEST_SHARED_POLL_MS);
+      // This machine's register first, so a local holder that arrived meanwhile is not trampled.
+      const local = await this.deps.registry.take(request, this.deps.now());
+      if (local.outcome !== LEASE_OUTCOME.TAKEN) continue;
+      const asked = await this.claimShared(request);
+      if (asked.held === undefined) {
+        return {
+          outcome: LEASE_GATE.WAITED,
+          lease: local.lease,
+          ...(asked.unconfirmed === undefined ? {} : { unconfirmed: asked.unconfirmed }),
+        };
+      }
+      await this.deps.registry.release(local.lease.id, request.holder, this.deps.now());
+      last = asked.held.verdict;
+    }
+    return { ...last, outcome: LEASE_GATE.TIMED_OUT };
+  }
+
+  /**
+   * What the workspace said. Not knowing lets the write through, since a lease is
+   * coordination and not safety, but where it went unanswered the writer is told so.
+   */
+  private async claimShared(request: LeaseRequest): Promise<SharedAsked> {
     const shared = this.deps.shared;
-    if (shared === undefined) return null;
-    const region = request.region;
-    const result = await shared.take(
-      request.path,
-      request.holder,
-      request.minutes ?? DEFAULT_SHARED_MINUTES,
-      region,
-    );
-    if (result.outcome !== SHARED_OUTCOME.HELD_BY_ANOTHER) return null;
+    if (shared === undefined) return {};
+    const result = await shared
+      .take(
+        request.path,
+        request.holder,
+        request.minutes ?? DEFAULT_SHARED_MINUTES,
+        request.region,
+      )
+      .catch((): SharedTake => ({
+        outcome: SHARED_OUTCOME.UNKNOWN,
+        because: 'asking the control plane failed',
+        unanswered: true,
+      }));
+    if (result.outcome === SHARED_OUTCOME.UNKNOWN) {
+      return result.unanswered === true
+        ? { unconfirmed: unconfirmedFor(request.path, result.because) }
+        : {};
+    }
+    if (result.outcome !== SHARED_OUTCOME.HELD_BY_ANOTHER) return {};
+    const until = result.until === undefined ? NaN : Date.parse(result.until);
     return {
-      outcome: LEASE_GATE.REFUSED,
-      message: heldElsewhere(result, this.deps.now()),
-      asked: heldElsewhere(withoutLease(result), this.deps.now()),
-      ...(result.leaseId === undefined ? {} : { sharedLeaseId: result.leaseId }),
+      held: {
+        verdict: {
+          outcome: LEASE_GATE.REFUSED,
+          message: heldElsewhere(result, this.deps.now()),
+          asked: heldElsewhere(withoutLease(result), this.deps.now()),
+          ...(result.leaseId === undefined ? {} : { sharedLeaseId: result.leaseId }),
+        },
+        ...(Number.isFinite(until) ? { until } : {}),
+      },
     };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    const sleep =
+      this.deps.sleep ??
+      ((wait: number) => new Promise<void>((resolve) => setTimeout(resolve, wait)));
+    return sleep(ms);
   }
 
   /** Never throws and never blocks the write: unknown is the whole file. */
@@ -265,7 +381,13 @@ export class LeaseGate {
   ): Promise<LeaseAsked | null> {
     if (this.deps.prompt === undefined) return null;
     try {
-      return await this.deps.prompt.ask(holding, path, this.deps.now(), budget);
+      return await this.deps.prompt.ask(
+        holding,
+        path,
+        this.deps.now(),
+        budget,
+        this.deps.repository,
+      );
     } catch {
       // A prompt that threw is a prompt nobody saw; wait it out rather than guessing.
       return null;
@@ -276,27 +398,29 @@ export class LeaseGate {
    * Bounded by the deadline and by a count, so a clock that does not advance cannot
    * turn the wait into a hang, which would be worse than the collision.
    */
-  private async waitOut(held: HeldClaim, budget: number): Promise<LeaseVerdict> {
-    const sleep =
-      this.deps.sleep ??
-      ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  private async waitOut(
+    held: HeldClaim,
+    budget: number,
+    window: number,
+  ): Promise<LeaseVerdict> {
     const poll = this.deps.pollMs ?? DEFAULT_POLL_MS;
-    const deadline = Date.parse(this.deps.now()) + budget;
+    const deadline = this.deadlineIn(budget);
     const attempts = Math.max(1, Math.ceil(budget / poll));
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       if (Date.parse(this.deps.now()) >= deadline) break;
-      await sleep(poll);
+      await this.sleep(poll);
       const retry = await this.deps.registry.take(held.request, this.deps.now());
       if (retry.outcome === LEASE_OUTCOME.TAKEN) {
-        return { outcome: LEASE_GATE.WAITED, lease: retry.lease };
+        // Free here is not free everywhere: the rest of the same window goes on the workspace.
+        return this.confirmShared(held.request, retry.lease, window, true);
       }
     }
 
     return {
       outcome: LEASE_GATE.TIMED_OUT,
       holding: held.holding,
-      message: `${describeLease(held.holding, this.deps.now())} and did not let go. Wait, or take it with "memnox lock ${held.request.path}".`,
+      message: `${describeLease(held.holding, this.deps.now(), this.deps.repository)} and did not let go. Wait, or take it with "memnox lock ${held.request.path}".`,
     };
   }
 

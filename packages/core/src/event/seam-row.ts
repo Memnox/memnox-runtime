@@ -36,3 +36,17 @@ export function openLedger(home: string): SqliteEventStore | null {
     return null;
   }
 }
+
+/** What the gate ruled under, as every seam's row carries it. */
+export interface RuledFor {
+  signals?: readonly string[];
+  principal?: string;
+}
+
+/** The signals and the person a verdict was reached for, copied onto a row only where present. */
+export function ruledFor(verdict: RuledFor): RuledFor {
+  return {
+    ...(verdict.signals === undefined ? {} : { signals: verdict.signals }),
+    ...(verdict.principal === undefined ? {} : { principal: verdict.principal }),
+  };
+}

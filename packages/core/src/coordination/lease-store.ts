@@ -1,6 +1,6 @@
-import { mkdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MEMNOX_HOME } from '../config/config';
+import { exclusively } from '../store/exclusive';
 import { JsonRecordDir } from '../store/json-records';
 import {
   DEFAULT_LEASE_MINUTES,
@@ -22,10 +22,6 @@ import { mergedRegion, regionsMeet } from './region-overlap';
  * is answered with the holder, and the caller decides.
  */
 export const LEASE_DIR = 'leases';
-/** The mutex is held for a directory read and one write. Anything longer is a crash. */
-const MUTEX_STALE_MS = 5_000;
-const MUTEX_RETRY_MS = 25;
-const MUTEX_ATTEMPTS = 200;
 
 export function leaseDirFor(home: string): string {
   return join(home, MEMNOX_HOME, LEASE_DIR);
@@ -107,6 +103,7 @@ export class LeaseRegistry {
       const wanted = {
         path: request.path,
         ...(request.repository === undefined ? {} : { repository: request.repository }),
+        ...(request.project === undefined ? {} : { project: request.project }),
         ...regionFields(request.region),
       };
       const overlapping = standing.filter((lease) => regionsMeet(lease, wanted));
@@ -150,6 +147,7 @@ export class LeaseRegistry {
           path: held.path,
           holder: by,
           ...(held.repository === undefined ? {} : { repository: held.repository }),
+          ...(held.project === undefined ? {} : { project: held.project }),
         },
         now,
       );
@@ -219,41 +217,9 @@ export class LeaseRegistry {
     await this.records.write(lease.id, lease);
   }
 
-  /**
-   * One writer at a time, across processes, since `mkdir` is atomic everywhere. A lock
-   * older than any honest critical section was left by a crash and is reclaimed.
-   */
-  private async exclusively<T>(work: () => Promise<T>): Promise<T> {
-    const lock = join(leaseDirFor(this.home), '.lock');
-    await mkdir(leaseDirFor(this.home), { recursive: true, mode: 0o700 });
-
-    for (let attempt = 0; attempt < MUTEX_ATTEMPTS; attempt += 1) {
-      try {
-        await mkdir(lock);
-        try {
-          return await work();
-        } finally {
-          await rm(lock, { recursive: true, force: true });
-        }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        await this.reclaimStale(lock);
-        await new Promise((resolve) => setTimeout(resolve, MUTEX_RETRY_MS));
-      }
-    }
-    // Five seconds of contention is a bug, and proceeding without the mutex would corrupt the register.
-    throw new Error('could not take the lease lock; run `memnox doctor`');
-  }
-
-  private async reclaimStale(lock: string): Promise<void> {
-    try {
-      const { mtimeMs } = await stat(lock);
-      if (Date.now() - mtimeMs > MUTEX_STALE_MS) {
-        await rm(lock, { recursive: true, force: true });
-      }
-    } catch {
-      // Gone between the failed mkdir and here, which is the outcome we wanted anyway.
-    }
+  /** One writer at a time across processes, the same lock every read-change-write store takes. */
+  private exclusively<T>(work: () => Promise<T>): Promise<T> {
+    return exclusively(leaseDirFor(this.home), work);
   }
 }
 

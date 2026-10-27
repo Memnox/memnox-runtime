@@ -3,6 +3,8 @@ import type { Policy } from './policy';
 import { TOOL_CLASS } from '../discovery/classify';
 import { LOCAL_NAMESPACES } from '../constants/action-class.constants';
 import { CAPABILITY } from '../domain/capability';
+import { DATA_CLASSIFICATION } from '../domain/sensitive-data';
+import { DATABASE_ACTION_PREFIX, STATEMENT_ARGUMENT } from '../intercept/database-call';
 import {
   ACTION,
   CHANGING_HTTP_METHODS,
@@ -11,7 +13,7 @@ import {
 } from '../constants/action.constants';
 
 /**
- * The six things somebody decides about when writing rules for the first time, walked
+ * The things somebody decides about when writing rules for the first time, walked
  * as questions that produce a file they can read afterwards.
  */
 export const POLICY_DOMAIN = {
@@ -21,10 +23,16 @@ export const POLICY_DOMAIN = {
   MCP: 'mcp',
   NETWORK: 'network',
   CLI: 'cli',
+  /** Statements that take every row or change a schema, on any database client. */
+  DATABASE: 'database',
+  /** Any change to a database on another host. */
+  REMOTE_DATABASE: 'remote-database',
   /** Moving money, deploying and handing out authority, wherever the tool is. */
   CONSEQUENTIAL: 'consequential',
   /** Any change in an environment named like production. */
   PRODUCTION: 'production',
+  /** Sensitive data leaving for any destination, which a person narrows to the approved ones. */
+  SENSITIVE_DATA: 'sensitive-data',
 } as const;
 
 export type PolicyDomain = (typeof POLICY_DOMAIN)[keyof typeof POLICY_DOMAIN];
@@ -46,6 +54,8 @@ export interface DomainChoice {
   capabilities?: string[];
   /** Narrows it to the environments named, as the command or the call names them. */
   environments?: string[];
+  /** Narrows it to what the payload carries, as the sensitive data classifier names it. */
+  dataClassifications?: string[];
 }
 
 /** What changes something, as every classifier spells it. Reads are left out on purpose. */
@@ -72,10 +82,44 @@ const REMOTE_CLIS: readonly string[] = [
   'heroku',
   'netlify',
   'stripe',
-  'psql',
-  'mysql',
-  'mongosh',
 ];
+
+/** Every client a statement is read off, so a rule about databases is one rule whichever ran it. */
+const DATABASE_CLIENTS: readonly string[] = [
+  'psql',
+  'pgcli',
+  'mysql',
+  'mariadb',
+  'mycli',
+  'mongosh',
+  'sqlite3',
+  // A statement an MCP database tool was handed, ruled as if a client on PATH had run it.
+  DATABASE_ACTION_PREFIX,
+];
+
+/**
+ * The row writes a statement names, which carry a WHERE or a filter whenever they are not
+ * `-unbounded`. Schema changes, grants and a session nothing could read stay with the rule.
+ */
+const ROW_WRITES: readonly string[] = [
+  'insert',
+  'update',
+  'delete',
+  'merge',
+  'insertone',
+  'insertmany',
+  'updateone',
+  'updatemany',
+  'deleteone',
+  'deletemany',
+  'replaceone',
+];
+
+/** Every database action except a bounded row write, which is ordinary work on a local database. */
+const DATABASE_CHANGES: string[] = DATABASE_CLIENTS.flatMap((client) => [
+  `${client}.*`,
+  ...ROW_WRITES.map((write) => `!${client}.${write}`),
+]);
 
 /** The verbs of the mostly local CLIs that publish something outward. */
 const OUTWARD_VERBS: readonly string[] = ['docker.push', 'npm.publish', 'npm.unpublish'];
@@ -86,6 +130,25 @@ const OUTSIDE_THIS_MACHINE: string[] = [
   ...[...LOCAL_NAMESPACES, 'package'].map((each) => `!${each}.*`),
 ];
 
+/** Where credentials sit on disk, as rule targets: what the first question denies an agent, and a phone never lists. */
+export const CREDENTIAL_PATHS: readonly string[] = [
+  // The directory too, or asking about `~/.aws` itself answers "no rule matched".
+  '**/.ssh',
+  '**/.ssh/**',
+  '**/.aws',
+  '**/.aws/**',
+  '**/.gcloud',
+  '**/.gcloud/**',
+  '**/.kube',
+  '**/.kube/**',
+  '**/.env',
+  '**/.env.*',
+  // A template holds names and no values, and reading it is how an agent learns the shape.
+  '!**/.env.example',
+  '!**/.env.sample',
+  '!**/.env.template',
+];
+
 export const DOMAIN_CHOICES: readonly DomainChoice[] = [
   {
     domain: POLICY_DOMAIN.FILESYSTEM,
@@ -94,22 +157,8 @@ export const DOMAIN_CHOICES: readonly DomainChoice[] = [
     because:
       'almost no task needs the key itself, and a leaked one is somebody’s weekend',
     actions: [ACTION.FILESYSTEM_READ, ACTION.ENVIRONMENT_READ],
-    // The directory too, or asking about `~/.aws` itself answers "no rule matched".
     targets: [
-      '**/.ssh',
-      '**/.ssh/**',
-      '**/.aws',
-      '**/.aws/**',
-      '**/.gcloud',
-      '**/.gcloud/**',
-      '**/.kube',
-      '**/.kube/**',
-      '**/.env',
-      '**/.env.*',
-      // A template holds names and no values, and reading it is how an agent learns the shape.
-      '!**/.env.example',
-      '!**/.env.sample',
-      '!**/.env.template',
+      ...CREDENTIAL_PATHS,
       // A variable printed is the same key read another way: `printenv`, `echo $STRIPE_KEY`.
       EVERY_VARIABLE,
       '*_KEY',
@@ -144,6 +193,16 @@ export const DOMAIN_CHOICES: readonly DomainChoice[] = [
       'git.branch-d',
       'git.clean-fd',
       'git.clean-f',
+      'git.clean-force',
+      'git.branch-delete-force',
+      'git.push-delete',
+      'git.reflog-expire',
+      'git.reflog-delete',
+      'git.stash-clear',
+      'git.stash-drop',
+      'git.filter-branch',
+      'git.filter-repo',
+      'git.gc-prune-now',
       'git.reset',
       'git.clean',
     ],
@@ -157,6 +216,8 @@ export const DOMAIN_CHOICES: readonly DomainChoice[] = [
     actions: ['mcp.*'],
     // Unknown too: a tool nothing could classify might change anything.
     classes: [...CHANGING_CLASSES, TOOL_CLASS.UNKNOWN],
+    // A bounded row write on a local database is the database question's, which lets it pass.
+    arguments: { [STATEMENT_ARGUMENT]: ['*', ...ROW_WRITES.map((write) => `!${write}`)] },
   },
   {
     domain: POLICY_DOMAIN.NETWORK,
@@ -178,6 +239,28 @@ export const DOMAIN_CHOICES: readonly DomainChoice[] = [
     classes: [...CHANGING_CLASSES],
   },
   {
+    domain: POLICY_DOMAIN.DATABASE,
+    question:
+      'Database statements that drop a table, change every row, or change the schema',
+    recommended: DECISION_EFFECT.ASK,
+    because:
+      'a DELETE or UPDATE with no WHERE, a TRUNCATE or a DROP takes every row at once, while a write bounded to the rows a task needs is ordinary work',
+    actions: DATABASE_CHANGES,
+    classes: [...CHANGING_CLASSES],
+  },
+  {
+    domain: POLICY_DOMAIN.REMOTE_DATABASE,
+    question: 'Any change to a database on another host',
+    recommended: DECISION_EFFECT.ASK,
+    because:
+      'a database somebody else runs is somebody else’s data, however few rows a statement names',
+    actions: DATABASE_CLIENTS.map((client) => `${client}.*`),
+    // A host and never a command line, which a seam falls back to and which always has a space.
+    // A statement names a host only when it is not this machine.
+    targets: ['**', '!* *'],
+    classes: [...CHANGING_CLASSES],
+  },
+  {
     domain: POLICY_DOMAIN.CONSEQUENTIAL,
     question: 'Moving money, deploying, or handing out authority, through any tool',
     recommended: DECISION_EFFECT.ASK,
@@ -195,6 +278,16 @@ export const DOMAIN_CHOICES: readonly DomainChoice[] = [
     actions: OUTSIDE_THIS_MACHINE,
     environments: ['prod*', 'production', 'live'],
     classes: [...CHANGING_CLASSES],
+  },
+  {
+    domain: POLICY_DOMAIN.SENSITIVE_DATA,
+    question:
+      'Sensitive data sent outside this machine: credentials, customer records, money, health, confidential material, code',
+    recommended: DECISION_EFFECT.ASK,
+    because:
+      'a ticket or a page can talk an agent into sending what it holds, so a person looks until the approved destinations are listed as `!*.yourcompany.com` and the rule is turned to deny',
+    actions: OUTSIDE_THIS_MACHINE,
+    dataClassifications: [DATA_CLASSIFICATION.SENSITIVE],
   },
 ];
 
@@ -227,6 +320,9 @@ export function policiesFrom(
         ...(choice.environments === undefined
           ? {}
           : { environments: choice.environments }),
+        ...(choice.dataClassifications === undefined
+          ? {}
+          : { dataClassifications: choice.dataClassifications }),
       },
       decision: {
         effect,

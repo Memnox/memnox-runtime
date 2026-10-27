@@ -274,7 +274,7 @@ describe('two machines on one repository', () => {
     /* Short, because a model reads it on every retry, and it ends on the one
        command a person can type to step in. */
     expect(verdict.message).toBe(
-      'claude-code on 0dc8ce0c is editing retryCharge (lines 40 to 44) of src/billing/invoice.ts. The rest of the file is free. A person can free them now by running `memnox lock --free lse_42`.',
+      'claude-code on 0dc8ce0c is editing retryCharge (lines 40 to 44) of src/billing/invoice.ts. The rest of the file is free. Ask it directly with memnox_message_agent, lease "lse_42". A person can free them now by running `memnox lock --free lse_42`.',
     );
     /* Asked in the person's own prompt, the command would be a second way to say it. */
     expect(verdict.asked).not.toContain('memnox lock');
@@ -301,6 +301,8 @@ describe('two machines on one repository', () => {
         }),
         now: clock.now,
         sleep: clock.sleep,
+        // No window to wait in, so the refusal is worded at the moment it was asked.
+        ceilingMs: 0,
       });
     const tmpHome = await home();
 

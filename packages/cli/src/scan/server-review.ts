@@ -49,5 +49,20 @@ function fieldsFor(review: ServerReview): { label: string; value: string }[] {
     },
     { label: 'filesystem', value: review.filesystem ? 'reaches it' : 'no' },
     { label: 'network', value: review.network ? 'reaches it' : 'no' },
+    ...fetchedRow(review),
+  ];
+}
+
+/** Said only for a line that fetches, since a local binary has no registry to drift from. */
+function fetchedRow(review: ServerReview): { label: string; value: string }[] {
+  const fetched = review.fetched;
+  if (fetched === undefined) return [];
+  return [
+    {
+      label: 'fetched',
+      value: fetched.pinned
+        ? `${fetched.spec} by ${fetched.runner}, pinned to that version`
+        : `${fetched.spec} by ${fetched.runner}, unpinned: each start runs whatever was published last`,
+    },
   ];
 }

@@ -9,6 +9,7 @@ import { registerWatchCommand } from './commands/watch.command';
 import { registerRewindCommand } from './commands/rewind.command';
 import { registerCheckCommand } from './commands/check.command';
 import { registerTraceCommand } from './commands/trace.command';
+import { registerTracesCommand } from './commands/traces.command';
 import { registerReplayCommand } from './commands/replay.command';
 import { registerExplainCommand } from './commands/explain.command';
 import { registerConfigCommand } from './commands/config.command';
@@ -27,6 +28,13 @@ import { registerResumeCommand } from './commands/resume.command';
 import { registerClaimsCommand } from './commands/claims.command';
 import { registerBudgetCommand } from './commands/budget.command';
 import { registerNextCommand } from './commands/next.command';
+import { registerUnattendedCommand } from './commands/unattended.command';
+import { registerAskCommand } from './commands/ask.command';
+import { registerVoiceCommand } from './commands/voice.command';
+import { registerPairCommand } from './commands/pair.command';
+import { registerSignInCommand } from './commands/signin.command';
+import { registerInboxCommand } from './commands/inbox.command';
+import { registerDevicesCommand } from './commands/devices.command';
 import { registerReportCommand } from './commands/report.command';
 import { registerSkillsCommand } from './commands/skills.command';
 import { registerEnvCommand } from './commands/env.command';
@@ -36,8 +44,10 @@ import { registerRunCommand } from './commands/run.command';
 import { registerMcpCommand } from './commands/mcp.command';
 import { registerRepoCommand } from './commands/repo.command';
 import { registerTaskCommand } from './commands/task.command';
+import { registerMissionCommand } from './commands/mission.command';
 import { registerModeCommand } from './commands/mode.command';
 import { registerAllowCommand } from './commands/allow.command';
+import { registerAutopilotCommand } from './commands/autopilot.command';
 import { unwrapEveryServer } from './mcp/wrap-servers';
 import { registerPolicyCommand } from './commands/policy.command';
 import { registerLoginCommand } from './commands/login.command';
@@ -104,13 +114,26 @@ function registerTerminalCommands(program: Command, context: CliContext): void {
   // How a person shapes the work: the mode, the task, and what a clone may do.
   registerModeCommand(program, context);
   registerAllowCommand(program, context);
+  registerAutopilotCommand(program, context);
   registerTaskCommand(program, context);
+  registerMissionCommand(program, context);
   registerRepoCommand(program, context);
   registerSetupCommand(program, context);
   registerStatusCommand(program, context);
   registerStopCommand(program, context);
   registerStartCommand(program, context);
   registerUpdateCommand(program, context);
+}
+
+/** What the voice answers through, which a person can also type: can I leave, ask, the key. */
+function registerVoiceCommands(program: Command, context: CliContext): void {
+  registerUnattendedCommand(program, context);
+  registerAskCommand(program, context);
+  registerVoiceCommand(program, context);
+  registerPairCommand(program, context);
+  registerSignInCommand(program, context);
+  registerInboxCommand(program, context);
+  registerDevicesCommand(program, context);
 }
 
 function registerCommands(program: Command, context: CliContext): void {
@@ -129,6 +152,7 @@ function registerCommands(program: Command, context: CliContext): void {
   registerClaimsCommand(program, context);
   registerBudgetCommand(program, context);
   registerNextCommand(program, context);
+  registerVoiceCommands(program, context);
   registerReportCommand(program, context);
   registerSkillsCommand(program, context);
   registerEnvCommand(program, context);
@@ -148,6 +172,7 @@ function registerCommands(program: Command, context: CliContext): void {
   registerRewindCommand(program, context);
   registerCheckCommand(program, context);
   registerTraceCommand(program, context);
+  registerTracesCommand(program, context);
   registerDoctorCommand(program, context);
   registerConfigCommand(program, context);
 }

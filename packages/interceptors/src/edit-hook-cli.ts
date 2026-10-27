@@ -9,6 +9,7 @@ import {
   LeaseRegistry,
   protectionStopped,
   SESSION_VAR,
+  SessionHosts,
 } from '@memnox/core';
 
 import {
@@ -20,20 +21,33 @@ import {
   type AgentEdits,
 } from './agent-edits';
 import { claimAll, type EditHookContext } from './edit-claims';
+import { answerAgentQuestion } from './agent-question';
 import { answerPicker } from './held-picker';
 import { checkpointBeforeFirstWrite } from './checkpoint-seam';
-import { canAskPerson } from './edit-hook';
+import { canAskPerson, withAddedContext } from './edit-hook';
 import { fingerprintHold } from './fingerprint-hold';
 import { keepBeforeShell, takeOwedReport } from './shell-written';
 import { fieldsOf } from './hook-payload';
 import { answerPause } from './edit-pause';
 import { keepSessionSummary } from './session-summary-row';
-import { answeredSessionStart, beforePause, replyInSession } from './in-session';
+import {
+  answeredApproval,
+  answeredSessionStart,
+  beforePause,
+  replyInSession,
+} from './in-session';
 import { log, readStdin } from './seam-runtime';
+import { noteSessionHost } from './session-host-note';
+import { clearTerminalQuestion, noteTerminalQuestion } from './terminal-question';
+import { noteCursorAsking } from './cursor-asking';
 import { sessionEventOf } from './session-events';
 import { answerToolCall, failedToolAnswer, type ToolAnswer } from './tool-hook';
 import { DEFAULT_AGENT_NAME, TOOL_POLICY_FLAG } from './tool-hook.constants';
 import { refusalReply, type ToolReply } from './tool-policy';
+import { canonicalPayload, isOpenClawPayload } from './openclaw-payload';
+import { isBorrowedClaudeHook } from './borrowed-hook';
+import { HERMES_PLUGIN_MARK } from './agent-edits';
+import { HOST_EVENT_FLAG, isCopilotPayload, namedHostPayload } from './named-hosts';
 
 /**
  * The hook an editor runs before a tool call and when a session ends: with `--policy` it
@@ -50,21 +64,21 @@ let received: unknown = null;
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const context = contextFrom(args, process.env);
-  let payload: unknown;
-  try {
-    payload = JSON.parse(await readStdin());
-    received = payload;
-  } catch {
-    // Not a payload this hook was written for, so it says nothing about it.
-    return;
-  }
+  const payload = await readPayload(args, context);
+  // Not a payload this hook was written for, so it says nothing about it.
+  if (payload === null) return;
+  received = payload;
 
+  // Cursor running Claude Code's entry: Cursor's own entry rules on this call.
+  if (isBorrowedClaudeHook(payload, context.agent, process.env)) return;
+  if (await answeredApproval(payload, context)) return;
   const ended = endedSessionOf(payload);
   if (ended !== null) return releaseSession(ended, context);
-  // Stopped on purpose: no rule, lease or pause stands in the way until `memnox start`.
-  if (await protectionStopped(context.home)) return;
+  if (await nothingToRule(payload, context)) return;
+  await noteSessionHost(payload, context);
   if (await answeredSessionStart(payload, context, process.env)) return;
   if (await answeredPicker(payload, context)) return;
+  if (await answeredOutLoud(payload, context)) return;
 
   // The rules first, so nothing takes a lease on a write it was never allowed to make.
   const ruled = args.includes(TOOL_POLICY_FLAG)
@@ -79,11 +93,37 @@ async function main(): Promise<void> {
   // Windsurf's `post_write_code` is both an edit to
   // claim and a tool to record, so the claim goes first.
   const pause = sessionEventOf(payload);
-  if (await answerEdits(payload, context)) return;
-  emit(reply);
+  const unconfirmed: string[] = [];
+  if (await answerEdits(payload, context, unconfirmed)) return;
+  await noteCursorAsking(payload, reply !== null, context);
+  emit(toldUnconfirmed(payload, reply, unconfirmed));
   if (pause === null) return;
   const said = await beforePause(payload, pause, context, process.env);
   process.stdout.write(await answerPause(pause, context, said));
+}
+
+/**
+ * The payload in the names every reader takes: OpenClaw's, Copilot's, Devin's and OpenCode's
+ * read into them, any other host's as it came. Null where stdin is not JSON.
+ */
+async function readPayload(
+  args: readonly string[],
+  context: EditHookContext,
+): Promise<unknown> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readStdin());
+  } catch {
+    return null;
+  }
+  const hostEvent = flagValue(args, HOST_EVENT_FLAG);
+  return canonicalPayload(
+    namedHostPayload(raw, {
+      agent: context.agent,
+      env: process.env,
+      ...(hostEvent === null ? {} : { hostEvent }),
+    }),
+  );
 }
 
 /**
@@ -165,6 +205,11 @@ async function heldForFingerprint(
 function personThere(payload: unknown, agent: string): boolean {
   const hook = fieldsOf(payload);
   if (hook !== null && CURSOR_ASKING.includes(hook['hook_event_name'])) return true;
+  // OpenClaw's approval reaches its person, and blocks the call where it has nowhere to;
+  // Copilot asks at its terminal and refuses an ask in autopilot.
+  if (isOpenClawPayload(payload) || isCopilotPayload(payload)) return true;
+  // Hermes's approval reaches its person through Memnox's plugin, and fails closed where none.
+  if (hook?.[HERMES_PLUGIN_MARK] === true) return true;
   return agent === DEFAULT_AGENT_NAME && canAskPerson(payload);
 }
 
@@ -174,6 +219,9 @@ function emit(reply: ToolReply | null): void {
   if (reply.stderr !== undefined) process.stderr.write(`${reply.stderr}\n`);
   if (reply.exitCode !== undefined) process.exitCode = reply.exitCode;
 }
+
+/** Claude Code names what started it here, which is how a panel session is told from a terminal one. */
+const ENTRYPOINT_VAR = 'CLAUDE_CODE_ENTRYPOINT';
 
 /**
  * Which agent this hook speaks for: the environment
@@ -187,12 +235,18 @@ function contextFrom(args: readonly string[], env: NodeJS.ProcessEnv): EditHookC
     pid: process.pid,
     cwd: process.cwd(),
     now: () => new Date(),
+    ...(env[ENTRYPOINT_VAR] === undefined ? {} : { entrypoint: env[ENTRYPOINT_VAR] }),
   };
 }
 
 /** `--agent cursor`, where the installed command names one. */
 function agentFlag(args: readonly string[]): string | null {
-  const at = args.indexOf(AGENT_FLAG);
+  return flagValue(args, AGENT_FLAG);
+}
+
+/** The value after a flag, or null where the flag is absent or bare. */
+function flagValue(args: readonly string[], flag: string): string | null {
+  const at = args.indexOf(flag);
   if (at === -1) return null;
   const value = args[at + 1];
   return value === undefined || value.startsWith('-') ? null : value;
@@ -203,6 +257,11 @@ function agentFlag(args: readonly string[]): string | null {
  * let go at once so nobody waits out a window.
  */
 async function releaseSession(ended: string, context: EditHookContext): Promise<void> {
+  // Closed by the person, so the voice, the cards and the waiting list stop tracking it at once.
+  await new SessionHosts(context.home).end(
+    context.runSession ?? ended,
+    context.now().toISOString(),
+  );
   await new LeaseRegistry(context.home).releaseSession(
     ended,
     context.now().toISOString(),
@@ -224,10 +283,14 @@ async function releaseSession(ended: string, context: EditHookContext): Promise<
  * Claims the writes in this payload and answers
  * the host. True when the write was refused.
  */
-async function answerEdits(payload: unknown, context: EditHookContext): Promise<boolean> {
+async function answerEdits(
+  payload: unknown,
+  context: EditHookContext,
+  unconfirmed: string[],
+): Promise<boolean> {
   const found = agentEditsOf(payload);
   if (found === null) return false;
-  const refusal = await claimAll(found, canAskPerson(payload), context);
+  const refusal = await claimAll(found, canAskPerson(payload), context, unconfirmed);
   if (refusal === null) {
     await keepBeforeFirstWrite(found, context);
     // Cursor reads a permission reply that is not JSON
@@ -245,6 +308,26 @@ async function answerEdits(payload: unknown, context: EditHookContext): Promise<
     process.stdout.write(`${refusal}\n`);
   }
   return true;
+}
+
+/**
+ * The reply with what could not be checked added for the model where its host reads
+ * context before a tool runs, and on stderr for the person everywhere else.
+ */
+function toldUnconfirmed(
+  payload: unknown,
+  reply: ToolReply | null,
+  unconfirmed: readonly string[],
+): ToolReply | null {
+  if (unconfirmed.length === 0) return reply;
+  const note = unconfirmed.join(' ');
+  const found = agentEditsOf(payload);
+  const before =
+    found?.host === EDIT_HOST.PRE_TOOL_USE && found.moment === EDIT_MOMENT.BEFORE;
+  const added = before ? withAddedContext(reply?.stdout, note) : null;
+  if (added !== null) return { ...(reply ?? {}), stdout: added };
+  log(note);
+  return reply;
 }
 
 /**
@@ -280,6 +363,46 @@ function personName(): string {
   } catch {
     return 'a person';
   }
+}
+
+/** An agent's own question, answered out loud when the voice is there to read it. */
+async function answeredOutLoud(
+  payload: unknown,
+  context: EditHookContext,
+): Promise<boolean> {
+  const reply = await answerAgentQuestion(payload, context).catch((err: unknown) => {
+    log(`agent question failed: ${String(err)}`);
+    return null;
+  });
+  if (reply === null) return false;
+  emit({ stdout: reply });
+  return true;
+}
+
+/**
+ * Stopped on purpose, so no rule, lease or pause stands in the way until `memnox start`; or the
+ * agent asking its person something in its terminal, which is news for the voice and no tool call.
+ */
+async function nothingToRule(
+  payload: unknown,
+  context: EditHookContext,
+): Promise<boolean> {
+  return (await protectionStopped(context.home)) || askedInTerminal(payload, context);
+}
+
+/** A question the agent asks in its terminal is posted for the voice; any other hook means it was answered. */
+async function askedInTerminal(
+  payload: unknown,
+  context: EditHookContext,
+): Promise<boolean> {
+  try {
+    if (await noteTerminalQuestion(payload, context)) return true;
+    await clearTerminalQuestion(payload, context);
+  } catch (err) {
+    // The voice reading it out is a convenience: the agent's own prompt is still on screen.
+    log(`terminal question failed: ${String(err)}`);
+  }
+  return false;
 }
 
 /** A held question asked in the host's own picker is answered here, and nowhere else. */

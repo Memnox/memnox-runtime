@@ -1,11 +1,16 @@
-import { agentIdFor } from '../discovery/agent';
+import { AGENT_ID_PREFIX } from '../discovery/agent';
 import { OVERLAY_KIND } from './overlay';
+
+/**
+ * A person pausing one agent by name: how the freeze is spelled in state and what the agent is told.
+ */
 
 // Spelled as the cloud's AGENT_SUBJECT_PREFIX, so a freeze on agent `payments` never reads as one on service `payments`.
 export const AGENT_SUBJECT_PREFIX = 'agent:';
 
+// Read by the agent itself, so it says to wait rather than try the same work another way.
 export const AGENT_FROZEN_REASON =
-  'this agent is frozen across the workspace, so nothing it asks for runs until the freeze lifts or expires';
+  'a person paused this agent, so stop and wait for them to resume it rather than trying another way; nothing it asks for runs until then';
 
 /** True when a freeze on this agent by name is among the state labels in force. */
 export function agentFrozen(
@@ -13,9 +18,26 @@ export function agentFrozen(
   agentName: string,
 ): boolean {
   if (state === undefined || state.length === 0) return false;
-  // The console freezes an agent by its fleet id (`agt_claude-code`) and a seam runs as its name.
-  const labels = [agentName, agentIdFor(agentName)].map((name) =>
-    `${OVERLAY_KIND.FREEZE}:${AGENT_SUBJECT_PREFIX}${name}`.toLowerCase(),
-  );
-  return state.some((fact) => labels.includes(fact.toLowerCase()));
+  const prefix = `${OVERLAY_KIND.FREEZE}:${AGENT_SUBJECT_PREFIX}`;
+  const wanted = sameProductAs(agentName);
+  return state.some((fact) => {
+    const label = fact.toLowerCase();
+    return (
+      label.startsWith(prefix) && sameProductAs(label.slice(prefix.length)) === wanted
+    );
+  });
 }
+
+/**
+ * The console freezes by fleet id (`agt_codex-cli`), a hook runs as its kind (`codex-cli`) and a
+ * shell seam as its launcher (`codex`), and all three are one agent.
+ */
+function sameProductAs(name: string): string {
+  const lower = name.trim().toLowerCase();
+  const bare = lower.startsWith(AGENT_ID_PREFIX)
+    ? lower.slice(AGENT_ID_PREFIX.length)
+    : lower;
+  return bare.endsWith(CLI_SUFFIX) ? bare.slice(0, -CLI_SUFFIX.length) : bare;
+}
+
+const CLI_SUFFIX = '-cli';

@@ -30,6 +30,8 @@ export interface Overlay {
   source: string;
   /** Set when somebody ended it early. It stays in the record rather than vanishing. */
   liftedAt?: string;
+  /** The workspace's own condition this was also declared as, so lifting here can lift it there. */
+  workspaceConditionId?: string;
 }
 
 export function validateOverlay(overlay: Partial<Overlay>): string[] {

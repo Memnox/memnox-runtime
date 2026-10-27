@@ -87,7 +87,7 @@ describe('an answer given for the rest of the session', () => {
     const dir = await home();
     const approvals = new PendingApprovals(dir);
     const held = await holdInChat(approvals, question('a.patch'), 'both', MOMENT);
-    await approvals.answer(held.id, 'session', 'Moise', MOMENT);
+    await approvals.answer(held.id, 'session', 'Maya', MOMENT);
     const grants = new FileGrants(dir);
     expect(await grants.covers(grantSubjectFor(question('a.patch')))).toBe(true);
   });
@@ -96,7 +96,7 @@ describe('an answer given for the rest of the session', () => {
     const dir = await home();
     const approvals = new PendingApprovals(dir);
     const held = await holdInChat(approvals, question('a.patch'), 'both', MOMENT);
-    await approvals.answer(held.id, 'session', 'Moise', MOMENT);
+    await approvals.answer(held.id, 'session', 'Maya', MOMENT);
     expect(await new FileGrants(dir).covers(grantSubjectFor(question('b.patch')))).toBe(
       false,
     );
@@ -108,7 +108,7 @@ describe('an answer given for the rest of the session', () => {
     const approvals = new PendingApprovals(dir);
     const write = { ...question('a.ts', 'write'), action: 'filesystem.write' };
     const held = await holdInChat(approvals, write, 'both', MOMENT);
-    await approvals.answer(held.id, 'session', 'Moise', MOMENT);
+    await approvals.answer(held.id, 'session', 'Maya', MOMENT);
     const other = { ...write, target: 'b.ts' };
     expect(await new FileGrants(dir).covers(grantSubjectFor(other))).toBe(true);
   });
@@ -117,10 +117,10 @@ describe('an answer given for the rest of the session', () => {
     const dir = await home();
     const approvals = new PendingApprovals(dir);
     const held = await holdInChat(approvals, question('a.patch'), 'both', MOMENT);
-    const outcome = await approvals.answer(held.id, 'session', 'Moise', MOMENT);
+    const outcome = await approvals.answer(held.id, 'session', 'Maya', MOMENT);
     const answered = outcome !== null && 'answered' in outcome ? outcome.answered : held;
     expect(answeredText(answered)).toBe(
-      `Memnox: Moise said yes for the rest of this session: you may delete a.patch (${held.id}). Any other delete still needs their OK. Try the same call again now and carry on.`,
+      `Memnox: Maya said yes for the rest of this session: you may delete a.patch (${held.id}). Any other delete still needs their OK. Try the same call again now and carry on.`,
     );
     expect(heldNotice(held)).toContain(
       '2. Allow for this session (this a.patch only; any other delete still asks)',
@@ -138,7 +138,7 @@ describe('an answer given for the rest of the session', () => {
       action: 'filesystem.write',
     };
     const held = await holdInChat(approvals, write, 'session', MOMENT);
-    const outcome = await approvals.answer(held.id, 'session', 'Moise', MOMENT);
+    const outcome = await approvals.answer(held.id, 'session', 'Maya', MOMENT);
     const grants = new FileGrants(dir);
     const at = (target: string) => grantSubjectFor({ ...write, target });
 
@@ -146,8 +146,8 @@ describe('an answer given for the rest of the session', () => {
       await grants.covers(at('/work/cloud/src/notifications/held-answer-text.ts')),
     ).toBe(true);
     expect(await grants.covers(at('/work/cloud/src/machines/held-call.ts'))).toBe(false);
-    expect(await grants.covers(at('/Users/moise/.zshrc'))).toBe(false);
-    expect(await grants.covers(at('/Users/moise/Library/LaunchAgents/run.plist'))).toBe(
+    expect(await grants.covers(at('/Users/maya/.zshrc'))).toBe(false);
+    expect(await grants.covers(at('/Users/maya/Library/LaunchAgents/run.plist'))).toBe(
       false,
     );
 
@@ -169,7 +169,7 @@ describe('an answer given for the rest of the session', () => {
       action: 'shell.execute',
     };
     const held = await holdInChat(approvals, run, 'session', MOMENT);
-    const outcome = await approvals.answer(held.id, 'session', 'Moise', MOMENT);
+    const outcome = await approvals.answer(held.id, 'session', 'Maya', MOMENT);
     const grants = new FileGrants(dir);
     const at = (target: string) => grantSubjectFor({ ...run, target });
 
@@ -194,7 +194,7 @@ describe('an answer given for the rest of the session', () => {
       action: 'filesystem.write',
     };
     const held = await holdInChat(approvals, write, 'session', MOMENT);
-    await approvals.answer(held.id, 'session', 'Moise', MOMENT);
+    await approvals.answer(held.id, 'session', 'Maya', MOMENT);
     const grants = new FileGrants(dir);
     const at = (target: string) => grantSubjectFor({ ...write, target });
 

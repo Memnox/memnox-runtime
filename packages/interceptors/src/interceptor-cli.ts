@@ -11,6 +11,7 @@ import {
   exitCodeForChild,
   exitCodeForSpawnError,
   holderPid,
+  pathValueOf,
   isBrowserLauncher,
   openLedger,
   overlaysInForce,
@@ -19,11 +20,15 @@ import {
   SESSION_VAR,
   splitCommandLine,
   urlArgumentIn,
+  withPathValue,
+  type EnforcementMode,
   type EventSink,
   type LocalGate,
   type Overlay,
+  Clashes,
 } from '@memnox/core';
 
+import { brokeredEnvironment } from './broker-client';
 import { observeSession, pauseHolding, pauseMessage } from './breaker-seam';
 import { BrowserSeam } from './browser-seam';
 import { checkpointBeforeCommand } from './checkpoint-seam';
@@ -32,6 +37,7 @@ import { reportToDaemon } from './daemon-client';
 import { readHookConfig } from './hook-config';
 import { loadHookGate } from './hook-gate-loader';
 import {
+  adviceLine,
   INTERCEPT_BINARY,
   invokedFor,
   isExecutableFile,
@@ -44,7 +50,9 @@ import { record, type Provenance } from './record';
 import { buildHold, log, pidSessionId } from './seam-runtime';
 import { ancestorsOf } from './process-ancestry';
 import { claimShellAction, shellAction, type ShellClaim } from './shell-action';
+import { readMachineMode } from './tool-hook';
 import { DEFAULT_AGENT_NAME } from './tool-hook.constants';
+import { spawnPlanFor } from './windows-exec';
 
 /**
  * One binary behind every interceptor: it reads which name it was called as, rules on the
@@ -60,6 +68,8 @@ const FORWARDED: readonly NodeJS.Signals[] = ['SIGINT', 'SIGQUIT'];
 interface RunContext {
   home: string;
   gate: LocalGate | null;
+  /** The machine's mode at arrival, the same one the hook reads, so both seams agree. */
+  mode: EnforcementMode;
   overlays: readonly Overlay[];
   /**
    * Read at arrival, so a verdict replays against the bundle and freeze in force then.
@@ -113,11 +123,13 @@ async function readRunContext(
   sessionId: string | undefined,
 ): Promise<RunContext> {
   const gate = await loadHookGate(await readHookConfig(process.env, home));
+  const mode = await readMachineMode(home);
   const overlays = await overlaysInForce(home);
   const provenance = await provenanceOf(home, overlays, new Date().toISOString());
   return {
     home,
     gate,
+    mode,
     overlays,
     provenance,
     sink: openLedger(home),
@@ -129,6 +141,7 @@ async function readRunContext(
 function ruleOn(command: Command, context: RunContext): Promise<InterceptOutcome> {
   return ruleOnCommand(command.binary, command.args, {
     ...(context.gate === null ? {} : { gate: context.gate }),
+    mode: context.mode,
     overlays: context.overlays,
     env: process.env,
     // Without a hold an `ask` rule denies instead of asking.
@@ -205,6 +218,8 @@ async function handAndRecord(
   if ('refused' in claim) return refuseAsClaimed(claim.refused, outcome, context);
 
   await keepBeforeDestroying(command, context);
+  const advice = adviceLine(outcome);
+  if (advice !== null) process.stderr.write(`${advice}\n`);
   // Held while the command runs, so another machine
   // waits on work being done rather than a window.
   const status = await hand(command, context.home);
@@ -252,6 +267,18 @@ async function refuseAsClaimed(
   context: RunContext,
 ): Promise<never> {
   process.stderr.write(`memnox: ${refused}\n`);
+  // Two agents on one pull request or deploy is a clash the person hears about, not only this agent.
+  await new Clashes(context.home)
+    .note({
+      at: new Date().toISOString(),
+      sessionId: context.sessionId ?? pidSessionId(holderPid(process.ppid, process.pid)),
+      agent: process.env[ENV_AGENT_NAME] ?? DEFAULT_AGENT_NAME,
+      what: [outcome.action, outcome.target]
+        .filter((each) => each !== undefined)
+        .join(' '),
+      said: refused,
+    })
+    .catch(() => undefined);
   await record(context.sink, {
     ...context.provenance,
     outcome: { ...outcome, allowed: false },
@@ -304,8 +331,8 @@ async function anotherAgentHasIt(
  * Stdio untouched and the exit code passed straight
  * back, so the agent sees what it would without us.
  */
-function hand(command: Command, home: string): Promise<number> {
-  const path = realPath(process.env['PATH'] ?? '', home);
+async function hand(command: Command, home: string): Promise<number> {
+  const path = realPath(pathValueOf(process.env), home);
   const real = resolveReal(command.binary, path, isExecutableFile);
   if (real === null) {
     process.stderr.write(
@@ -316,11 +343,16 @@ function hand(command: Command, home: string): Promise<number> {
   // Not blocking, so the claim can be renewed while
   // it runs; an interrupt reaches the command itself.
   const ignore = (): void => undefined;
+  // Ruled on already: only a command allowed to run reaches here to be handed its token.
+  const env = await brokeredEnvironment(process.env, command.binary);
   for (const signal of FORWARDED) process.on(signal, ignore);
+  // A batch file on Windows runs under cmd.exe with its arguments escaped, never spliced in raw.
+  const plan = spawnPlanFor(real, command.args, { comspec: process.env['ComSpec'] });
   return new Promise((resolve) => {
-    const child = spawn(real, [...command.args], {
+    const child = spawn(plan.file, plan.args, {
       stdio: 'inherit',
-      env: { ...process.env, PATH: path },
+      env: withPathValue(env, path),
+      windowsVerbatimArguments: plan.verbatim,
     });
     const detach = relayEndingSignals(child);
     child.on('error', (err: unknown) => {

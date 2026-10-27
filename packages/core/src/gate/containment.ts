@@ -33,6 +33,8 @@ export const CONTAINMENT_SIGNAL = {
   BOUNDARY: 'containment:boundary',
   UNTRUSTED: 'containment:untrusted',
   PROBATION: 'containment:probation',
+  /** A probation write let through because a milestone puts it back, rather than asked about. */
+  CHECKPOINTED: 'containment:checkpointed',
 } as const;
 
 /**
@@ -92,6 +94,8 @@ export interface ContainmentAsk {
   signal: string;
   /** A refusal rather than a question, for what an untrusted repository never gets. */
   refuses?: true;
+  /** No question at all: a milestone taken before the write puts it back, so it runs and is recorded. */
+  checkpointed?: true;
 }
 
 const FILE_WRITES: readonly string[] = [
@@ -148,7 +152,7 @@ export function containmentAsk(
   return (
     boundaryAsk(request, containment) ??
     untrustedAsk(kind, containment, request.action) ??
-    probationAsk(containment)
+    probationAsk(request, containment)
   );
 }
 
@@ -192,6 +196,33 @@ function boundaryAsk(
   };
 }
 
+/** Every file action, the only kind whose reach is a path that can be placed. */
+const FILE_ACTIONS: readonly string[] = [ACTION.FILESYSTEM_READ, ...FILE_WRITES];
+
+/**
+ * A file action that lands inside the repository the session works in, which is the one place
+ * a yes needs no fingerprint. Anything else, a target it cannot place included, is outside.
+ */
+export function staysInRepository(
+  request: Pick<ActionRequest, 'action' | 'target' | 'workingDirectory'>,
+  containment: Containment,
+): boolean {
+  const { root } = containment;
+  const target = request.target;
+  if (
+    root === undefined ||
+    target === undefined ||
+    !FILE_ACTIONS.includes(request.action)
+  )
+    return false;
+  const path = absoluteOf(
+    target,
+    request.workingDirectory ?? containment.cwd ?? root,
+    containment.home,
+  );
+  return isInside(root, path);
+}
+
 /** Key files by name; a template of names is left readable, as the credential rule leaves it. */
 const KEY_FILE = /^\.env(\.(?!example$|sample$|template$)[\w.-]+)?$/;
 
@@ -232,13 +263,37 @@ function untrustedAsk(
   };
 }
 
-function probationAsk(containment: Containment): ContainmentAsk | null {
+function probationAsk(
+  request: ActionRequest,
+  containment: Containment,
+): ContainmentAsk | null {
   const probation = containment.probation;
   if (probation === undefined) return null;
+  if (undoneByMilestone(request, containment)) {
+    return {
+      reason: `${probation.name} is on probation, so a milestone was kept before this write rather than asking: "memnox rewind" puts it back.`,
+      signal: CONTAINMENT_SIGNAL.CHECKPOINTED,
+      checkpointed: true,
+    };
+  }
   return {
     reason: `${probation.name} is on probation until ${probation.until.slice(0, 10)}, so its writes and outward actions ask first. "${probation.trustCommand}" ends it now.`,
     signal: CONTAINMENT_SIGNAL.PROBATION,
   };
+}
+
+/**
+ * A file write inside the repository, which the milestone a seam keeps before a session's
+ * first write puts back. Only probation is lifted this way: it is Memnox's own caution, and
+ * a rule a person wrote that asks, a write outside the repository or a delete still ask.
+ */
+function undoneByMilestone(request: ActionRequest, containment: Containment): boolean {
+  if (request.action !== ACTION.FILESYSTEM_WRITE || request.target === undefined)
+    return false;
+  const { root } = containment;
+  if (root === undefined) return false;
+  const base = containment.cwd ?? root;
+  return isInside(root, absoluteOf(request.target, base, containment.home));
 }
 
 /** A registry or the agent's own model provider, reached without asking on containment's account. */

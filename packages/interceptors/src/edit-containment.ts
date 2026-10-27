@@ -17,7 +17,14 @@ import {
   type ContainmentAsk,
 } from '@memnox/core';
 
-import { EDIT_HOST, type AgentEdits, type EditHost } from './agent-edits';
+import {
+  BLOCKING_HOSTS,
+  EDIT_HOST,
+  blockDecision,
+  copilotDenial,
+  type AgentEdits,
+  type EditHost,
+} from './agent-edits';
 import { containmentFor } from './containment-loader';
 import type { EditHookContext } from './edit-claims';
 import { EDIT_HOOK_EVENT } from './edit-hook';
@@ -59,7 +66,8 @@ export async function containedEdit(
       { action: ACTION.FILESYSTEM_WRITE, target: file },
       containment,
     );
-    if (asked === null) continue;
+    // A probation write inside the repository runs, since the milestone kept before it puts it back.
+    if (asked === null || asked.checkpointed === true) continue;
     // The policy half raised this same question, so a yes given there for the session holds here too.
     if (await grantedInSession(context, edit.sessionId, file)) continue;
     return replyFor(found.host, asked, asking);
@@ -104,6 +112,10 @@ function replyFor(host: EditHost, asked: ContainmentAsk, asking: boolean): strin
   const told = `${asked.reason} ${NOT_FROM_CHAT} ${OTHER_WAY}`;
   if (host === EDIT_HOST.GEMINI)
     return JSON.stringify({ decision: 'deny', reason: told });
+  if (BLOCKING_HOSTS.includes(host)) {
+    return blockDecision(told);
+  }
+  if (host === EDIT_HOST.COPILOT) return copilotDenial(told);
   if (host === EDIT_HOST.WINDSURF) return told;
   return JSON.stringify({
     permission: 'deny',

@@ -1,6 +1,11 @@
-import { ENV_AGENT_NAME, ENV_POLICIES, readPolicyFiles, SESSION_VAR } from '@memnox/core';
-
-import { ENV_AGENT_ROLE } from './tool-hook.constants';
+import {
+  ENV_AGENT_NAME,
+  ENV_AGENT_ROLE,
+  ENV_POLICIES,
+  ENV_PRINCIPAL,
+  readPolicyFiles,
+  SESSION_VAR,
+} from '@memnox/core';
 
 /**
  * Where a seam finds the rules to evaluate against, with no daemon and no network: the
@@ -13,6 +18,8 @@ export interface HookConfig {
   agentName?: string;
   /** The role a rule's `roles:` matches, when this agent was enrolled under one. */
   agentRole?: string;
+  /** The person the agent works for, which a rule's `principals:` matches. */
+  principal?: string;
   /** The session `memnox run` set, whose declared task a scope rule compares against. */
   sessionId?: string;
   /**
@@ -36,6 +43,7 @@ export async function readHookConfig(
     fromRegistry: named === undefined || named.trim().length === 0,
     ...pick('agentName', env[ENV_AGENT_NAME]),
     ...pick('agentRole', env[ENV_AGENT_ROLE]),
+    ...pick('principal', env[ENV_PRINCIPAL]),
     ...pick('sessionId', env[SESSION_VAR]),
   };
 }

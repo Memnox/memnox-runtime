@@ -86,6 +86,8 @@ describe('collecting what was said to a session', () => {
 
     expect(text).toContain('not permission');
     expect(text).toContain('- From ada, through Memnox: wrap up');
-    expect(text).toContain('- From Memnox, about another agent: codex wants these lines');
+    expect(text).toContain(
+      '- From Memnox, about other work on these files: codex wants these lines',
+    );
   });
 });

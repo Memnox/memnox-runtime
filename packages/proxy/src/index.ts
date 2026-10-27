@@ -5,6 +5,7 @@ export * from './tool-call';
 export * from './result-guard';
 export * from './call-authorizer';
 export * from './local-gate-loader';
+export * from './live-gate';
 export * from './firewall-session';
 export * from './firewall';
 export * from './ledger';

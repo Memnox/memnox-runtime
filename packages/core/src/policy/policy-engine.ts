@@ -10,7 +10,8 @@ import {
 } from '../constants/decision.constants';
 import { normalizeActionRequest } from '../domain/action-identity';
 import { capabilityOf } from '../domain/capability';
-import { matchesAny, withWorkspace } from './pattern-matcher';
+import { matchesAny, matchesAnyOf, withWorkspace } from './pattern-matcher';
+import { classificationsImpliedBy } from '../domain/sensitive-data';
 import { TOOL_CLASS } from '../discovery/classify';
 import { matchesAnyTimeWindow } from './time-window';
 import { classifyRisk } from './risk-classifier';
@@ -131,7 +132,7 @@ export class PolicyEngine {
     // An observed rule is recorded but never decides.
     const shadow = strictestOf(observedEffects(matchedPolicies));
     const winner = strictestPolicy(
-      matchedPolicies.filter((policy) => policy.observed !== true),
+      withoutRelaxed(matchedPolicies.filter((policy) => policy.observed !== true)),
     );
     if (winner === undefined) {
       return {
@@ -181,7 +182,10 @@ export class PolicyEngine {
       matchesAny(policy.match.principals, request.principal) &&
       matchesAny(policy.match.models, request.model) &&
       matchesAny(policy.match.providers, request.provider) &&
-      matchesAny(policy.match.dataClassifications, request.dataClassification) &&
+      matchesAnyOf(
+        policy.match.dataClassifications,
+        classificationsImpliedBy(request.dataClassification),
+      ) &&
       matchesAny(policy.match.jurisdictions, request.jurisdiction) &&
       matchesAny(policy.match.workingDirectories, request.workingDirectory) &&
       matchesAny(policy.match.branches, request.branch) &&
@@ -247,6 +251,12 @@ function toMatchedPolicy(policy: Policy): MatchedPolicy {
     ...(policy.decision.alternative === undefined
       ? {}
       : { alternative: policy.decision.alternative }),
+    ...(policy.workspace === true ? { workspace: true } : {}),
+    ...(policy.decidedBy === undefined ? {} : { decidedBy: policy.decidedBy }),
+    ...(policy.decidedAt === undefined ? {} : { decidedAt: policy.decidedAt }),
+    ...(policy.decision.relaxes === undefined
+      ? {}
+      : { relaxes: policy.decision.relaxes }),
   };
 }
 
@@ -295,6 +305,29 @@ function strictestOf(effects: readonly DecisionEffect[]): DecisionEffect | undef
       strictest === undefined || isStricter(effect, strictest) ? effect : strictest,
     undefined,
   );
+}
+
+/**
+ * The matched rules less the asks an allow beside them names as relaxed. An allow can only
+ * stand in for an ask of its own layer, and a deny is never relaxed by anything.
+ */
+function withoutRelaxed(matched: readonly MatchedPolicy[]): MatchedPolicy[] {
+  const relaxed = new Set(
+    matched
+      .filter((policy) => policy.effect === DECISION_EFFECT.ALLOW)
+      .flatMap((policy) =>
+        (policy.relaxes ?? []).map((name) => layerOf(policy.workspace, name)),
+      ),
+  );
+  return matched.filter(
+    (policy) =>
+      policy.effect !== DECISION_EFFECT.ASK ||
+      !relaxed.has(layerOf(policy.workspace, policy.name)),
+  );
+}
+
+function layerOf(workspace: boolean | undefined, name: string): string {
+  return `${workspace === true ? 'workspace' : 'local'}\u0000${name}`;
 }
 
 /** The first matched policy with the strictest effect, so ties go to the earlier rule. */

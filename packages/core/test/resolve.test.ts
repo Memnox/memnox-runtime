@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { TOOL_CLASS } from '../src/discovery/classify';
+import { normalizeShellCommand } from '../src/domain/shell-normalizer';
+import { CODE_RUNNERS, SHELLS } from '../src/domain/shell-runners';
 import { resolveAction, resolveShellLine } from '../src/intercept/resolve';
 import { takesLease } from '../src/coordination/writes';
 
@@ -161,5 +164,82 @@ describe('a line whose only dollar is quoted code', () => {
 
     expect(opaque).toEqual([]);
     expect(actions.filter((each) => each.class === 'write')).toEqual([]);
+  });
+});
+
+/* `mysql -e "DROP DATABASE prod"` was destructive while `mariadb -e` with the same
+   statement was a plain shell line, and redis took its command as argv so nothing read it. */
+describe('database clients that were invisible', () => {
+  // argv rather than a line, because a statement carries its own spaces.
+  const ruled = (words: string[]) => {
+    const [binary, ...args] = words;
+    return resolveAction(binary ?? '', args);
+  };
+
+  it.each([
+    [['mariadb', '-e', 'DROP DATABASE prod'], 'mariadb.drop'],
+    [['mycli', '-e', 'DROP DATABASE prod'], 'mycli.drop'],
+    [['pgcli', '-c', 'DROP TABLE users'], 'pgcli.drop'],
+    [['redis-cli', 'FLUSHALL'], 'redis-cli.flushall'],
+    [['redis-cli', 'flushall'], 'redis-cli.flushall'],
+    [['redis-cli', 'FlushDb'], 'redis-cli.flushdb'],
+    [['redis-cli', 'DEL', 'session:1'], 'redis-cli.del'],
+    [['redis-cli', 'UNLINK', 'session:1'], 'redis-cli.unlink'],
+  ])('%j is destructive', (argv, action) => {
+    const resolved = ruled(argv as string[]);
+    expect(resolved.action).toBe(action);
+    expect(resolved.class).toBe(TOOL_CLASS.DESTRUCTIVE);
+  });
+
+  it.each([
+    [
+      ['redis-cli', 'CONFIG', 'SET', 'appendonly', 'no'],
+      'redis-cli.config-set',
+      TOOL_CLASS.WRITE,
+    ],
+    [['redis-cli', 'SET', 'k', 'v'], 'redis-cli.set', TOOL_CLASS.WRITE],
+    [['redis-cli', 'GET', 'k'], 'redis-cli.get', TOOL_CLASS.READ],
+    [['redis-cli', 'INFO'], 'redis-cli.info', TOOL_CLASS.READ],
+    [['mariadb', '-e', 'SELECT 1'], 'mariadb.select', TOOL_CLASS.READ],
+  ])('%j is %s', (argv, action, expected) => {
+    const resolved = ruled(argv as string[]);
+    expect(resolved.action).toBe(action);
+    expect(resolved.class).toBe(expected);
+  });
+
+  it('still calls an interactive session a write, as it does for mysql', () => {
+    expect(ruled(['mariadb']).class).toBe(TOOL_CLASS.WRITE);
+    expect(ruled(['redis-cli']).class).toBe(TOOL_CLASS.WRITE);
+  });
+});
+
+/* The normalizer and the resolver each kept their own list of prefixes and interpreters,
+   and a third copy read `timeout` on its own. So `doas python3 -c x` was unwrapped by one
+   and missed by the other, and the paths a hidden interpreter could write went uncounted. */
+describe('a prefix in front of an interpreter', () => {
+  const HOME_ENV = { HOME: '/home/dev', PWD: '/home/dev' };
+  const reached = (line: string): string[] =>
+    resolveShellLine(line, HOME_ENV)
+      .actions.filter((action) => action.target === '/srv/data')
+      .map((action) => action.class);
+
+  it.each([
+    ['doas python3 -c x /srv/data', 'python3 -c x /srv/data'],
+    ['stdbuf -o0 bash -c x /srv/data', 'bash -c x /srv/data'],
+    ['sudo -u root python3 -c x /srv/data', 'python3 -c x /srv/data'],
+    ['timeout 10 python3 -c x /srv/data', 'python3 -c x /srv/data'],
+    ['timeout -s KILL 5 bash -c x /srv/data', 'bash -c x /srv/data'],
+    ['ionice -c3 node -e x /srv/data', 'node -e x /srv/data'],
+    ['FOO=1 doas node -e x /srv/data', 'node -e x /srv/data'],
+  ])('`%s` is ruled on as `%s` is, by both paths', (prefixed, bare) => {
+    expect(reached(prefixed)).toEqual(reached(bare));
+    expect(reached(prefixed)).toEqual([TOOL_CLASS.WRITE]);
+    expect(normalizeShellCommand(prefixed).commands).toEqual(
+      normalizeShellCommand(bare).commands,
+    );
+  });
+
+  it('keeps one list of what runs code, with every shell in it', () => {
+    for (const shell of SHELLS) expect(CODE_RUNNERS.has(shell)).toBe(true);
   });
 });

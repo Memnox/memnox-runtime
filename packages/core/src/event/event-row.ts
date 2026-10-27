@@ -14,6 +14,9 @@ const DEFAULT_RULE_LAYER = 'project';
 /** Joined rather than a second table, because the ids are always read back whole. */
 const CONDITION_SEPARATOR = ',';
 
+/** A line apiece, because a signal carries a rule's name and a name may hold a comma. */
+const SIGNAL_SEPARATOR = '\n';
+
 export function eventToRow(event: MemnoxEvent): EventRow {
   return {
     id: event.id,
@@ -23,6 +26,8 @@ export function eventToRow(event: MemnoxEvent): EventRow {
     agent: event.agent,
     actorType: event.actorType,
     principal: event.principal ?? null,
+    subagent: event.subagent ?? null,
+    subagentType: event.subagentType ?? null,
     surface: event.surface,
     operation: event.operation,
     target: event.target ?? null,
@@ -39,6 +44,8 @@ export function eventToRow(event: MemnoxEvent): EventRow {
         ? null
         : event.conditionsInForce.join(CONDITION_SEPARATOR),
     decisionIds: joined(event.decisionIds),
+    // Empty, not null, when the gate found nothing: null is a row older than signals.
+    signals: event.signals === undefined ? null : event.signals.join(SIGNAL_SEPARATOR),
     argsDigest: event.argsDigest ?? null,
     execution: event.execution ?? null,
     exitCode: event.exitCode ?? null,
@@ -92,6 +99,8 @@ function requiredFields(row: EventRow): MemnoxEvent {
 
 const OPTIONAL_TEXT = [
   'principal',
+  'subagent',
+  'subagentType',
   'target',
   'shadowEffect',
   'policyHash',
@@ -118,6 +127,9 @@ function copyOptionalFields(row: EventRow, event: MemnoxEvent): void {
     event.conditionsInForce = conditions.split(CONDITION_SEPARATOR);
   const decisions = textOf(row, 'decisionIds');
   if (decisions !== undefined) event.decisionIds = decisions.split(CONDITION_SEPARATOR);
+  const signals = textOf(row, 'signals');
+  if (signals !== undefined)
+    event.signals = signals === '' ? [] : signals.split(SIGNAL_SEPARATOR);
 }
 
 // Null rather than empty, so a row that bears on nothing reads back without the field.

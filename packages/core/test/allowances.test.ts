@@ -12,7 +12,7 @@ const STAGING: Allowance = {
   actions: ['railway.*'],
   environments: ['staging'],
   agents: ['claude-code'],
-  by: 'moise',
+  by: 'maya',
   reason: 'reproducing the retry bug',
   since: '2026-09-26T09:50:00.000Z',
   until: '2026-09-26T10:20:00.000Z',
@@ -43,7 +43,7 @@ describe('a scope a person allowed for a while', () => {
       environment: 'staging',
     });
     expect(verdict.effect).toBe('allow');
-    expect(verdict.reason).toContain('moise allowed this until 2026-09-26T10:20:00.000Z');
+    expect(verdict.reason).toContain('maya allowed this until 2026-09-26T10:20:00.000Z');
   });
 
   it('leaves an ask outside it, in another environment or for another agent', () => {
@@ -64,6 +64,33 @@ describe('a scope a person allowed for a while', () => {
         environment: 'staging',
       }).effect,
     ).toBe('deny');
+  });
+
+  it("never answers the workspace's own ask, since that question belongs to the team", () => {
+    const workspaceAsk = [
+      {
+        name: 'team-cli-ask',
+        match: { actions: ['railway.*'], classes: ['write'] },
+        decision: { effect: 'ask', reason: 'the team looks at CLI changes' },
+        workspace: true,
+        decidedBy: 'Ada',
+      },
+    ];
+    const verdict = new LocalGate(workspaceAsk as never, {
+      agentName: 'claude-code',
+      allowances: [STAGING],
+      now: NOW,
+    }).evaluate({
+      action: 'railway.restart',
+      toolClass: 'write',
+      environment: 'staging',
+    });
+
+    expect(verdict.effect).toBe('ask');
+    expect(verdict.matchedPolicies[0]).toMatchObject({
+      workspace: true,
+      decidedBy: 'Ada',
+    });
   });
 
   it('ends on its own', () => {

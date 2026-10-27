@@ -15,9 +15,11 @@ import type { ScanSeams } from '../machine-scan';
 import { wrapEveryServer } from '../mcp/wrap-servers';
 import { wireSessionTools, type SessionPlacement } from '../session-tools/session-entry';
 import { EDIT_HOOK_TARGETS, type EditHookTarget } from '../protect/agent-hooks';
-import { holdsPolicyHook } from '../protect/claude-hook';
+import { holdsPolicyHook, runsCurrentHook } from '../protect/claude-hook';
+import { writeHookLauncher } from '../protect/hook-launcher';
 import { describeResumed, endStopWhenDue } from '../protect/stop';
 import { recordConfigChanges } from './config-events';
+import { autopilotOnce, describeAutopilot } from './keep-autopilot';
 import { DRIFT_GROUP, driftNotices, type DriftItem } from './keep-drift';
 import { dormantNotice } from './keep-dormant';
 import { probationClause, startProbations, type Adopted } from './keep-probation';
@@ -171,6 +173,8 @@ async function keepHook(
   if (kept.declined.includes(target.name)) return null;
   const found = await hookIn(path, target, target.agent);
   if (found === HOOK.CURRENT) return null;
+  // A stale launcher is what makes a hook outdated after an update, and the entry needs it there.
+  await writeHookLauncher(home);
   if (!(await target.install(home))) return null;
   if (found === HOOK.OUTDATED) return { kind: KEPT_CHANGE.UPGRADED, agent: target.name };
   return {
@@ -200,12 +204,13 @@ async function hookIn(
   }
   if (
     holdsPolicyHook(text, agent) &&
+    runsCurrentHook(text) &&
     events.every((event) => text.includes(`"${event}"`)) &&
     (target.currentText ?? []).every((mark) => text.includes(mark))
   ) {
     return HOOK.CURRENT;
   }
-  // Ours but older: the lease half alone, or from before an event or the agent flag was added.
+  // Ours but older: the lease half alone, from before an event or the agent flag, or by another path.
   return text.includes(EDIT_HOOK_BINARY) ? HOOK.OUTDATED : HOOK.NONE;
 }
 
@@ -322,6 +327,13 @@ export class BoundaryKeeper {
       await recordConfigChanges(this.home, keptRecords(this.home, changes, targets), now);
     } catch (err) {
       this.options.log(`Keeping the boundary failed this pass: ${String(err)}`);
+    }
+    try {
+      for (const said of describeAutopilot(await autopilotOnce(this.home, now))) {
+        this.say(said);
+      }
+    } catch (err) {
+      this.options.log(`The autopilot failed this pass: ${String(err)}`);
     }
     if (this.lookDue(now)) await this.look(now);
   }

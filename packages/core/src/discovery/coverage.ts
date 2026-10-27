@@ -17,6 +17,8 @@ export const SEAM_STATE = {
   OPEN: 'open',
   /** This agent does not have that surface, so there is nothing to hold. */
   NOT_APPLICABLE: 'not-applicable',
+  /** The agent has the surface and Memnox has nothing to put in front of it. Said, never counted as held. */
+  NO_SEAM: 'no-seam',
 } as const;
 
 export type SeamState = (typeof SEAM_STATE)[keyof typeof SEAM_STATE];
@@ -124,7 +126,22 @@ export function coverageFor(
   if (has(SURFACE_KIND.NETWORK)) {
     coverage.push(networkCoverage(windowed, facts, hooked));
   }
+  if (has(SURFACE_KIND.DESKTOP)) coverage.push(desktopCoverage());
   return coverage;
+}
+
+/**
+ * A desktop is driven through the platform's own accessibility and input APIs, which no
+ * wrapper, proxy or kernel profile here sits in front of. Saying so beats a seam count that
+ * reads as complete while the widest surface on the machine is missing from it.
+ */
+function desktopCoverage(): SeamCoverage {
+  return {
+    surface: SURFACE_KIND.DESKTOP,
+    state: SEAM_STATE.NO_SEAM,
+    detail:
+      "nothing here sits between it and the screen; the harness's own opt-in and approval cards are the only control",
+  };
 }
 
 function heldSeam(surface: SurfaceKind, detail: string): SeamCoverage {

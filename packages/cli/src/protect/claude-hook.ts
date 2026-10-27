@@ -2,7 +2,6 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { AGENT_FLAG, DISCOVERED_AGENT_KIND } from '@memnox/core';
 import {
   EDIT_HOOK_BINARY,
@@ -11,7 +10,14 @@ import {
   TOOL_POLICY_FLAG,
 } from '@memnox/interceptors';
 import type { CliContext } from '../cli-context';
-import { onPath } from '../on-path';
+import {
+  builtHookScript,
+  hookRunnerArgv,
+  launcherIsCurrent,
+  launcherPath,
+  usesLauncher,
+  writeHookLauncher,
+} from './hook-launcher';
 import { isInPlace, REWRITE, rewriteJsonFile, writeBackedUp } from './json-config';
 import { markHook } from '../keeper/kept';
 import {
@@ -67,18 +73,33 @@ const TURN_END_TIMEOUT_S = 600;
 export const TURN_END_TIMEOUT_MARK = `"timeout": ${TURN_END_TIMEOUT_S}`;
 
 /**
+ * Seconds before a tool runs, past the host's sixty, so an agent's questions can be answered
+ * step by step on the notch; everything else the hook does there is bounded well inside it.
+ */
+const PRE_TOOL_TIMEOUT_S = 300;
+
+/** In the settings file only once a pre tool hook carries it, so an install from before is upgraded. */
+export const PRE_TOOL_TIMEOUT_MARK = `"timeout": ${PRE_TOOL_TIMEOUT_S}`;
+
+/**
  * Before a write, to take the lines; after a tool call, a turn or a prompt, where a
  * session can be handed a note; and when the session starts and ends.
  */
 export function claudeEvents(editMatcher: string = MATCHER): HookEvent[] {
   return [
-    { event: EDIT_HOOK_EVENT.PRE_TOOL_USE, matcher: editMatcher },
+    {
+      event: EDIT_HOOK_EVENT.PRE_TOOL_USE,
+      matcher: editMatcher,
+      timeout: PRE_TOOL_TIMEOUT_S,
+    },
     { event: EDIT_HOOK_EVENT.SESSION_END },
     { event: EDIT_HOOK_EVENT.POST_TOOL_USE, matcher: EVERY_TOOL },
     { event: EDIT_HOOK_EVENT.STOP, timeout: TURN_END_TIMEOUT_S },
     { event: EDIT_HOOK_EVENT.USER_PROMPT_SUBMIT },
     // Where the session is told its boundary once, as added context.
     { event: EDIT_HOOK_EVENT.SESSION_START },
+    // Where it stops to ask its person something, so the voice can put the question to them.
+    { event: EDIT_HOOK_EVENT.NOTIFICATION },
   ];
 }
 
@@ -134,18 +155,42 @@ export function withoutEditHook(settings: Settings): Settings {
 }
 
 /**
- * The bare binary only where it is on PATH, otherwise the path beside this one, because
- * a hook whose command is not found fails every write silently.
+ * The hook by an absolute path, never the bare name, since the agent runs it with its own PATH:
+ * the launcher that never moves, or on Windows the Node and the built script themselves.
  */
 export function editHookCommand(
-  path: string | undefined = process.env['PATH'],
   exists: (file: string) => boolean = existsSync,
-  sibling: string = fileURLToPath(new URL('./bin/edit-hook.js', import.meta.url)),
+  sibling: string = builtHookScript(),
+  home: string = homedir(),
 ): string {
-  if (onPath(EDIT_HOOK_BINARY, path ?? '', exists) || !exists(sibling)) {
-    return EDIT_HOOK_BINARY;
-  }
-  return `"${process.execPath}" "${sibling}" --${EDIT_HOOK_BINARY}`;
+  if (!exists(sibling)) return EDIT_HOOK_BINARY;
+  if (usesLauncher()) return `"${launcherPath(home)}"`;
+  return hookRunnerArgv(exists, sibling)
+    .map((word, index) => (index < 2 ? `"${word}"` : word))
+    .join(' ');
+}
+
+/** The named policy hook as an argv, for a host that spawns it rather than handing a shell a line. */
+export function namedHookArgv(
+  agent: string,
+  exists: (file: string) => boolean = existsSync,
+  sibling: string = builtHookScript(),
+  home: string = homedir(),
+): string[] {
+  const head =
+    exists(sibling) && usesLauncher()
+      ? [launcherPath(home)]
+      : hookRunnerArgv(exists, sibling);
+  return [...head, TOOL_POLICY_FLAG, AGENT_FLAG, agent];
+}
+
+/**
+ * Whether a hooks file runs the hook this install would write, as JSON spells it, and the
+ * launcher it names runs this build, so a stale one is rewritten rather than kept.
+ */
+export function runsCurrentHook(text: string, home: string = homedir()): boolean {
+  if (!text.includes(JSON.stringify(editHookCommand()).slice(1, -1))) return false;
+  return !usesLauncher() || !existsSync(builtHookScript()) || launcherIsCurrent(home);
 }
 
 /** The hook that takes leases and also rules on every tool call against the rules in force. */
@@ -189,6 +234,8 @@ export async function runClaudeHook(
   const raw = existsSync(path) ? await readFile(path, 'utf8') : '{}';
   const settings = parseSettings(path, raw);
 
+  // Before the entry that names it, so the hook never runs a launcher that is not there.
+  if (!reverting) await writeHookLauncher(home());
   await mkdir(dirname(path), { recursive: true });
   const walled = !reverting && wallSupported(claudeVersion());
   const next = reverting
@@ -198,6 +245,36 @@ export async function runClaudeHook(
   // A hook taken out on purpose stays out, rather than coming back on the daemon's next pass.
   await markHook(home(), 'Claude Code', !reverting);
   renderClaudeHook(context, path, reverting, walled);
+}
+
+/**
+ * The repository's own personal settings: read by a launch restricted to project setting
+ * sources, which the user file is not, and never committed, since the command line in it
+ * names this machine.
+ */
+export const PROJECT_CLAUDE_SETTINGS = join('.claude', 'settings.local.json');
+
+/**
+ * The same hook in this repository's own settings, for the Claude Code a harness starts
+ * as a child with `--setting-sources project`: that launch never reads `~/.claude`, so a
+ * hook only there governs a terminal session and nothing started by a chat window.
+ */
+export async function runProjectClaudeHook(
+  context: CliContext,
+  reverting: boolean,
+  dir: string,
+): Promise<void> {
+  const path = join(dir, PROJECT_CLAUDE_SETTINGS);
+  const raw = existsSync(path) ? await readFile(path, 'utf8') : '{}';
+  const settings = parseSettings(path, raw);
+
+  if (!reverting) await writeHookLauncher(homedir());
+  await mkdir(dirname(path), { recursive: true });
+  const next = reverting
+    ? withoutEditHook(settings)
+    : withEditHook(settings, claudeHookCommand(), claudeEvents(EVERY_TOOL));
+  await writeBackedUp(path, raw, next);
+  renderProjectClaudeHook(context, path, reverting);
 }
 
 /** The hook, and the wall around the shell where this Claude Code can hold one. */
@@ -263,6 +340,32 @@ function renderClaudeHook(
   flow.hint('Two sessions on one file: the second waits, then is told who holds it.');
   flow.hint('Enrolled with "memnox login", the lease is shared with every machine.');
   flow.hint('Undo with "memnox protect --revert-claude-hook".');
+}
+
+function renderProjectClaudeHook(
+  context: CliContext,
+  path: string,
+  reverting: boolean,
+): void {
+  const { flow } = context;
+  flow.rows(reverting ? 'Removed' : 'Installed', [
+    { label: 'where', value: path },
+    { label: 'runs', value: `${EDIT_HOOK_BINARY} before every tool call` },
+    {
+      label: 'read by',
+      value:
+        'every Claude Code in this repository, including one a harness starts with project setting sources only',
+    },
+  ]);
+  if (reverting) {
+    flow.close('Claude Code started in this repository no longer meets the hook here.');
+    return;
+  }
+  flow.close(
+    'Claude Code in this repository checks every tool call against your rules, however it was started.',
+  );
+  flow.hint('The file is personal to this machine: keep it out of the commit.');
+  flow.hint('Undo with "memnox protect --revert-project-hook".');
 }
 
 /**

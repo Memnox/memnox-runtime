@@ -20,6 +20,8 @@ export const ALERT = {
   HARNESS_WIDENED: 'harness-widened',
   /** A server an agent was configured with is gone, so what used it will now fail. */
   SERVER_GONE: 'server-gone',
+  /** An agent now runs a command on its own event that nobody here installed through Memnox. */
+  NEW_HOOK: 'new-hook',
 } as const;
 
 export type AlertKind = (typeof ALERT)[keyof typeof ALERT];
@@ -87,12 +89,23 @@ function alertFor(change: EnvironmentChange): Alert | null {
       next: `memnox explain ${name}`,
     };
   }
+  if (change.subject === CHANGE_SUBJECT.HOOK) return newHook(change);
   if (!isWriteCapable(change)) return null;
   return {
     kind: ALERT.NEW_WRITE_TOOL,
     name,
     headline: `${name} can change something outside this machine`,
     next: 'memnox protect',
+  };
+}
+
+/** A hook runs as this user on every matching event, and no permission prompt sees it. */
+function newHook(change: EnvironmentChange): Alert {
+  return {
+    kind: ALERT.NEW_HOOK,
+    name: change.name,
+    headline: `a new hook, ${change.name}, ${change.detail}`,
+    next: 'memnox scan',
   };
 }
 

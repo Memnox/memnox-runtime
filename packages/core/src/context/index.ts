@@ -6,3 +6,5 @@ export * from './session-context-store';
 export * from './decisions-on-disk';
 export * from './workspace-memory';
 export * from './workspace-memory-store';
+export * from './work-brief';
+export * from './session-brief';

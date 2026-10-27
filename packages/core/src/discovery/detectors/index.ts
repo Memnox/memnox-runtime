@@ -23,7 +23,7 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
       SURFACE_KIND.GIT,
       SURFACE_KIND.NETWORK,
     ],
-    mcpConfigPath: '.claude.json',
+    mcpConfigPaths: ['.claude.json'],
   },
   {
     kind: DISCOVERED_AGENT_KIND.CLAUDE_DESKTOP,
@@ -34,7 +34,11 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     ],
     clients: ['Claude Desktop'],
     inherentSurfaces: [SURFACE_KIND.NETWORK],
-    mcpConfigPath: 'Library/Application Support/Claude/claude_desktop_config.json',
+    // macOS first, then Linux: one install has one of them.
+    mcpConfigPaths: [
+      'Library/Application Support/Claude/claude_desktop_config.json',
+      '.config/Claude/claude_desktop_config.json',
+    ],
   },
   {
     kind: DISCOVERED_AGENT_KIND.CURSOR,
@@ -42,7 +46,7 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     configPaths: ['.cursor/mcp.json', '.cursor'],
     clients: ['Cursor'],
     inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
-    mcpConfigPath: '.cursor/mcp.json',
+    mcpConfigPaths: ['.cursor/mcp.json'],
   },
   {
     kind: DISCOVERED_AGENT_KIND.CLINE,
@@ -50,7 +54,7 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     configPaths: ['.cline/settings.json'],
     clients: ['Cline'],
     inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM],
-    mcpConfigPath: '.cline/settings.json',
+    mcpConfigPaths: ['.cline/settings.json'],
   },
   {
     kind: DISCOVERED_AGENT_KIND.VS_CODE,
@@ -58,7 +62,47 @@ const DETECTOR_SPECS: readonly ConfigDetectorSpec[] = [
     configPaths: ['.vscode/mcp.json'],
     clients: ['VS Code'],
     inherentSurfaces: [SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
-    mcpConfigPath: '.vscode/mcp.json',
+    mcpConfigPaths: ['.vscode/mcp.json'],
+  },
+  {
+    kind: DISCOVERED_AGENT_KIND.GEMINI_CLI,
+    layoutVersion: '2026-10',
+    configPaths: ['.gemini/settings.json'],
+    clients: ['Gemini CLI'],
+    inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
+    mcpConfigPath: '.gemini/settings.json',
+  },
+  {
+    kind: DISCOVERED_AGENT_KIND.WINDSURF,
+    layoutVersion: '2026-10',
+    configPaths: ['.codeium/windsurf/mcp_config.json', '.codeium/windsurf'],
+    clients: ['Windsurf'],
+    inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
+    mcpConfigPath: '.codeium/windsurf/mcp_config.json',
+  },
+  {
+    kind: DISCOVERED_AGENT_KIND.COPILOT_CLI,
+    layoutVersion: '2026-10',
+    configPaths: ['.copilot/mcp-config.json', '.copilot'],
+    clients: ['GitHub Copilot CLI'],
+    inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
+    mcpConfigPath: '.copilot/mcp-config.json',
+  },
+  {
+    kind: DISCOVERED_AGENT_KIND.DEVIN,
+    layoutVersion: '2026-10',
+    configPaths: ['.config/devin/config.json', '.config/devin', '.devin'],
+    clients: ['Devin'],
+    inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
+    mcpConfigPath: '.config/devin/mcp_config.json',
+  },
+  {
+    // Its servers sit under `mcp` in a shape of its own, so none is read from its config.
+    kind: DISCOVERED_AGENT_KIND.OPENCODE,
+    layoutVersion: '2026-10',
+    configPaths: ['.config/opencode/opencode.json', '.config/opencode'],
+    clients: ['OpenCode'],
+    inherentSurfaces: [SURFACE_KIND.SHELL, SURFACE_KIND.FILESYSTEM, SURFACE_KIND.NETWORK],
   },
 ];
 

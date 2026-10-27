@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { delimiter, join, resolve } from 'node:path';
+import { basename, delimiter, join, resolve } from 'node:path';
 
 import {
+  HOOK_SEAT,
+  type HookSeat,
   CONFIG_FORMAT,
   configPathFor,
   formatOf,
@@ -11,7 +13,7 @@ import {
   MCP_CONFIG_LOCATIONS,
   MEMNOX_HOME,
   POLICY_REGISTRY_FILE,
-  PROXY_BINARY,
+  planWrap,
   readPolicyRegistry,
   readTextServers,
   versionPolicySet,
@@ -21,6 +23,8 @@ import {
   loadPolicySet,
   type Policy,
   socketPathFor,
+  isNamedPipe,
+  pathValueOf,
   LeaseRegistry,
   PendingApprovals,
   readBudgets,
@@ -29,6 +33,7 @@ import {
   type MemnoxEvent,
   readAccount,
   type HealthFacts,
+  type ServerLaunch,
 } from '@memnox/core';
 import {
   askDaemon,
@@ -37,13 +42,19 @@ import {
   isExecutableFile,
   realPath,
   resolveReal,
+  shimNamesIn,
 } from '@memnox/interceptors';
 
+import { readCodexHookStanding } from './agents/codex-hooks';
+import { DEFAULT_SHELL, loginPathConfigured } from './protect/shell-profile';
 import { describeError } from './cli-errors';
 import { serviceState } from './daemon/service';
 import { withEvents } from './event-store';
+import { onPath } from './on-path';
 import { POLICY_FILES } from './policy-path';
 import { policyRegistryPath } from './policy-registry';
+import { CLAUDE_SETTINGS } from './protect/claude-hook';
+import { hookSeatOf, managedSettingsPath } from './protect/managed-hook';
 
 /** Reads the machine once for `doctor`, so every health check downstream stays a pure function. */
 
@@ -94,11 +105,12 @@ export async function readHealth(
   dir: string,
   env: NodeJS.ProcessEnv = process.env,
   now: Date = new Date(),
+  managed: string | null = managedSettingsPath(),
 ): Promise<HealthFacts> {
   const config = await loadOrCreateConfig(home);
   // What the seams load, which is a different list from what `policy test` reads.
   const registeredFiles = await readPolicyRegistry(policyRegistryPath(home));
-  const socket = await exists(socketPathFor(home));
+  const socket = await daemonAddressPresent(home);
   return {
     ...(await readHolds(home, now.toISOString())),
     configFound: await exists(configPathFor(home)),
@@ -113,7 +125,44 @@ export async function readHealth(
     enrolled: (await readAccount(home)) !== null,
     daemonStartsItself: serviceState(home).installed,
     ...(await readLedgerCounts(home)),
+    claudeHook: await readClaudeHookSeat(home, managed),
+    codexHooks: await readCodexHookStanding(home, dir),
+    loginPathConfigured: await loginPathConfigured(shellOf(env), home),
   };
+}
+
+/** The person's shell by name, as its profile is chosen. */
+function shellOf(env: NodeJS.ProcessEnv): string {
+  return basename(env['SHELL'] ?? DEFAULT_SHELL);
+}
+
+/** Where Claude Code's hook is, or absent where Claude Code has never run here. */
+async function readClaudeHookSeat(
+  home: string,
+  managed: string | null,
+): Promise<HookSeat> {
+  const claudeHere =
+    (await exists(join(home, '.claude'))) || (await exists(join(home, '.claude.json')));
+  if (!claudeHere) return HOOK_SEAT.ABSENT;
+  return hookSeatOf(
+    await readOrNull(join(home, CLAUDE_SETTINGS)),
+    managed === null ? null : await readOrNull(managed),
+  );
+}
+
+async function readOrNull(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch {
+    // Absent or unreadable both mean no hook can be read from it.
+    return null;
+  }
+}
+
+/** A socket file to find, or on Windows a pipe, which has no file and is present only while answered. */
+async function daemonAddressPresent(home: string): Promise<boolean> {
+  const address = socketPathFor(home);
+  return isNamedPipe(address) ? isDaemonAnswering(home) : exists(address);
 }
 
 async function isDaemonAnswering(home: string): Promise<boolean> {
@@ -236,37 +285,39 @@ async function proxyWiring(
   let wrapped = 0;
   for (const location of MCP_CONFIG_LOCATIONS) {
     const path = join(location.scope === 'home' ? home : dir, location.relative);
-    const launches = await readServerLaunches(path);
-    servers += launches.length;
-    wrapped += launches.filter((launch) => launch?.command === PROXY_BINARY).length;
+    // Counted as `mcp wrap` would act on them, so its fix can clear what this reports: Memnox's
+    // own servers and those declared by URL are never wrapped, and so never counted as missed.
+    const plan = planWrap(await readServerLaunches(path));
+    servers += plan.wrap.length + plan.alreadyWrapped.length;
+    wrapped += plan.alreadyWrapped.length;
   }
   return { mcpServers: servers, mcpWrapped: wrapped };
 }
 
-/** How each server in one config file is launched, or none where it is absent or unreadable. */
-async function readServerLaunches(path: string): Promise<{ command?: string }[]> {
-  if (!(await exists(path))) return [];
+/** How each server in one config file is launched, by name, or none where it is absent or unreadable. */
+async function readServerLaunches(path: string): Promise<Record<string, ServerLaunch>> {
+  if (!(await exists(path))) return {};
   let raw: string;
   try {
     raw = await readFile(path, 'utf8');
   } catch {
-    return [];
+    return {};
   }
 
   const format = formatOf(path);
   if (format !== CONFIG_FORMAT.JSON) {
-    return Object.values(readTextServers(format, raw).servers);
+    return readTextServers(format, raw).servers;
   }
   try {
     // Narrowed by the key lookup below; a missing block reads as no servers.
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    // Only `command` is read, and a launch without one is simply not ours.
+    // Read as launches; `planWrap` passes over any entry that is not one.
     const block = (parsed[JSON_SERVER_KEYS[0]] ?? parsed[JSON_SERVER_KEYS[1]]) as
-      Record<string, { command?: string }> | undefined;
-    return block === undefined ? [] : Object.values(block);
+      Record<string, ServerLaunch> | undefined;
+    return block ?? {};
   } catch {
     // A config we cannot parse is one we also refuse to rewrite; skip it here too.
-    return [];
+    return {};
   }
 }
 
@@ -274,8 +325,9 @@ async function readInterceptors(
   home: string,
   env: NodeJS.ProcessEnv,
 ): Promise<InterceptorFacts> {
-  const installed = await installedInterceptors(home);
-  const path = (env['PATH'] ?? '').split(delimiter);
+  // One per binary, though Windows keeps a `.cmd` beside each script.
+  const installed = shimNamesIn(await installedInterceptors(home));
+  const path = pathValueOf(env).split(delimiter);
   return {
     interceptorsInstalled: installed,
     // Only what this machine has, since `protect --interceptors` wraps nothing else.
@@ -283,7 +335,7 @@ async function readInterceptors(
     // First wins on PATH, so anything before us means the real binary is found first.
     interceptorDirFirstOnPath:
       installed.length > 0 && path.indexOf(interceptorDirFor(home)) === 0,
-    interceptBinaryFound: isInterceptBinaryOn(realPath(env['PATH'] ?? '', home)),
+    interceptBinaryFound: isInterceptBinaryOn(realPath(pathValueOf(env), home)),
   };
 }
 
@@ -301,10 +353,7 @@ async function installedInterceptors(home: string): Promise<string[]> {
  * through `resolveReal`, which refuses this name so a wrapper never resolves to itself.
  */
 function isInterceptBinaryOn(path: string): boolean {
-  return path
-    .split(delimiter)
-    .filter((entry) => entry !== '')
-    .some((entry) => existsSync(join(entry, INTERCEPT_BINARY)));
+  return onPath(INTERCEPT_BINARY, path, existsSync);
 }
 
 /**
@@ -312,7 +361,7 @@ function isInterceptBinaryOn(path: string): boolean {
  * with our own directory removed, or a shim resolving to itself reports them all present.
  */
 function presentBinaries(home: string, env: NodeJS.ProcessEnv): string[] {
-  const path = realPath(env['PATH'] ?? '', home);
+  const path = realPath(pathValueOf(env), home);
   return interceptedBinaries().filter(
     (binary) => resolveReal(binary, path, isExecutableFile) !== null,
   );

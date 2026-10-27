@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   CHECK,
   CHECK_NAME,
+  CODEX_HOOK_TRUST,
   checkInstallation,
+  HOOK_SEAT,
   summarizeHealth,
   type HealthFacts,
 } from '../src/discovery/health';
@@ -31,6 +33,7 @@ const HEALTHY: HealthFacts = {
   waitingApprovals: 0,
   heldLeases: 0,
   spentBudgets: [],
+  claudeHook: 'managed',
 };
 
 const check = (facts: Partial<HealthFacts>, name: string) =>
@@ -349,5 +352,72 @@ describe('rules the seams load, and files they do not', () => {
 
     expect(check.detail).toContain('one.yaml');
     expect(check.detail).toContain('2 more');
+  });
+});
+
+describe('where the Claude Code hook lives', () => {
+  it('is fine in managed settings, and fine but reachable in the user file', () => {
+    expect(check({ claudeHook: HOOK_SEAT.MANAGED }, CHECK_NAME.HOOKS)?.state).toBe(
+      CHECK.OK,
+    );
+    const user = check({ claudeHook: HOOK_SEAT.USER }, CHECK_NAME.HOOKS);
+    expect(user?.state).toBe(CHECK.OK);
+    expect(user?.detail).toContain('memnox protect --managed');
+  });
+
+  it('is broken in both, since every call is then ruled on twice', () => {
+    const both = check({ claudeHook: HOOK_SEAT.BOTH }, CHECK_NAME.HOOKS);
+    expect(both?.state).toBe(CHECK.BROKEN);
+    expect(both?.fix).toBe('memnox protect --managed');
+  });
+
+  it('is inert with no hook, and says nothing is wrong where Claude Code is absent', () => {
+    expect(check({ claudeHook: HOOK_SEAT.NONE }, CHECK_NAME.HOOKS)?.state).toBe(
+      CHECK.INERT,
+    );
+    expect(check({ claudeHook: HOOK_SEAT.ABSENT }, CHECK_NAME.HOOKS)?.state).toBe(
+      CHECK.OK,
+    );
+  });
+});
+
+describe('whether Codex runs the Memnox hooks', () => {
+  /* Codex trusts a hook by a hash of its entry, so one rewritten after it was trusted is a
+     hook it skips without a word, and only Codex can say which. */
+  function codexCheck(codexHooks: HealthFacts['codexHooks']) {
+    return checkInstallation({
+      ...HEALTHY,
+      ...(codexHooks === undefined ? {} : { codexHooks }),
+    }).find((check) => check.name === CHECK_NAME.CODEX_HOOKS);
+  }
+
+  it('is broken where Codex will not run one, naming the events and the fix', () => {
+    const check = codexCheck({
+      trust: CODEX_HOOK_TRUST.UNTRUSTED,
+      untrusted: ['PreToolUse'],
+    });
+
+    expect(check).toMatchObject({
+      state: CHECK.BROKEN,
+      fix: expect.stringContaining('/hooks'),
+    });
+    expect(check?.detail).toContain('PreToolUse');
+  });
+
+  it('is fine where there is nothing to check, and says so plainly where Codex was not asked', () => {
+    expect(codexCheck(undefined)?.state).toBe(CHECK.OK);
+    expect(codexCheck({ trust: CODEX_HOOK_TRUST.UNKNOWN })?.state).toBe(CHECK.INERT);
+  });
+});
+
+describe('a terminal older than the PATH line', () => {
+  it('is a new terminal to open, not a wrapper to start every agent with', () => {
+    const check = checkInstallation({
+      ...HEALTHY,
+      interceptorDirFirstOnPath: false,
+      loginPathConfigured: true,
+    }).find((each) => each.name === CHECK_NAME.PATH);
+
+    expect(check).toMatchObject({ state: CHECK.INERT, fix: 'open a new terminal' });
   });
 });

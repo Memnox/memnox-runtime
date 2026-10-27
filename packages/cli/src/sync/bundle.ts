@@ -1,8 +1,10 @@
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { platform } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
   conditionsForMachine,
+  detectMachineClass,
   loadPoliciesFromFile,
   MEMNOX_HOME,
   orgConditionsPathFor,
@@ -15,6 +17,8 @@ import {
   isCredentialRefused,
   type Account,
   type Alternative,
+  type DataPattern,
+  type MachineClass,
   type OrgCondition,
   type PolicyCarveOut,
   type PolicyMatch,
@@ -23,6 +27,7 @@ import {
 } from '@memnox/core';
 
 import { registerPolicyFile } from '../policy-registry';
+import { loadablePatterns } from './bundle-patterns';
 import { callCloud } from './client';
 
 /**
@@ -59,6 +64,13 @@ export interface BundleRule {
   unless?: PolicyCarveOut[];
   /** Its decision as published, where it says more than its effect. Read over `effect`. */
   decision?: BundleDecision;
+  /** The kinds of machine it holds on, server or workstation. Absent is every machine. */
+  machineClasses?: string[];
+  /** The project it belongs to. Absent is every project. */
+  project?: string;
+  /** Who in the workspace approved the publish that carried it, and when. */
+  decidedBy?: string;
+  decidedAt?: string;
 }
 
 /** Mode, approvers, quorum, rate limit and the rest, verbatim, with the published effect. */
@@ -76,6 +88,8 @@ export interface Bundle {
   rules: BundleRule[];
   conditions: BundleCondition[];
   tags: unknown[];
+  /** The team's own sensitive data patterns, each under the classification it adds. */
+  classifications?: DataPattern[];
 }
 
 export const PULL_OUTCOME = {
@@ -141,7 +155,11 @@ export async function pullBundle(
     };
   }
 
-  return applyBundle(home, answer.body, now, account.machineId);
+  return applyBundle(home, answer.body, {
+    now,
+    machineId: account.machineId,
+    machineClass: account.machineClass ?? detectMachineClass(platform(), process.env),
+  });
 }
 
 /**
@@ -151,17 +169,21 @@ export async function pullBundle(
 export async function applyBundle(
   home: string,
   bundle: Bundle,
-  now: () => number = Date.now,
-  // Which machine this is; without one, a freeze scoped to a machine applies nowhere.
-  machineId = '',
+  here: BundleMachine = {},
 ): Promise<PullResult> {
+  const now = here.now ?? Date.now;
+  const machineId = here.machineId ?? '';
   const path = orgPolicyPath(home);
   const staging = `${path}.incoming`;
   await mkdir(dirname(path), { recursive: true, mode: OWNER_ONLY_DIR });
-  await writeFile(staging, JSON.stringify(documentFrom(bundle), null, 2), {
-    encoding: 'utf8',
-    mode: OWNER_ONLY,
-  });
+  await writeFile(
+    staging,
+    JSON.stringify(documentFrom(bundle, here.machineClass), null, 2),
+    {
+      encoding: 'utf8',
+      mode: OWNER_ONLY,
+    },
+  );
 
   try {
     // The gate's own loader, so a bundle this accepts is one the gate can read.
@@ -189,28 +211,64 @@ export async function applyBundle(
   };
 }
 
+/** The machine a bundle is applied on, since freezes name a machine and rules may name a kind of machine. */
+interface BundleMachine {
+  now?: () => number;
+  /** Without one, a freeze scoped to a machine applies nowhere. */
+  machineId?: string;
+  /** Without one, only rules that name no kind of machine apply, the narrowest reading. */
+  machineClass?: MachineClass;
+}
+
 /** The bundle's rules as the policy document the gate already reads. */
-export function documentFrom(bundle: Bundle): unknown {
+export function documentFrom(bundle: Bundle, machineClass?: MachineClass): unknown {
+  const classifications = loadablePatterns(bundle.classifications);
   return {
     version: 1,
     // Carried here so the next pull sends it as `If-None-Match` with no second copy.
     bundleHash: bundle.hash,
-    policies: bundle.rules.filter(canHonour).flatMap((rule) => {
-      const decision = decisionFor(rule);
-      if (decision === null) return [];
-      return [
-        {
-          name: rule.id,
-          ...(rule.reason === undefined ? {} : { description: rule.reason }),
-          match: {
-            ...(rule.conditions ?? {}),
-            actions: actionsOf(rule),
-            ...scopeOf(rule),
+    // The gate registers a policy file's patterns as it loads it, so every seam classifies with them.
+    ...(classifications.length === 0 ? {} : { classifications }),
+    policies: bundle.rules
+      .filter(canHonour)
+      .filter((rule) => holdsOn(rule, machineClass))
+      .flatMap((rule) => {
+        const decision = decisionFor(rule);
+        if (decision === null) return [];
+        return [
+          {
+            name: rule.id,
+            ...(rule.reason === undefined ? {} : { description: rule.reason }),
+            match: {
+              ...matchConditions(rule),
+              actions: actionsOf(rule),
+              ...scopeOf(rule),
+            },
+            decision,
+            ...provenanceOf(rule),
           },
-          decision,
-        },
-      ];
-    }),
+        ];
+      }),
+  };
+}
+
+/**
+ * Whether a rule holds on this kind of machine. The kind is fixed at enrolment, so the rule is
+ * dropped here rather than matched on every call; a machine that never said holds only unscoped rules.
+ */
+function holdsOn(rule: BundleRule, machineClass: MachineClass | undefined): boolean {
+  const classes = classesOf(rule);
+  if (classes.length === 0) return true;
+  return machineClass !== undefined && classes.includes(machineClass);
+}
+
+/** Marked as the workspace's, with its project and who decided it, for the gate and for `why`. */
+function provenanceOf(rule: BundleRule): Record<string, unknown> {
+  return {
+    workspace: true,
+    ...(rule.project === undefined ? {} : { project: rule.project }),
+    ...(rule.decidedBy === undefined ? {} : { decidedBy: rule.decidedBy }),
+    ...(rule.decidedAt === undefined ? {} : { decidedAt: rule.decidedAt }),
   };
 }
 
@@ -320,6 +378,8 @@ function alternativeOf(
 }
 
 /** Every condition key this gate reads; the validator drops any other, which would widen the rule. */
+const MACHINE_CLASSES = 'machineClasses';
+
 const HONOURED_CONDITIONS: ReadonlySet<string> = new Set([
   'environments',
   'roles',
@@ -340,7 +400,26 @@ const HONOURED_CONDITIONS: ReadonlySet<string> = new Set([
 
 /** A rule naming a condition this gate would ignore is skipped: matching less, never more. */
 function canHonour(rule: BundleRule): boolean {
-  return Object.keys(rule.conditions ?? {}).every((key) => HONOURED_CONDITIONS.has(key));
+  return Object.keys(matchConditions(rule)).every((key) => HONOURED_CONDITIONS.has(key));
+}
+
+/**
+ * The conditions the gate matches on each call. The machine class is sent among them too, so a
+ * runtime that never learned it skips the rule rather than holding a server's rule on a laptop;
+ * here it is settled once, at apply time, and taken out of what the gate matches.
+ */
+function matchConditions(rule: BundleRule): Record<string, unknown> {
+  const { [MACHINE_CLASSES]: _settledAtApply, ...rest } = rule.conditions ?? {};
+  return rest;
+}
+
+/** The classes a rule holds on, top level or among its conditions, whichever the plane sent. */
+function classesOf(rule: BundleRule): string[] {
+  const listed = rule.conditions?.[MACHINE_CLASSES];
+  const fromConditions = Array.isArray(listed)
+    ? listed.filter((each): each is string => typeof each === 'string')
+    : [];
+  return [...(rule.machineClasses ?? []), ...fromConditions];
 }
 
 /** The patterns a rule really matches, whichever spelling it was sent under. */

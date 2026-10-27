@@ -58,7 +58,8 @@ export interface Classification {
 
 export type ToolOverrides = Readonly<Record<string, ToolClass>>;
 
-function isToolClass(value: string): value is ToolClass {
+/** A class named by a caller or a hand-edited file, narrowed before it is trusted. */
+export function isToolClass(value: string): value is ToolClass {
   // Widened for the lookup, which is what narrows `value`.
   return (Object.values(TOOL_CLASS) as readonly string[]).includes(value);
 }
@@ -97,8 +98,29 @@ export function parseOverrides(raw: string): {
   return { overrides, rejected };
 }
 
+/**
+ * Things people read once they exist, whatever verb made them: servers name a post
+ * `add_issue_comment` or `JIRA_ADD_COMMENT`, so the first word is no guide. A false
+ * match only makes a write ask like a post, which is the safe direction.
+ */
+const POSTED_THINGS = ['comment', 'message', 'reply', 'thread'];
+
+/** Two words that only together name a post, so `create_review_app` stays a write. */
+const POSTED_PHRASES: readonly (readonly [string, string])[] = [['request', 'review']];
+
+function namesAPost(segments: readonly string[]): boolean {
+  const posted = segments.some((part) =>
+    POSTED_THINGS.some((thing) => part === thing || part === `${thing}s`),
+  );
+  if (posted) return true;
+  return POSTED_PHRASES.some(([first, second]) =>
+    segments.some((part, index) => part === first && segments[index + 1] === second),
+  );
+}
+
 function looksLikeCommunication(name: string): boolean {
   const segments = nameSegments(name);
+  if (namesAPost(segments)) return true;
   const verb = segments[0];
   if (verb === undefined || !COMMUNICATION_VERBS.includes(verb)) return false;
   // A bare `send` is a message; `post_invoice` is a write with a message-shaped verb.

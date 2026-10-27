@@ -1,16 +1,20 @@
 /** `memnox run`: starts an agent with the interceptors, the shell wrapper, a session and a milestone in place. */
 
 import { rm } from 'node:fs/promises';
-import { delimiter } from 'node:path';
 import type { Command } from 'commander';
 import {
+  BROKER_VAR,
+  holdCredentials,
   CloudLeases,
   LeaseRegistry,
+  pathValueOf,
+  prependedPath,
   SESSION_VAR,
   SessionContainments,
   LEDGER_SESSION_LIMIT,
   summarizeSession,
   describeSummary,
+  withPathValue,
 } from '@memnox/core';
 import { FALLBACK_SHELL, interceptorDirFor, REAL_SHELL_VAR } from '@memnox/interceptors';
 import type { CliContext } from '../cli-context';
@@ -26,8 +30,10 @@ import {
   type RunDeps,
   type RunOptions,
 } from './run/prepare';
+import { startBroker, type CredentialBroker } from './run/credential-broker';
 import { SESSION_GUARD_EXTENSIONS } from './run/sandbox';
 import { defaultStart, interceptorsIn, wiringRow } from './run/start';
+import { forgetRunTerminal, noteRunTerminal, ownTerminal } from './run/terminal';
 
 /**
  * Everything the child needs to be governed, set as environment rather than asked of the
@@ -39,11 +45,10 @@ export function environmentFor(
   sessionId: string,
   shellBinary: string,
 ): NodeJS.ProcessEnv {
-  const interceptors = interceptorDirFor(home);
-  const path = base['PATH'] ?? '';
+  // Under the spelling the environment already uses, since Windows keeps it as `Path`.
+  const path = prependedPath(pathValueOf(base), interceptorDirFor(home));
   return {
-    ...base,
-    PATH: path.startsWith(interceptors) ? path : `${interceptors}${delimiter}${path}`,
+    ...withPathValue(base, path),
     SHELL: shellBinary,
     // The displaced shell, so the wrapper hands off to it and never reads `SHELL` to find itself.
     [REAL_SHELL_VAR]: base['SHELL'] ?? FALLBACK_SHELL,
@@ -82,6 +87,16 @@ export function registerRunCommand(
       'the task is an investigation: nothing outside this machine changes',
     )
     .option('--role <name>', 'the job this agent is enrolled under, matched by roles:')
+    .option('--for <person>', 'the person this agent works for, matched by principals:')
+    .option(
+      '--brief <id>',
+      'a workspace brief the voice gathered, handed to the agent before its first turn',
+    )
+    .option('--mission <id>', 'join this session to a mission, from memnox mission start')
+    .option(
+      '--hold-credentials',
+      'keep tokens out of the agent environment and hand each only to the CLI that uses it',
+    )
     .action(async (command: readonly string[], options: RunOptions) =>
       runAgent(context, deps, command, options),
     );
@@ -108,8 +123,27 @@ async function runAgent(
     environment: (home, sessionId) =>
       environmentFor(deps.env ?? process.env, home, sessionId, options.shell),
   });
-  renderStart(context, run, deps);
-  await startAndRelease(context, run, deps);
+  const broker = options.holdCredentials === true ? await brokerFor(run, deps) : null;
+  renderStart(context, run, deps, broker);
+  await noteRunTerminal(
+    run,
+    (deps.cwd ?? process.cwd)(),
+    (deps.terminalOf ?? ownTerminal)(),
+    nowOf(deps).toISOString(),
+  );
+  await startAndRelease(context, run, deps, broker);
+}
+
+/**
+ * The tokens taken out of the environment the agent starts with, held by this process,
+ * and the one variable that tells an interceptor where to ask for the ones its binary uses.
+ */
+async function brokerFor(run: PreparedRun, deps: RunDeps): Promise<CredentialBroker> {
+  const { passed, held } = holdCredentials(run.env, run.binary);
+  const broker = await (deps.broker ?? startBroker)(run.home, run.sessionId, held);
+  for (const name of Object.keys(run.env)) delete run.env[name];
+  Object.assign(run.env, passed, { [BROKER_VAR]: broker.path });
+  return broker;
 }
 
 /** Refused before a session, a milestone or the sandbox, so nothing is kept for a run that never starts. */
@@ -127,21 +161,26 @@ function resolveBinary(command: readonly string[], deps: RunDeps): string {
   throw new Error(`"${binary}" is not on PATH, so there is nothing to start.${hint}`);
 }
 
-function renderStart(context: CliContext, run: PreparedRun, deps: RunDeps): void {
+function renderStart(
+  context: CliContext,
+  run: PreparedRun,
+  deps: RunDeps,
+  broker: CredentialBroker | null,
+): void {
   const rows: FlowRow[] = [
     { label: 'session', value: run.sessionId },
     wiringRow(context, run.home, deps.interceptorsIn ?? interceptorsIn),
     ...containmentRows(context, run),
+    ...(broker === null
+      ? []
+      : [
+          {
+            label: 'credentials',
+            value: `${describeCount(broker.held, 'variable')} held back, each handed only to the CLI that uses it`,
+          },
+        ]),
   ];
-  if (run.declared !== null) {
-    rows.push({ label: 'task', value: `"${run.declared.statement}"` });
-    if (run.declared.expectedActions !== undefined) {
-      rows.push({
-        label: 'expecting',
-        value: `about ${run.declared.expectedActions} actions`,
-      });
-    }
-  }
+  rows.push(...askedRows(run));
   if (run.kept !== null) {
     rows.push({
       label: 'working tree',
@@ -153,6 +192,26 @@ function renderStart(context: CliContext, run: PreparedRun, deps: RunDeps): void
   context.flow.rows(`Starting ${run.binary}`, rows);
   context.flow.close(`${run.binary} is running under session ${run.sessionId}.`);
   if (run.hint !== null) context.flow.hint(run.hint);
+}
+
+/** What the session is here to do: the mission it is one run of, and its own task. */
+function askedRows(run: PreparedRun): FlowRow[] {
+  const rows: FlowRow[] = [];
+  if (run.mission !== null) {
+    rows.push({
+      label: 'mission',
+      value: `"${run.mission.statement}", session ${run.mission.sessions.length}`,
+    });
+  }
+  if (run.declared === null) return rows;
+  rows.push({ label: 'task', value: `"${run.declared.statement}"` });
+  if (run.declared.expectedActions !== undefined) {
+    rows.push({
+      label: 'expecting',
+      value: `about ${run.declared.expectedActions} actions`,
+    });
+  }
+  return rows;
 }
 
 /** The wall and the network, said as they are, including where there is neither. */
@@ -187,6 +246,7 @@ async function startAndRelease(
   context: CliContext,
   run: PreparedRun,
   deps: RunDeps,
+  broker: CredentialBroker | null,
 ): Promise<void> {
   const start = deps.start ?? defaultStart;
   const [executable, ...args] = run.sandbox.command;
@@ -201,6 +261,9 @@ async function startAndRelease(
     // In a `finally`, because an agent that crashed is the one whose paths must not stay held.
     const released = await releaseLeases(run.home, run.sessionId, deps);
     await endContainment(run);
+    await forgetRunTerminal(run);
+    // The held values die with this process; closing removes the socket that served them.
+    await broker?.close().catch(() => undefined);
     // Off the rail, because it closed when the agent took over the terminal.
     const said = [
       released > 0 ? `released ${describeCount(released, 'lease')}` : null,

@@ -133,3 +133,40 @@ describe('what counts as the same code', () => {
     ).toBe(true);
   });
 });
+
+describe('which checkouts are one repository', () => {
+  const file = { path: 'src/billing.ts' };
+
+  it('joins two checkouts that name one project', () => {
+    expect(
+      regionsMeet(
+        { ...file, repository: '/work/api', project: 'acme/api' },
+        { ...file, repository: '/work/api-wt', project: 'acme/api' },
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps two projects apart even in one folder name', () => {
+    expect(
+      regionsMeet(
+        { ...file, repository: '/a/api', project: 'acme/api' },
+        { ...file, repository: '/b/api', project: 'other/api' },
+      ),
+    ).toBe(false);
+  });
+
+  it('falls back to the checkout where either side never recorded a project', () => {
+    expect(
+      regionsMeet(
+        { ...file, repository: '/work/api' },
+        { ...file, repository: '/work/api-wt', project: 'acme/api' },
+      ),
+    ).toBe(false);
+    expect(
+      regionsMeet(
+        { ...file, repository: '/work/api' },
+        { ...file, repository: '/work/api', project: 'acme/api' },
+      ),
+    ).toBe(true);
+  });
+});

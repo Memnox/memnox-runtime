@@ -40,6 +40,12 @@ export const PROMOTION_THRESHOLD = 5;
 /** Actions in the window before the top two rungs can be claimed, since quiet is not proof. */
 export const MINIMUM_EVIDENCE = 50;
 
+/** Targets one handed-over rule lists before the approvals read as a pattern nobody named. */
+export const MOST_HANDED_TARGETS = 20;
+
+/** Characters a rule's target reads as a pattern, so a target holding one cannot be named exactly. */
+const PATTERN_MARKS: readonly string[] = ['*', '!', '{workspace}'];
+
 export interface Delegation {
   action: string;
   /** Times a person said yes to this exact thing. */
@@ -47,7 +53,13 @@ export interface Delegation {
   /** Times a person said no. One is enough to stop a recommendation. */
   denials: number;
   lastAt: string;
+  /** The widest class it was ever recorded under, since a rule allows the action at its worst. */
   class: ToolClass;
+  /**
+   * What the yeses were about, distinct. A handed-over rule names these and no others, so
+   * it allows what was approved rather than the action everywhere. Empty when none carried one.
+   */
+  targets: string[];
   /** What this could become, and never more than the class allows. */
   recommendation: AutonomyLevel;
   /** Why, in the words the screen prints. */
@@ -72,6 +84,20 @@ interface Tally {
   denials: number;
   lastAt: string;
   class: ToolClass;
+  targets: Set<string>;
+}
+
+/** How far each class reaches, so a tally keeps the worst one it saw. */
+const CLASS_REACH: Readonly<Record<string, number>> = {
+  [TOOL_CLASS.READ]: 0,
+  [TOOL_CLASS.WRITE]: 1,
+  [TOOL_CLASS.COMMUNICATION]: 2,
+  [TOOL_CLASS.UNKNOWN]: 2,
+  [TOOL_CLASS.DESTRUCTIVE]: 3,
+};
+
+function widerClass(held: ToolClass, seen: ToolClass): ToolClass {
+  return (CLASS_REACH[seen] ?? 2) > (CLASS_REACH[held] ?? 2) ? seen : held;
 }
 
 /**
@@ -88,16 +114,7 @@ export function delegations(
     const denied = event.effect === DECISION_EFFECT.DENY;
     if (!asked && !denied) continue;
 
-    const tally = tallies.get(event.operation) ?? {
-      approvals: 0,
-      denials: 0,
-      lastAt: event.at,
-      class: event.class,
-    };
-    if (asked && event.authorizedBy !== undefined) tally.approvals += 1;
-    if (denied) tally.denials += 1;
-    if (event.at > tally.lastAt) tally.lastAt = event.at;
-    tallies.set(event.operation, tally);
+    tallies.set(event.operation, counted(tallies.get(event.operation), event, asked));
   }
 
   const found: Delegation[] = [];
@@ -108,12 +125,33 @@ export function delegations(
       denials: tally.denials,
       lastAt: tally.lastAt,
       class: tally.class,
+      targets: [...tally.targets].sort(),
       ...recommend(tally, threshold),
     });
   }
   return found.sort(
     (a, b) => b.approvals - a.approvals || a.action.localeCompare(b.action),
   );
+}
+
+/** One held event added to what was already counted for its action. */
+function counted(held: Tally | undefined, event: MemnoxEvent, asked: boolean): Tally {
+  const tally = held ?? {
+    approvals: 0,
+    denials: 0,
+    lastAt: event.at,
+    class: event.class,
+    targets: new Set<string>(),
+  };
+  if (asked && event.authorizedBy !== undefined) {
+    tally.approvals += 1;
+    if (event.target !== undefined && event.target !== '')
+      tally.targets.add(event.target);
+  }
+  if (!asked) tally.denials += 1;
+  if (event.at > tally.lastAt) tally.lastAt = event.at;
+  tally.class = widerClass(tally.class, event.class);
+  return tally;
 }
 
 function recommend(
@@ -149,7 +187,10 @@ export function promotable(
 ): Delegation[] {
   return found.filter((each) => {
     const held = holdBackOf(each, threshold);
-    return held === null || held.kind === HOLD_BACK.CEILING;
+    // Shown with its reason: a habit worth seeing even where no single rule can take it.
+    return (
+      held === null || held.kind === HOLD_BACK.CEILING || held.kind === HOLD_BACK.WIDER
+    );
   });
 }
 
@@ -241,6 +282,8 @@ const HOLD_BACK = {
   TOO_FEW: 'too-few',
   /** The class ceiling: a habit, and still a decision however routine it became. */
   CEILING: 'ceiling',
+  /** No rule could allow what was approved without allowing more than that. */
+  WIDER: 'wider',
 } as const;
 
 type HoldBackKind = (typeof HOLD_BACK)[keyof typeof HOLD_BACK];
@@ -273,5 +316,38 @@ function holdBackOf(
       because: `it is ${seen.class}, which stays supervised however routine it became`,
     };
   }
+  return widerThanApproved(seen);
+}
+
+/**
+ * Why a rule naming these targets would allow more than the yeses did, or null when it
+ * would not. Promotion is earned on what was approved, so it must not reach past it.
+ */
+function widerThanApproved(
+  seen: Delegation,
+): { kind: HoldBackKind; because: string } | null {
+  const patterned = seen.targets.find((target) =>
+    PATTERN_MARKS.some((mark) => target.includes(mark)),
+  );
+  if (patterned !== undefined) {
+    return {
+      kind: HOLD_BACK.WIDER,
+      because: `it was approved on ${patterned}, which a rule would read as a pattern and so allow more than that`,
+    };
+  }
+  if (seen.targets.length > MOST_HANDED_TARGETS) {
+    return {
+      kind: HOLD_BACK.WIDER,
+      because: `it was approved on ${seen.targets.length} different targets, more than one rule should list; hand over the ones you mean with memnox protect`,
+    };
+  }
   return null;
+}
+
+/** The rule's own words for how far a handed-over allow reaches, so the file says it too. */
+export function describeHandedReach(each: Delegation): string {
+  if (each.targets.length === 0) {
+    return 'no approval named a target, so it allows the action wherever it runs';
+  }
+  return `only on the ${each.targets.length === 1 ? 'target' : `${each.targets.length} targets`} it was approved for`;
 }

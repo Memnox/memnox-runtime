@@ -1,5 +1,8 @@
 import {
   AGENT_APPROVAL,
+  APPROVAL_STATE,
+  HOST_LOCATION,
+  type AgentLifecycle,
   agentRefOf,
   agentsReachingPath,
   approvalOf,
@@ -7,10 +10,12 @@ import {
   describeBrowser,
   describeCombined,
   describeHarness,
+  describeHooks,
   distinctTools,
-  gapLines,
+  floats,
+  foreignHooks,
+  launchPinOf,
   GRANT,
-  measureGap,
   principalCount,
   SENSITIVITY,
   SURFACE_KIND,
@@ -24,13 +29,16 @@ import { TONE, type FlowRow } from '../flow';
 import type { LocalCounts } from '../local-counts';
 import { describeCount } from '../plural';
 import { renderWhatDidNotLoad } from '../policy-path';
+import { agentKinds, renderGap } from './gap-report';
 
 /** What is on this machine, as one card of counts and then the things that are wrong. */
 export function renderMachine(
   context: CliContext,
   report: DiscoveryReport,
   counts: LocalCounts,
+  seen: { lifecycle?: AgentLifecycle; unasked?: readonly string[] } = {},
 ): void {
+  const { lifecycle, unasked = [] } = seen;
   if (report.agents.length === 0) {
     // With no fixtures there is no pretty default, so an empty machine reads as an answer.
     context.flow.close('No AI agents found on this machine.');
@@ -40,9 +48,13 @@ export function renderMachine(
 
   context.flow.rows('On this machine', [
     { label: 'agents', value: agentKinds(report).join(', ') },
+    ...goneRow(context, lifecycle),
     ...unregisteredRow(context, report, counts),
+    ...noPromptRows(context, report),
+    ...hostRows(context, report),
     ...harnessRows(context, report),
     ...definitionRows(context, report),
+    ...hookRows(context, report),
     ...serverRows(context, report),
     ...toolsRow(report),
   ]);
@@ -54,11 +66,7 @@ export function renderMachine(
   renderReachable(context, report);
   // A broken file is never reported as no rules, and the other repositories stay in force.
   renderWhatDidNotLoad(context, counts);
-  renderGap(context, report, counts);
-}
-
-function agentKinds(report: DiscoveryReport): string[] {
-  return report.agents.map((agent) => agent.kind);
+  renderGap(context, report, counts, unasked);
 }
 
 /** Everything an agent with a shell reaches, whether or not Memnox can see the call. */
@@ -67,31 +75,66 @@ function toolsRow(report: DiscoveryReport): FlowRow[] {
   return [{ label: 'tools', value: report.tools.map((tool) => tool.name).join(', ') }];
 }
 
-/** What can reach outside this laptop against how much of it anything checks, as counts. */
-function renderGap(
-  context: CliContext,
-  report: DiscoveryReport,
-  counts: LocalCounts,
-): void {
-  const { flow, style } = context;
-  const surfaces = report.surfaces.filter((surface) => surface.kind !== SURFACE_KIND.MCP);
-  const gap = measureGap(report, counts.policies);
-  flow.close(
-    gap.governed === 0
-      ? style.warn(
-          `${surfaces.length} execution surfaces, and nothing is checking any of them.`,
-        )
-      : `${surfaces.length} execution surfaces.`,
+/** How an agent that is not asking decides, in the words a person repeats. */
+const UNASKED_WORDING: Readonly<Record<string, string>> = {
+  [APPROVAL_STATE.AUTO]: 'acts without asking',
+  [APPROVAL_STATE.MODEL_REVIEWED]: 'lets a model approve its actions',
+};
+
+/**
+ * Agents that approve their own actions, or hand that to a model, each with the setting
+ * that says so. The pair with a readable secret is the line: nothing between the agent
+ * and the file but the agent.
+ */
+function noPromptRows(context: CliContext, report: DiscoveryReport): FlowRow[] {
+  const unasked = report.agents.filter(
+    (agent) => agent.approval !== undefined && agent.approval.state in UNASKED_WORDING,
   );
-  for (const line of gapLines(gap)) flow.hint(line);
-  if (counts.approvedAgents.length === 0) {
-    flow.hint(
-      'No agent has been approved or refused here. Decide with ' +
-        `"memnox config set approvedAgents ${agentKinds(report).join(',')}".`,
-    );
-  }
-  flow.hint('memnox explain <name>   where any of these comes from');
-  flow.hint('memnox protect          put the dangerous ones behind ask or deny');
+  return unasked.map((agent, at) => {
+    const secrets = report.resources.filter(
+      (resource) =>
+        resource.sensitivity !== SENSITIVITY.ORDINARY &&
+        resource.reachableBy.some((ref) => ref.id === agent.id),
+    ).length;
+    const reach =
+      secrets === 0
+        ? ''
+        : `, and it can read ${describeCount(secrets, 'sensitive path')}`;
+    return {
+      label: at === 0 ? 'no prompt' : '',
+      value: context.style.warn(
+        `${agent.kind} ${UNASKED_WORDING[agent.approval?.state ?? ''] ?? 'acts without asking'} (${agent.approval?.setting ?? 'set to'})${reach}`,
+      ),
+    };
+  });
+}
+
+/** A binary resolved from somewhere nothing installs to, named with its path. */
+function hostRows(context: CliContext, report: DiscoveryReport): FlowRow[] {
+  const planted = report.agents.filter(
+    (agent) => agent.host?.location === HOST_LOCATION.UNUSUAL,
+  );
+  return planted.map((agent, at) => ({
+    label: at === 0 ? 'binary' : '',
+    value: context.style.warn(
+      `${agent.kind} runs ${agent.host?.path ?? 'a binary'}, which nothing installed`,
+    ),
+  }));
+}
+
+/** Agents an earlier scan held and this one does not, so a roster never counts the departed. */
+function goneRow(context: CliContext, lifecycle: AgentLifecycle | undefined): FlowRow[] {
+  if (lifecycle === undefined || lifecycle.gone.length === 0) return [];
+  return [
+    {
+      label: 'removed',
+      value: context.style.dim(
+        lifecycle.gone
+          .map((agent) => `${agent.kind}, last seen ${agent.lastSeen.slice(0, 10)}`)
+          .join('; '),
+      ),
+    },
+  ];
 }
 
 /** Agents nobody approved, said only once somebody has decided: an empty list is undecided. */
@@ -181,6 +224,32 @@ function definitionRows(context: CliContext, report: DiscoveryReport): FlowRow[]
   ];
 }
 
+/**
+ * Commands the agents run on their own events, counted the way a definition is. Memnox's
+ * own are left out, because the seam is not something a person has to go and read.
+ */
+function hookRows(context: CliContext, report: DiscoveryReport): FlowRow[] {
+  const foreign = foreignHooks(report.hooks);
+  if (foreign.length === 0) return [];
+  const hosts = [...new Set(foreign.map((hook) => hook.host))].join(', ');
+  const programs = [...new Set(foreign.map((hook) => hook.program))];
+  return [
+    { label: 'hooks', value: `${foreign.length} in ${hosts}` },
+    { label: '', value: context.style.warn(describeHooks(foreign)) },
+    {
+      label: '',
+      value: context.style.dim(
+        programs.length <= HOOK_PROGRAMS_SHOWN
+          ? programs.join(', ')
+          : `${programs.slice(0, HOOK_PROGRAMS_SHOWN).join(', ')} and ${programs.length - HOOK_PROGRAMS_SHOWN} more`,
+      ),
+    },
+  ];
+}
+
+/** Programs named on the card before the rest are counted, so one plugin cannot fill it. */
+const HOOK_PROGRAMS_SHOWN = 5;
+
 /** Which agents speak MCP, which servers they hold, and what those servers can do. */
 function serverRows(context: CliContext, report: DiscoveryReport): FlowRow[] {
   const { style } = context;
@@ -217,7 +286,30 @@ function serverRows(context: CliContext, report: DiscoveryReport): FlowRow[] {
         `${destructive.length} of them destructive, and nothing is checking any of them`,
       ),
     ),
+    ...floatingRow(context, servers),
   ];
+}
+
+/** Servers that fetch a package by name on every start, so what was counted can change unasked. */
+function floatingRow(
+  context: CliContext,
+  servers: DiscoveryReport['surfaces'],
+): FlowRow[] {
+  const floating = [
+    ...new Set(
+      servers.flatMap((surface) =>
+        (surface.servers ?? [])
+          .filter((launch) => launch.disabled !== true && floats(launchPinOf(launch)))
+          .map((launch) => launch.name),
+      ),
+    ),
+  ];
+  return noteRow(
+    floating.length > 0,
+    context.style.warn(
+      `${floating.join(', ')} ${floating.length === 1 ? 'downloads' : 'download'} whatever was last published each time ${floating.length === 1 ? 'it starts' : 'they start'}, since no version is pinned`,
+    ),
+  );
 }
 
 function serverNames(servers: DiscoveryReport['surfaces']): string[] {

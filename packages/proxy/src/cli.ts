@@ -20,14 +20,14 @@ import {
   UNNAMED_AGENT,
   type ContainedProbation,
   type HoldService,
-  type LocalGate,
   type UnusualNotice,
 } from '@memnox/core';
 
 import { parseFirewallArgs, type FirewallArgs } from './firewall-args';
 import { McpFirewall, type FirewallOptions } from './firewall';
 import { ENV_TOOLS_ALLOW, ENV_TOOLS_DENY } from './firewall.constants';
-import { loadLocalGate, localGateEnvironment } from './local-gate-loader';
+import { LiveGate } from './live-gate';
+import { localGateEnvironment } from './local-gate-loader';
 import { sessionLimitsFor } from './session-limits';
 
 /**
@@ -76,22 +76,18 @@ async function firewallOptionsFor(
   args: FirewallArgs,
   home: string,
 ): Promise<FirewallOptions> {
-  const gate = await loadLocalGate(
-    localGateEnvironment(process.env),
-    args.serverName,
-    home,
-    warn,
-  );
-  const ledger = openLedger(home);
-  const session = process.env[SESSION_VAR];
   // The environment `memnox run` sets, then the agent the wrapped line was written for.
   const agent = process.env[ENV_AGENT_NAME] ?? args.agent;
+  const gate = await liveGateFor(args, home);
+  const ledger = openLedger(home);
+  const session = process.env[SESSION_VAR];
   const mode = (await loadOrCreateConfig(home).catch(() => null))?.mode;
 
   return {
     command: args.command,
     serverName: args.serverName,
-    ...(gate === null ? {} : { gate }),
+    gates: gate,
+    env: process.env,
     ...(ledger === null ? {} : { ledger }),
     ...(session === undefined ? {} : { sessionId: session }),
     ...(agent === undefined ? {} : { agent }),
@@ -111,9 +107,25 @@ async function firewallOptionsFor(
   };
 }
 
+/** Read again on every call, so a pause or a pulled bundle needs no restart of the agent. */
+async function liveGateFor(args: FirewallArgs, home: string): Promise<LiveGate> {
+  const gate = new LiveGate({
+    environment: {
+      ...localGateEnvironment(process.env),
+      ...(args.agent === undefined ? {} : { wrappedFor: args.agent }),
+    },
+    serverName: args.serverName,
+    home,
+    warn,
+  });
+  // Read once here, so a broken rule file is said at start rather than at the first call.
+  await gate.current();
+  return gate;
+}
+
 interface NoticeWiring {
   home: string;
-  gate: LocalGate | null;
+  gate: LiveGate;
   agent: string | undefined;
   session: string | undefined;
 }
@@ -128,7 +140,7 @@ async function noticeFor(wiring: NoticeWiring): Promise<UnusualNotice> {
     agent: agent ?? UNNAMED_AGENT,
     ...(session === undefined ? {} : { sessionId: session }),
   });
-  gate?.attachNotice(notice);
+  gate.attachNotice(notice);
   return notice;
 }
 

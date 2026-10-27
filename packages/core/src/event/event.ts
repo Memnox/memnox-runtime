@@ -74,6 +74,13 @@ export interface MemnoxEvent {
   actorType: ActorType;
   /** The person whose authority this ran under, where one is known. */
   principal?: string;
+  /**
+   * The helper the agent handed this to, by the id its host gave it. Absent means the
+   * agent's own turn: a session busy through three helpers is otherwise one agent doing everything.
+   */
+  subagent?: string;
+  /** What kind of helper, as the host named it, e.g. "Explore". */
+  subagentType?: string;
 
   surface: EventSurface;
   /** What was attempted, e.g. "github.merge_pull_request" or "rm". */
@@ -111,6 +118,13 @@ export interface MemnoxEvent {
    * so whoever answers for one can be asked to look at what was written.
    */
   decisionIds?: readonly string[];
+
+  /**
+   * What the gate found, as ids: the rules that matched, the part of the context each was
+   * written about, and what noticing saw. Never the matched text, so `why` can say which
+   * part of the context decided without the row carrying anything the call was handed.
+   */
+  signals?: readonly string[];
 
   /** A hash of the arguments. The arguments themselves never reach a row. */
   argsDigest?: string;

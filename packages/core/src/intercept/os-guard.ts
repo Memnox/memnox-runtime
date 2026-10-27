@@ -54,6 +54,13 @@ export function guardFor(platform: string, kernelRelease: string): GuardSupport 
           because: `Linux ${kernelRelease} predates Landlock (needs 5.13+); the interceptors are the only gate`,
         };
   }
+  if (platform === 'win32') {
+    return {
+      guard: OS_GUARD.NONE,
+      because:
+        'Windows has neither sandbox-exec nor Landlock, so the interceptors, the hook and the proxy are the only gate',
+    };
+  }
   return {
     guard: OS_GUARD.NONE,
     because: `${platform} has no OS guard here; the interceptors are the only gate`,
@@ -69,8 +76,9 @@ export interface GuardPolicy {
   allowWrite: readonly string[];
 }
 
+/** A path as a profile string: backslashes first, so one at the end cannot turn the closing quote into text. */
 function quote(path: string): string {
-  return `"${path.replace(/"/g, '\\"')}"`;
+  return `"${path.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 /**

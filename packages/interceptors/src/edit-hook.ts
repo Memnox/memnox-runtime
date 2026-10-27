@@ -36,6 +36,8 @@ export const EDIT_HOOK_EVENT = {
   USER_PROMPT_SUBMIT: 'UserPromptSubmit',
   /** A session began: the boundary is said once, as context. Codex and Gemini CLI share the name. */
   SESSION_START: 'SessionStart',
+  /** Claude Code stopped to ask its person something, a permission or a choice, in its own terminal. */
+  NOTIFICATION: 'Notification',
 } as const;
 
 /**
@@ -49,10 +51,14 @@ export const COME_BACK =
 export const EDIT_HOOK_BINARY = 'memnox-edit-hook';
 
 /**
- * Milliseconds a held file is waited on: an editor
- * holds a file all session, so a long wait is wasted.
+ * Milliseconds a held file is waited on before the write is refused, inside the hook
+ * timeout of the hosts that allow it: Claude Code's is set to 300 s at install, Codex's
+ * defaults to 600 s and Gemini CLI's to 60 s.
  */
-export const EDIT_HOOK_WAIT_MS = 5_000;
+export const EDIT_HOOK_WAIT_MS = 45_000;
+
+/** For a host whose hook timeout Memnox neither sets nor knows, so a wait never kills the hook. */
+export const SHORT_EDIT_WAIT_MS = 5_000;
 
 /**
  * Minutes an editor's hold lasts without a sign of
@@ -129,10 +135,14 @@ export interface EditRefusal {
   leaseId?: string;
 }
 
-/** Takes the lease for one write. Null means go ahead. */
+/**
+ * Takes the lease for one write. Null means go ahead, and `told` hears when it goes ahead
+ * without the workspace having been asked, which the agent is then told.
+ */
 export async function claimEdit(
   edit: EditIntent,
   leases: SeamLeases,
+  told?: (unconfirmed: string) => void,
 ): Promise<EditRefusal | null> {
   const path = leasePathFor(
     edit.path,
@@ -152,7 +162,10 @@ export async function claimEdit(
     `edit ${path}`,
     EDIT_IDLE_MINUTES,
   );
-  if (proceeds(verdict)) return null;
+  if (proceeds(verdict)) {
+    if (verdict.unconfirmed !== undefined) told?.(verdict.unconfirmed);
+    return null;
+  }
   return {
     reason: verdict.message ?? `${scope} is held by another agent.`,
     ...(verdict.asked === undefined ? {} : { asked: verdict.asked }),
@@ -180,5 +193,37 @@ export function editAsk(reason: string): string {
       permissionDecision: 'ask',
       permissionDecisionReason: `${reason} Allow to take these lines over? The other agent will be told.`,
     },
+  });
+}
+
+/**
+ * The pre tool reply with `note` added to what the model reads, or null where that reply
+ * is not one the host adds context from, so the caller says it another way.
+ */
+export function withAddedContext(
+  stdout: string | undefined,
+  note: string,
+): string | null {
+  if (stdout === undefined)
+    return JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: EDIT_HOOK_EVENT.PRE_TOOL_USE,
+        additionalContext: note,
+      },
+    });
+  let reply: unknown;
+  try {
+    reply = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const fields = fieldsOf(reply);
+  const specific = fieldsOf(fields?.['hookSpecificOutput']);
+  if (fields === null || specific === null) return null;
+  const said = specific['additionalContext'];
+  const context = typeof said === 'string' && said !== '' ? `${said}\n\n${note}` : note;
+  return JSON.stringify({
+    ...fields,
+    hookSpecificOutput: { ...specific, additionalContext: context },
   });
 }

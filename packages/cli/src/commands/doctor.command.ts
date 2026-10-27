@@ -26,6 +26,7 @@ import {
   type GovernedBy,
   summarizeHealth,
   withToolsFrom,
+  type AgentOnWindows,
   type AgentStanding,
   type Finding,
   type HealthCheck,
@@ -37,6 +38,7 @@ import {
   ACTION,
   agentNameIn,
 } from '@memnox/core';
+import { WINDOWS } from '@memnox/interceptors';
 import type { CliContext } from '../cli-context';
 import { defaultScanSeams, scanMachine } from '../machine-scan';
 import {
@@ -50,6 +52,7 @@ import { TONE, type Tone } from '../flow';
 import { policySetInForce } from '../policy-path';
 import { readHealth } from '../health-probe';
 import { proveEnforcement, type ProbeContext } from '../verify/enforcement';
+import { renderWindowsCoverage, windowsCoverageOf } from './doctor/windows';
 import { renderEnforcement } from '../verify/enforcement-report';
 
 const SEVERITY_WIDTH = 10;
@@ -68,6 +71,8 @@ interface DoctorSeams {
   buildSnapshots: () => SnapshotStore;
   buildFindings: () => FindingsStore;
   probe: (ctx: ProbeContext) => Promise<SeamProof[]>;
+  /** Injected, so a test on a Mac sees what doctor says on Windows. */
+  platform: () => NodeJS.Platform;
 }
 
 interface DoctorDeps extends DoctorSeams {
@@ -92,6 +97,7 @@ function defaultSeams(given: Partial<DoctorSeams>): DoctorSeams {
     buildSnapshots: () => new NodeSnapshotStore(join(home(), MEMNOX_HOME)),
     buildFindings: () => new NodeFindingsStore(join(home(), MEMNOX_HOME)),
     probe: proveEnforcement,
+    platform: () => process.platform,
     ...given,
   };
 }
@@ -164,11 +170,23 @@ async function runServers(deps: DoctorDeps, asJson: boolean): Promise<void> {
 /** Whether the seams are installed, which is a different question from whether they bite. */
 async function runWiring(deps: DoctorDeps, asJson: boolean): Promise<void> {
   const checks = checkInstallation(await readHealth(deps.home(), deps.cwd()));
+  const windows = await onWindows(deps);
   if (asJson) {
-    deps.context.out.json({ ...summarizeHealth(checks), checks });
+    deps.context.out.json({
+      ...summarizeHealth(checks),
+      checks,
+      ...(windows === null ? {} : { windows }),
+    });
     return;
   }
+  if (windows !== null) renderWindowsCoverage(deps.context, windows);
   renderWiring(deps.context, checks);
+}
+
+/** Said on Windows only, where a seam that exists only on macOS or Linux is a gap, not a pass. */
+async function onWindows(deps: DoctorDeps): Promise<AgentOnWindows[] | null> {
+  if (deps.platform() !== WINDOWS) return null;
+  return windowsCoverageOf(deps.buildReader(), { now: deps.now(), cwd: deps.cwd() });
 }
 
 /** What is reachable on this machine that should not be, and what closes each. */
@@ -177,10 +195,16 @@ async function runFindings(deps: DoctorDeps, options: DoctorOptions): Promise<vo
   const { report, surfaces } = await diagnose(deps);
   await keepForSync(deps, report.findings);
   const standings = rankAgents(report.findings, surfaces);
+  const windows = await onWindows(deps);
   if (options.json === true) {
-    context.out.json({ ...report, agents: standings });
+    context.out.json({
+      ...report,
+      agents: standings,
+      ...(windows === null ? {} : { windows }),
+    });
     return;
   }
+  if (windows !== null) renderWindowsCoverage(context, windows);
   if (options.byAgent === true) {
     renderByAgent(context, standings);
     return;

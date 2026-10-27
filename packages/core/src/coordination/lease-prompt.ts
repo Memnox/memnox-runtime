@@ -24,17 +24,13 @@ const KEYS: Readonly<Record<string, LeaseAnswer>> = {
   n: LEASE_ANSWER.REFUSE,
 };
 
-export function heldQuestionFor(
-  held: Lease,
-  wanted: string,
-  moment: string,
-  waitMs: number,
-): string {
+export function heldQuestionFor(question: HeldQuestion): string {
+  const { held, wanted, moment, waitMs, from } = question;
   const seconds = Math.max(1, msToSeconds(waitMs));
   const lines = [
     '',
     `  MEMNOX  ${wanted === '' ? 'this repository' : wanted} is held`,
-    `          ${describeLease(held, moment)}`,
+    `          ${describeLease(held, moment, from)}`,
   ];
   if (held.activity.length > 0) {
     lines.push('');
@@ -56,6 +52,7 @@ interface HeldQuestion {
   wanted: string;
   moment: string;
   waitMs: number;
+  from?: string;
 }
 
 export class TtyLeasePrompt implements LeasePrompt {
@@ -66,6 +63,7 @@ export class TtyLeasePrompt implements LeasePrompt {
     wanted: string,
     moment: string,
     waitMs: number,
+    from?: string,
   ): Promise<LeaseAsked | null> {
     let streams: TerminalStreams;
     try {
@@ -77,7 +75,13 @@ export class TtyLeasePrompt implements LeasePrompt {
 
     const rl = createInterface({ input: streams.input, output: streams.output });
     try {
-      return await race(rl, { held, wanted, moment, waitMs });
+      return await race(rl, {
+        held,
+        wanted,
+        moment,
+        waitMs,
+        ...(from === undefined ? {} : { from }),
+      });
     } finally {
       rl.close();
       streams.close?.();
@@ -86,13 +90,15 @@ export class TtyLeasePrompt implements LeasePrompt {
 }
 
 function race(rl: Interface, question: HeldQuestion): Promise<LeaseAsked | null> {
-  const { held, wanted, moment, waitMs } = question;
   return new Promise((resolve) => {
     // A walk-away becomes a bounded wait rather than a takeover.
-    const timer = setTimeout(() => resolve({ answer: LEASE_ANSWER.WAIT }), waitMs);
+    const timer = setTimeout(
+      () => resolve({ answer: LEASE_ANSWER.WAIT }),
+      question.waitMs,
+    );
     timer.unref?.();
 
-    rl.question(heldQuestionFor(held, wanted, moment, waitMs), (raw) => {
+    rl.question(heldQuestionFor(question), (raw) => {
       const answer = KEYS[raw.trim().toLowerCase().charAt(0)] ?? LEASE_ANSWER.WAIT;
       if (answer !== LEASE_ANSWER.TAKE) {
         clearTimeout(timer);

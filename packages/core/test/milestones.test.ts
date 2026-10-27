@@ -70,8 +70,12 @@ describe('taking a milestone', () => {
 
     await new Milestones(git, tree).take({ at: AT });
 
-    expect(copied).toEqual([['/repo/.git/index', '/repo/.git/memnox-index']]);
+    const [[from, to] = []] = copied;
+    expect(from).toBe('/repo/.git/index');
+    expect(to).toMatch(/^\/repo\/\.git\/memnox-index-\d+-\d+$/);
     expect(git.calls.some((call) => call[0] === 'read-tree')).toBe(false);
+    // Its own, and gone after, so a lock left by one operation never stops the next.
+    expect(tree.removed).toContain(to);
   });
 
   it('parks the milestone under refs/memnox, not on a branch', async () => {
@@ -141,7 +145,10 @@ describe('restoring one', () => {
 
     await new Milestones(git, tree).restore('mst_a', AT);
 
-    expect(tree.removed).toEqual(['/repo/src/invented.ts']);
+    // Only the file that arrived after it; the rest are the operation's own scratch indexes.
+    expect(tree.removed.filter((path) => !path.includes('/.git/'))).toEqual([
+      '/repo/src/invented.ts',
+    ]);
     expect(git.calls.some((call) => call[0] === 'rm')).toBe(false);
   });
 

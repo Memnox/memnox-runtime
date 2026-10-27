@@ -216,7 +216,7 @@ describe('the loop the daemon runs', () => {
       sleep: async (ms) => {
         slept.push(ms);
       },
-      holding: async () => 0,
+      holding: async () => [],
     });
 
     /* Three passes, an idle minute between each. Counted as time rather than as calls,
@@ -235,7 +235,7 @@ describe('the loop the daemon runs', () => {
         slept.push(ms);
       },
       // Somebody is waiting on the other end of this, on both legs.
-      holding: async () => 1,
+      holding: async () => ['call_1'],
     });
 
     /* Seconds, not a minute. The question travels up on the next pass and the answer
@@ -256,7 +256,7 @@ describe('the loop the daemon runs', () => {
       sleep: async (ms) => {
         slept.push(ms);
       },
-      holding: async () => 0,
+      holding: async () => [],
       active: async () => true,
     });
 
@@ -275,7 +275,7 @@ describe('the loop the daemon runs', () => {
         return {};
       },
       sleep: async () => {},
-      holding: async () => 0,
+      holding: async () => [],
       active: async () => true,
     });
 
@@ -294,7 +294,7 @@ describe('the loop the daemon runs', () => {
         return results[asked.length - 1] ?? {};
       },
       sleep: async () => {},
-      holding: async () => 0,
+      holding: async () => [],
       active: async () => true,
     });
 
@@ -310,7 +310,7 @@ describe('the loop the daemon runs', () => {
       sleep: async (ms) => {
         slept.push(ms);
       },
-      holding: async () => 1,
+      holding: async () => ['call_1'],
     });
 
     // Polling fast for an answer that has nowhere to come from spends requests only.

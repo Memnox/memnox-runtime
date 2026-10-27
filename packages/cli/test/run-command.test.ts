@@ -17,7 +17,10 @@ const HOME = '/home/dev';
 /** No repository, no proxy started and no profile read, so a run touches nothing real. */
 const QUIET = {
   rootOf: () => null,
-  egress: { daemonPort: async () => 4321 },
+  egress: {
+    daemonPort: async () => 4321,
+    relay: async () => ({ port: 4322, close: async () => undefined }),
+  },
   guard: { exists: () => false },
 };
 
@@ -383,5 +386,60 @@ describe('what memnox run says is wired', () => {
     expect(said).toContain('memnox protect --interceptors');
     // The one thing it must never do is claim a seam it does not have.
     expect(said).not.toContain('on PATH from');
+  });
+});
+
+/* The agent's environment is where a prompt-injected `curl -d "$(env)"` looks, so a run
+   asked to hold credentials starts the agent without them and keeps them in this process. */
+describe('memnox run --hold-credentials', () => {
+  it('starts the agent without its tokens, keeping its own model key and the broker address', async () => {
+    const start = vi.fn(async () => 0);
+    const held: Record<string, string>[] = [];
+    const closed: string[] = [];
+    const out = new RecordedOutput();
+    const program = new Command().exitOverride().configureOutput({ writeErr: () => {} });
+    registerRunCommand(program, new CliContext(out, plainStyle), {
+      ...QUIET,
+      start: start as never,
+      home: () => HOME,
+      newId: () => 'ses_held',
+      onPath: () => true,
+      milestones: (() => new FakeMilestones()) as never,
+      env: {
+        PATH: '/usr/bin',
+        ANTHROPIC_API_KEY: 'sk-ant-1',
+        GITHUB_TOKEN: 'ghp_1',
+        AWS_SECRET_ACCESS_KEY: 'secret',
+      },
+      broker: async (_home, sessionId, values) => {
+        held.push({ ...values });
+        return {
+          path: `/run/${sessionId}.sock`,
+          held: Object.keys(values).length,
+          close: async () => {
+            closed.push(sessionId);
+          },
+        };
+      },
+    });
+    await program.parseAsync(['run', '--hold-credentials', '--', 'claude'], {
+      from: 'user',
+    });
+
+    const [, , env] = start.mock.calls[0] as unknown as [
+      string,
+      string[],
+      NodeJS.ProcessEnv,
+    ];
+    expect(env['GITHUB_TOKEN']).toBeUndefined();
+    expect(env['AWS_SECRET_ACCESS_KEY']).toBeUndefined();
+    expect(env['ANTHROPIC_API_KEY']).toBe('sk-ant-1');
+    expect(env['MEMNOX_CREDENTIAL_BROKER']).toBe('/run/ses_held.sock');
+    expect(held).toEqual([{ GITHUB_TOKEN: 'ghp_1', AWS_SECRET_ACCESS_KEY: 'secret' }]);
+    // Closed when the agent exits, so nothing serves the values after it.
+    expect(closed).toEqual(['ses_held']);
+    // Counted on the start screen, never named.
+    expect(out.notes.join('\n')).toContain('2 variables held back');
+    expect(out.notes.join('\n')).not.toContain('ghp_1');
   });
 });

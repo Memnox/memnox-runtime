@@ -17,11 +17,14 @@ import {
   TASK_INTENT,
   taskFromPrompt,
   waitingOnDm,
+  SessionTurns,
 } from '@memnox/core';
 
 import { EDIT_HOST } from './agent-edits';
+import { fieldsOf } from './hook-payload';
 import type { EditHookContext } from './edit-claims';
 import { log } from './seam-runtime';
+import { noteSubagent } from './subagent-note';
 import {
   answerSessionStart,
   decisionsAt,
@@ -30,7 +33,7 @@ import {
   type SessionContextDeps,
 } from './session-context-hook';
 import { SESSION_MOMENT, type SessionEvent } from './session-events';
-import { learnFromAnswer, rememberQuestion } from './prompt-answers';
+import { learnFromAnswer, learnFromRefusal, rememberQuestion } from './prompt-answers';
 import { authorizerFor, type ToolAnswer } from './tool-hook';
 import { taintFromResult } from './result-taint';
 import { brokenByShell, oweReport } from './shell-written';
@@ -51,6 +54,20 @@ export async function answeredSessionStart(
     log(`session context failed, saying nothing: ${String(err)}`);
   }
   return true;
+}
+
+/** True when this was the answer to a question put through OpenClaw's approval, now recorded. */
+export async function answeredApproval(
+  payload: unknown,
+  context: EditHookContext,
+): Promise<boolean> {
+  try {
+    return await learnFromRefusal(payload, { ...context, env: process.env });
+  } catch (err) {
+    // Said nothing back either way: OpenClaw does not wait on this, the call already went its way.
+    log(`recording an approval answer failed: ${String(err)}`);
+    return true;
+  }
 }
 
 /**
@@ -137,7 +154,9 @@ export async function beforePause(
 ): Promise<string | null> {
   try {
     const sessionId = context.runSession ?? pause.sessionId;
+    await noteTurn(pause, context, sessionId);
     if (pause.moment === SESSION_MOMENT.AFTER_TOOL) {
+      await noteSubagent(payload, context, sessionId);
       await learnFromAnswer(payload, { ...context, env });
       await markIfInstructed(payload, context, env);
       const broken = await shellReport(payload, pause, context, sessionId);
@@ -146,9 +165,10 @@ export async function beforePause(
       return said.length === 0 ? null : said.join('\n\n');
     }
     if (pause.moment === SESSION_MOMENT.TURN_END) {
-      // Claude Code's Stop hook is written with a timeout that covers the long wait.
-      const wait =
-        pause.host === EDIT_HOST.PRE_TOOL_USE ? TURN_END_WAIT_MS : SHORT_WAIT_MS;
+      const wait = turnEndWait(
+        pause.host,
+        fieldsOf(payload)?.[STOP_HOOK_ACTIVE] === true,
+      );
       return await answersArrived({ ...clockOf(context, sessionId), waitMs: wait });
     }
     if (pause.moment !== SESSION_MOMENT.PROMPT || pause.prompt === undefined) return null;
@@ -157,6 +177,29 @@ export async function beforePause(
     log(`session context failed at a pause: ${String(err)}`);
     return null;
   }
+}
+
+/**
+ * How long a turn end waits for an answer. Claude Code's Stop hook has the timeout for the
+ * long wait; a turn that only goes on because a note stopped it never waits again.
+ */
+function turnEndWait(host: string, continuing: boolean): number {
+  if (continuing) return 0;
+  return host === EDIT_HOST.PRE_TOOL_USE ? TURN_END_WAIT_MS : SHORT_WAIT_MS;
+}
+
+/** When the person asked and when the agent handed back, which is how a finished turn is told from a long reply. */
+async function noteTurn(
+  pause: SessionEvent,
+  context: EditHookContext,
+  sessionId: string,
+): Promise<void> {
+  const turns = new SessionTurns(context.home);
+  const at = context.now().toISOString();
+  if (pause.moment === SESSION_MOMENT.PROMPT)
+    await turns.prompted(sessionId, context.agent, at);
+  if (pause.moment === SESSION_MOMENT.TURN_END)
+    await turns.ended(sessionId, context.agent, at);
 }
 
 /** A prompt is an answer to a held question, or a new ask read for its task and decisions. */
@@ -226,6 +269,8 @@ export async function answerInChat(
 
 /** Long enough to answer a DM from a phone, and inside the hook timeout setup writes. */
 const TURN_END_WAIT_MS = 9 * 60 * 1000;
+/** Claude Code's flag on a stop that follows one a hook already held. */
+const STOP_HOOK_ACTIVE = 'stop_hook_active';
 /** Where the host keeps its default hook timeout, a wait must end well inside it. */
 const SHORT_WAIT_MS = 45 * 1000;
 const ANSWER_POLL_MS = 1000;
@@ -300,5 +345,6 @@ function depsOf(context: EditHookContext, env: NodeJS.ProcessEnv): SessionContex
     env,
     cwd: context.cwd,
     now: context.now,
+    ...(context.runSession === undefined ? {} : { runSession: context.runSession }),
   };
 }

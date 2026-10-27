@@ -38,8 +38,8 @@ const TOOLCHAINS: readonly string[] = [
   join('.local', 'share', 'pnpm'),
 ];
 
-/** Credentials that are not dotfiles, and so are not covered by refusing those. */
-const UNREADABLE: readonly string[] = [
+/** Credentials that are not dotfiles, and so are not covered by refusing those; a phone never lists them either. */
+export const UNREADABLE: readonly string[] = [
   join('Library', 'Keychains'),
   join('Library', 'Cookies'),
   join('Library', 'Application Support', 'Google', 'Chrome'),

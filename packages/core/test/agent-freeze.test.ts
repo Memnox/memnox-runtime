@@ -39,7 +39,7 @@ describe('a freeze scoped to one agent', () => {
       { agentName: 'claude-code', state: stateFrom('agent:claude-code') },
     );
     expect(result.effect).toBe(DECISION_EFFECT.DENY);
-    expect(result.reason).toMatch(/frozen across the workspace/);
+    expect(result.reason).toMatch(/a person paused this agent, so stop and wait/);
     expect(result.matchedPolicies).toEqual([]);
   });
 

@@ -64,7 +64,7 @@ describe('the breaker, replayed at the seam', () => {
   it('does not trip again on the failures a person has already let go', async () => {
     const home = await machine(5);
     await observeSession({ home, sessionId: SESSION });
-    await new SessionPauses(home).resume(SESSION, 'tresor', at(10));
+    await new SessionPauses(home).resume(SESSION, 'ada', at(10));
 
     expect(await observeSession({ home, sessionId: SESSION })).toBeNull();
     expect(await pauseHolding(home, SESSION)).toBeNull();
@@ -73,7 +73,7 @@ describe('the breaker, replayed at the seam', () => {
   it('holds again when the same thing starts failing after a resume', async () => {
     const home = await machine(5);
     await observeSession({ home, sessionId: SESSION });
-    await new SessionPauses(home).resume(SESSION, 'tresor', at(10));
+    await new SessionPauses(home).resume(SESSION, 'ada', at(10));
 
     const store = SqliteEventStore.forHome(home);
     for (let i = 20; i < 25; i += 1) await store.append(failure(i));

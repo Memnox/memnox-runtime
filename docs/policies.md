@@ -56,6 +56,8 @@ denied — it is never invented.
 | `environments` | `production`, `staging`, whatever you name |
 | `classes` | what the action does: `read`, `write`, `destructive`, `communication`, `unknown` |
 | `arguments` | a named argument, e.g. `method = ["POST", "DELETE"]` on `http.request` |
+| `roles` | the job the agent was enrolled under, from `memnox run --role` |
+| `principals` | the person the agent works for, from `memnox run --for` |
 
 Patterns take `*`. A pattern starting with `!` takes matches back out, and `{workspace}`
 stands for the directory the agent is working in:
@@ -76,6 +78,34 @@ A list of exclusions only covers everything it does not name. A request that rep
 target, or no working directory, cannot be shown to be excluded, so the rule still
 applies to it. Claude Code's native permissions and the kernel wall cannot leave
 anything out, so an exclusion is left to the rules there, and those two stay wider.
+
+### The person behind the agent
+
+An agent on a shared database credential can do whatever every workflow on that
+credential needed, so the database cannot tell a support assistant from a DBA. The rules
+can, once the run says who the agent works for. What an agent may do is then what its own
+rules allow *and* what its person's rules allow, never either alone:
+
+```toml
+# Only somebody on the DBA team deletes rows, through whichever agent and credential.
+[[policies]]
+name = "only-a-dba-deletes"
+[policies.match]
+actions = [ "mcp.*", "psql.*" ]
+classes = [ "destructive" ]
+principals = [ "!dba-*" ]
+[policies.decision]
+effect = "deny"
+reason = "the person this agent works for may not delete rows"
+```
+
+The person comes from `memnox run --for <person>` and nothing else. A call that names a
+principal of its own is overruled by the run's, and an agent that sets or clears
+`MEMNOX_PRINCIPAL`, `MEMNOX_AGENT_ROLE`, `MEMNOX_AGENT_NAME` or `MEMNOX_PARENT_AGENTS` in
+a shell line, or runs `memnox run --for` or `--role` itself, is refused, because naming
+whose authority it holds is exactly what an agent must not do for itself. A run that names
+nobody matches no `principals = ["dba-*"]` and every `principals = ["!dba-*"]`, so a rule
+written as an exclusion fails closed.
 
 ### Reads and changes under one name
 
@@ -110,6 +140,66 @@ class, so an MCP tool and a CLI verb name it the same way, and a local command s
 [policies.match]
 actions = [ "*" ]
 capabilities = [ "transfer", "deploy" ]
+```
+
+### What a payload carries
+
+`dataClassifications` matches what a call is sending, read where the call is made by shape
+and never by a model, and never recorded. Every kind found also carries `sensitive`, so
+one rule can name them all:
+
+| Classification | What it found |
+|---|---|
+| `secret` | an API key or token, a private key, a password, a connection string with its password |
+| `financial` | a Luhn checked card, an IBAN that checks, a bank account, an invoice, a payroll line |
+| `health` | a diagnosis, a prescription, a medical record |
+| `government-id` | a social security or national insurance number, a passport, a tax id |
+| `personal-data` | one person's email, phone, address or date of birth |
+| `customer-record` | several of those about one person, or any under a `customer` key |
+| `confidential` | text marked confidential, internal only, restricted or under NDA |
+| `source-code` | a program, or a file from inside the repository named for upload |
+| `bulk-records` | twenty rows or more of anything: a table, an export, a dump |
+
+On the need to know ladder, `secret`, `financial`, `health`, `government-id` and
+`customer-record` are `restricted`, the ceiling, and the rest are `confidential`.
+
+It is read on every seam that sees what goes out: an MCP call through the proxy or an
+agent's hook, a `curl` or `wget` body, a plain HTTP body through the egress proxy, and
+every call a cloud agent makes through `@memnox/guard`. A body inside an HTTPS tunnel is
+the one it cannot read. Where a call names where it is going, as a recipient address, a
+URL or a webhook, the classified request carries that host as its target, so the
+approved destinations are a list of `!` patterns:
+
+```toml
+[[policies]]
+name = "sensitive-stays-approved"
+
+[policies.match]
+actions = [ "*" ]
+dataClassifications = [ "sensitive" ]
+targets = [ "*", "!ourcompany.com", "!*.ourcompany.com" ]
+
+[policies.decision]
+effect = "deny"
+reason = "sensitive data leaves only to destinations the team approved"
+
+[policies.decision.alternative]
+action = "ticket.reply"
+note = "reply inside the ticket, which keeps the data where it lives"
+```
+
+A call that names nowhere is ruled on where it stands, and nowhere named is nowhere
+approved. `memnox protect` offers this as its sensitive data question, on ask until the
+approved destinations are listed and it is turned to deny.
+
+A team adds its own words under a classification of its choosing, a codename under
+`confidential` or a name of its own. Each pattern is a whole word in any case, or a
+`/regex/` of at most 200 characters, and a rule naming `sensitive` holds on them too:
+
+```toml
+[[classifications]]
+classification = "confidential"
+patterns = [ "falcon", "/PRJ-\\d{4}/" ]
 ```
 
 ### Where a command lands

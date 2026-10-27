@@ -128,7 +128,7 @@
    {
     "id": "apr_evt_0002",
     "answer": "once",
-    "by": "tresor"
+    "by": "ada"
    }
   ],
   "fleetSpend": [
@@ -228,7 +228,7 @@
     "agentSessionId": "ses_01",
     "payload": {
      "outcome": "approved",
-     "resolvedBy": "tresor"
+     "resolvedBy": "ada"
     }
    }
   ]
@@ -240,6 +240,12 @@
     "id": "claude-code",
     "kind": "claude-code",
     "version": "2.1",
+    "approval": "auto",
+    "host": {
+     "location": "installed",
+     "signature": "signed",
+     "signer": "Developer ID Application: Example Inc (ABCDE12345)"
+    },
     "surfaces": [
      {
       "kind": "shell",
@@ -320,7 +326,13 @@
       "git",
       "network",
       "shell"
-     ]
+     ],
+     "approval": "auto",
+     "host": {
+      "location": "installed",
+      "signature": "signed",
+      "signer": "Developer ID Application: Example Inc (ABCDE12345)"
+     }
     }
    },
    {

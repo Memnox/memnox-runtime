@@ -115,6 +115,19 @@ deliberate: one engine, one rule file format, one verdict vocabulary.
 In `observe` mode step 4 records the verdict and applies nothing, keeping what enforce
 *would* have said in `shadowEffect`. That is the mode a new machine starts in.
 
+**The PATH wrapper has a native front, and it decides nothing itself.** Starting Node
+for every wrapped command cost about a hundred milliseconds against a budget of ten, so
+where `native/intercept` was built the shim runs `memnox-intercept-native` first. It
+sends the command line to the daemon as one `intercept` line, and the daemon runs
+`planIntercept` in `interceptors/src/fast-intercept.ts`, which is steps 1 to 4 through
+the Node interceptor's own functions with the agent's directory and environment handed
+in rather than inherited. The answer is run, pass, refuse, or `node`, and `node` is the
+answer to anything the daemon cannot reproduce exactly: an ask, a claim, a milestone,
+brokered credentials. The client hands `node` and every failure of its own to
+`memnox-intercept` with the same argv. Step 5 moves to the daemon, which writes the row
+only once the client says it acted, so a fallback is never recorded twice. ADR 0004 has
+the reasoning and the numbers.
+
 **An agent's own tools meet the same rules.** `setup` installs `memnox-edit-hook
 --policy` before every tool call each agent's hook system exposes, so a Read of
 `~/.ssh`, a WebFetch or an MCP call is ruled on even where no wrapper stands in the
@@ -190,8 +203,13 @@ that writes anywhere else says so and takes a backup first.
 | `~/.memnox/guard/` | the seatbelt profile or Landlock ruleset |
 | `~/.memnox/backup/` | configs `mcp wrap` rewrote, restored byte for byte by `unwrap` |
 | `~/.memnox/transcripts/` | what an agent printed, when `run --transcript` asked for it |
-| `~/.memnox/pending/` | held calls waiting for a person |
+| `~/.memnox/pending/` | held calls waiting for a person, and those parked for one who was away |
+| `~/.memnox/posts/` | a session struggling, kept for a person away until it recovers |
+| `~/.memnox/missions/` | one goal and the sessions that worked on it |
+| `~/.memnox/turns/` | when a person last prompted each session and when it handed back |
 | `~/.memnox/overlays.json` | freezes and anything else true only for a while |
+| `~/.memnox/devices.json` | the paired devices: the Mac's own key and each phone, with what it may do |
+| `~/.memnox/remote/noise-key.json` | this machine's Noise key, which a phone checks on every connection |
 | `~/.memnox/stopped.json` | `memnox stop` in force: who, why, until when, and the mode `start` returns to |
 | `~/.memnox/notice/` | what each agent has done before, as digests, and what each session took or was told, so every seam notices the same unusual action |
 | `~/.memnox/context/` | per session, the decisions already said to it and the questions its own prompt is still answering |
@@ -299,6 +317,56 @@ neither door can take the other's entry. `planWrap` skips the binary, since wrap
 would put Memnox in front of itself. `setup` adds the entry where each agent is
 installed, the keeper puts a missing one back unless `memnox mcp session off` recorded
 `session: false` in `kept.json`, and `uninstall` takes it out.
+
+## A paired phone, and why the tunnel ends in the daemon
+
+A phone can see and steer this machine from anywhere, through a blind relay in Memnox Cloud.
+`docs/remote-contract.md` is the protocol and `docs/threat-model.md` says what the cloud learns.
+The tunnel ends in the daemon rather than the Mac app, because the daemon is the authority and the
+app may not be running.
+
+| Piece | Where | What it does |
+|---|---|---|
+| the device registry | `core/src/gate/devices.ts`, `devices.json` | every key that signs for the person: `this-mac`, mirrored from `confirm-key.json` and still trusted on first use, and each phone with its Noise key and capabilities |
+| the capability table | `core/src/gate/capabilities.ts` | which method and which proposal each capability covers, as data; a method missing from it is never remote |
+| the relay link | `cli/src/remote/relay-link.ts` | the one outbound WebSocket, with the `mch_` token, backing off when it drops; the only network module beside `sync/client.ts` |
+| Noise | `cli/src/remote/noise.ts` over `native/noise` | snow, loaded only once a phone is involved; the iPhone links the same build |
+| pairing | `cli/src/remote/pairing.ts`, `pairings.ts` | XXpsk0 with the QR's one time secret, the phone's proof, the six digits, and a device written only on the Mac's signed `pair-accept` |
+| a phone's session | `cli/src/remote/remote-session.ts` | an IK handshake against the registry, then JSON lines exactly as on the socket; a frame before a finished handshake is dropped |
+| the endpoint | `cli/src/remote/endpoint.ts` | checks each remote request against the device's capabilities before the voice surface sees it, and revokes, grants, drives and wakes |
+| folder listing | `cli/src/daemon/folder-listing.ts` | `files-list` under `see`: one folder under the home as names, kinds, sizes and dates, folders first, hidden entries out, at most 500; refused outside the home after links are followed, in a hidden folder, or where the credential rules and the untrusted run's keychains say credentials sit |
+| speech for a phone | `cli/src/daemon/kokoro-speech.ts` | `speak` under `ask`: one line rendered by the Mac app's Kokoro on `127.0.0.1:8723`, its WAV read chunk by chunk, and the 16 bit mono PCM streamed back as base64 pieces of at most 48000 characters until one marked `last`; refused with a plain reason when Kokoro is not running, the voice is unknown or there is nothing to say |
+| origin routing | `cli/src/daemon/origin-routing.ts` | a phone's words go back to the phone; a show only the Mac can do goes to the Mac app, as a proposal the phone signs unless it only reads or the phone drives; what it does for a phone carries that phone as `origin`, and a show naming a session also reaches the phone that asked |
+| the voice hold | `cli/src/remote/voice-hold.ts` | which phone speaks: one whose app is open with a live `subscribe` stream, that drives, has a question in flight, or ended one or its stream under thirty seconds ago, the latest wins, and a revoked one gives it back at once; every event then carries `heardOn` so the Mac stays silent, and the Mac app alone hears `voiceOn` when it moves |
+| the answering phone | `cli/src/remote/answer-on.ts` | which paired phone a yes waits on: the asking phone for a `mac` proposal, else the one paired last that holds what the yes takes; every held call and proposal in the waiting feed carries it as `answerOn`, so the Mac leaves a spoken yes to its Face ID rather than Touch ID, and a phone with no `subscribe` stream is woken for it |
+
+It is off until sync is enrolled and a phone is paired, so nothing changes for a Mac with no phone.
+A remote yes is always signed by that phone's key, which is why `withinSession` is honoured for the
+local socket only. `scripts/relay-stub.mjs` and `scripts/phone-sim.mjs` pair a phone in a terminal
+against a real daemon.
+
+## How a person is told, and why nothing is told twice
+
+Two routes carry everything, split by whether it needs the person.
+
+| Route | Carries | Reaches |
+|---|---|---|
+| the waiting feed, `cli/src/daemon/waiting-feed.ts` | what needs a person: held and parked calls, an agent's own question, a proposal, a session the breaker stopped, one struggling, and a long turn that handed back while nobody answered | the Mac app while it listens, and a paired phone, which is woken over APNs whenever a subject it has not seen appears |
+| the notice watcher, `cli/src/daemon/notice-watch.ts` | news that needs nobody: a commit, a push, a short turn ending, a rule that would have fired in observe | whoever is listening at the moment, and nobody else |
+
+The heartbeat carries one thing up: held calls, masked, so a person who cannot reach this
+machine can still answer from the workspace. Everything else stays on the machine and the
+phone, through the tunnel.
+
+**One subject per thing, on every route.** A pause is its session id; a notice is
+`noticeSubject(kind, session, moment)` in `core/src/session/notices.ts`. A finished turn told
+live and the same turn still waiting in the feed are one subject, so a surface told twice
+shows it once and a phone is woken once.
+
+**What a person away needs is in the feed, never only in the broadcast.** The broadcast is
+lost the moment nobody is listening. Anything that should reach somebody who closed the
+laptop has to be derivable from a file, which is why struggling is a post a seam writes and
+finished is read from the turn records rather than from the watcher's memory.
 
 ## Seams, and why the tests never touch your machine
 

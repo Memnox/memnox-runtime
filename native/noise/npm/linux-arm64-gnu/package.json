@@ -1,0 +1,31 @@
+{
+  "name": "@memnox/noise-linux-arm64-gnu",
+  "version": "0.1.1",
+  "description": "The Noise addon for Memnox, prebuilt for linux-arm64-gnu.",
+  "license": "Apache-2.0",
+  "main": "memnox-noise.linux-arm64-gnu.node",
+  "files": [
+    "memnox-noise.linux-arm64-gnu.node"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Memnox/memnox.git",
+    "directory": "native/noise/npm/linux-arm64-gnu"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

@@ -28,6 +28,8 @@ export interface BinaryVerdict {
   method?: string;
   /** The verb table's way forward, used where a rule only said to ask somebody. */
   alternative?: string;
+  /** What the request's body carries about people, for a rule's `dataClassifications`. */
+  dataClassification?: string;
 }
 
 const ROOTS = ['/', '/*', '~', '~/', '.', './'];
@@ -159,7 +161,7 @@ function classifyCurl(binary: string, args: readonly string[]): BinaryVerdict {
 const METHOD_FLAGS: readonly string[] = ['-X', '--request', '--method'];
 
 /** Flags that send a body, which a request only does to change something. */
-const BODY_FLAGS: readonly string[] = [
+export const BODY_FLAGS: readonly string[] = [
   '-d',
   '--data',
   '--data-raw',

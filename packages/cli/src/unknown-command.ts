@@ -13,6 +13,8 @@ const MOVED: Readonly<Record<string, string>> = {
   diff: 'memnox scan --since <when>',
   autopilot: 'memnox next --agent <name>',
   verify: 'memnox doctor --prove',
+  // It was never about a team: one person signs in, beside the machine `login` enrols.
+  team: 'memnox signin, and memnox signout',
   spend:
     'nothing here: this machine cannot price a model call, so it no longer pretends to',
 };

@@ -35,6 +35,10 @@ export interface HookVerdict {
   environment?: string;
   /** Outside the task the session declared, which the circuit breaker counts. */
   outOfScope?: boolean;
+  /** What the gate found, as ids, so the row can say which part of the context decided. */
+  signals?: readonly string[];
+  /** The person this was ruled for, as the run named them. */
+  principal?: string;
 }
 
 export interface HookAuthorizerDeps {
@@ -112,6 +116,8 @@ export class HookAuthorizer {
         ? {}
         : { shadowEffect: verdict.shadowEffect }),
       ...(verdict.scope?.match === SCOPE_MATCH.OUT_OF_SCOPE ? { outOfScope: true } : {}),
+      signals: verdict.signals,
+      ...(verdict.principal === undefined ? {} : { principal: verdict.principal }),
     };
   }
 }

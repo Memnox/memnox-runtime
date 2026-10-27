@@ -9,6 +9,7 @@ import {
   LeaseRegistry,
   type ActionRequest,
   type LeaseHolder,
+  Clashes,
 } from '@memnox/core';
 import type { HookAuthorizer } from '../src/hook-authorizer';
 import { ShellSeam, SHELL_EXIT_OK, SHELL_EXIT_WITHHELD } from '../src/shell-seam';
@@ -31,9 +32,11 @@ const seamFor = (
   registry: LeaseRegistry,
   holder: LeaseHolder,
   answer?: { answer: string; reason?: string },
+  memnoxHome?: string,
 ): ShellSeam =>
   new ShellSeam({
     authorizer: allowing,
+    ...(memnoxHome === undefined ? {} : { home: memnoxHome }),
     workingDirectory: ROOT,
     leases: {
       gate: new LeaseGate({
@@ -80,11 +83,15 @@ describe('taking a lease where the write happens', () => {
       { path: 'src/auth', holder: cursor, minutes: 60, activity: 'rewriting login' },
       NOW,
     );
-    const outcome = await seamFor(registry, claude).gate([
+    const memnoxHome = await home();
+    const outcome = await seamFor(registry, claude, undefined, memnoxHome).gate([
       "sed -i 's/a/b/' /work/repo/src/billing/a.ts /work/repo/src/auth/b.ts",
     ]);
     expect(outcome.exitCode).toBe(SHELL_EXIT_WITHHELD);
     expect(outcome.message).toContain('cursor');
+    // Kept for the voice, so the person hears two agents met rather than only the one held.
+    const [clash] = await new Clashes(memnoxHome).since('', NOW);
+    expect(clash).toMatchObject({ sessionId: claude.sessionId, what: 'src/auth' });
   });
 
   it('never takes one for a read, so nothing here can make a reader wait', async () => {

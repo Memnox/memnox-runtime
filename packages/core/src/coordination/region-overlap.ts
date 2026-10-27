@@ -13,8 +13,21 @@ export interface Placed {
   path: string;
   /** Which checkout the path is relative to; paths in two repositories never meet. */
   repository?: string;
+  /** What every checkout of one repository shares, which joins two worktrees of it. */
+  project?: string;
   lines?: readonly LineRange[];
   symbols?: readonly string[];
+}
+
+/**
+ * Two checkouts of one project are one repository, as the workspace register already
+ * reads them. A record written before `project` was kept falls back to its checkout.
+ */
+function sameProject(held: Placed, wanted: Placed): boolean {
+  if (held.project !== undefined && wanted.project !== undefined) {
+    return held.project === wanted.project;
+  }
+  return sameRepository(held.repository, wanted.repository);
 }
 
 /**
@@ -23,7 +36,7 @@ export interface Placed {
  * Either side saying nothing narrower is the whole file.
  */
 export function regionsMeet(held: Placed, wanted: Placed): boolean {
-  if (!sameRepository(held.repository, wanted.repository)) return false;
+  if (!sameProject(held, wanted)) return false;
   if (!conflicts(held.path, wanted.path)) return false;
   if (held.path !== wanted.path) return true;
 

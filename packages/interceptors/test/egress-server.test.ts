@@ -22,6 +22,7 @@ import {
   type EgressProxy,
 } from '../src/egress-server';
 import { HookAuthorizer } from '../src/hook-authorizer';
+import { EGRESS_MAX_BODY_BYTES } from '../src/tool-hook.constants';
 
 const NOW = new Date('2026-09-24T10:00:00.000Z');
 
@@ -160,6 +161,273 @@ describe('the proxy as a server, on loopback only', () => {
       req.end();
     });
   }
+
+  /* The handlers ran as `void answerRequest(...)` with no catch and nothing registers an
+     unhandledRejection, so one malformed request ended the process — which can be the
+     daemon. Each case below is answered, and the server serves the next request after it. */
+  function allowAll(): EgressSeam {
+    return new EgressSeam({
+      authorizer: new HookAuthorizer({}),
+      ruled: async () => undefined,
+    });
+  }
+
+  function tunnelTo(
+    proxyPort: number,
+    authority: string,
+    auth: string,
+  ): Promise<{ status: number; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = request({
+        host: '127.0.0.1',
+        port: proxyPort,
+        method: 'CONNECT',
+        path: authority,
+        headers: { 'proxy-authorization': auth },
+      });
+      req.on('connect', (res, socket) => {
+        socket.write(
+          `GET /hello HTTP/1.1\r\nHost: ${authority}\r\nConnection: close\r\n\r\n`,
+        );
+        let body = '';
+        socket.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')));
+        socket.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  it('tunnels to an IPv6 loopback, whose authority holds colons of its own', async () => {
+    const server = createServer((_req, res) => res.end('upstream says hi'));
+    opened.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '::1', () => resolve()));
+    const address = server.address();
+    const port = typeof address === 'object' && address !== null ? address.port : 0;
+
+    const proxy = await startEgressProxy({
+      seam: allowAll(),
+      port: 0,
+      log: () => undefined,
+    });
+    opened.push(proxy);
+    const auth = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+
+    const answer = await tunnelTo(proxy.port, `[::1]:${port}`, auth);
+
+    expect(answer.body).toContain('upstream says hi');
+  });
+
+  it('answers a mangled Proxy-Authorization, and serves the next request after it', async () => {
+    const port = await upstream();
+    const proxy = await startEgressProxy({
+      seam: allowAll(),
+      port: 0,
+      log: () => undefined,
+    });
+    opened.push(proxy);
+    // `%zz` is not a percent sequence, and any local process can send it.
+    const mangled = `Basic ${Buffer.from('%zz:a', 'utf8').toString('base64')}`;
+
+    const first = await get(proxy.port, `http://127.0.0.1:${port}/hello`, mangled);
+    const good = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+    const second = await get(proxy.port, `http://127.0.0.1:${port}/hello`, good);
+
+    expect(first.status).toBeGreaterThan(0);
+    expect(second).toEqual({ status: 200, body: 'upstream says hi' });
+  });
+
+  it('refuses an https absolute-form request rather than throwing on it', async () => {
+    const port = await upstream();
+    const proxy = await startEgressProxy({
+      seam: allowAll(),
+      port: 0,
+      log: () => undefined,
+    });
+    opened.push(proxy);
+    const auth = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+
+    const refused = await get(proxy.port, 'https://example.com/', auth);
+    const after = await get(proxy.port, `http://127.0.0.1:${port}/hello`, auth);
+
+    expect(refused.status).toBe(403);
+    expect(refused.body).toContain('http only');
+    expect(after).toEqual({ status: 200, body: 'upstream says hi' });
+  });
+
+  it('forwards to an IPv6 host in absolute form, brackets and all', async () => {
+    const server = createServer((_req, res) => res.end('upstream says hi'));
+    opened.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '::1', () => resolve()));
+    const address = server.address();
+    const port = typeof address === 'object' && address !== null ? address.port : 0;
+
+    const proxy = await startEgressProxy({
+      seam: allowAll(),
+      port: 0,
+      log: () => undefined,
+    });
+    opened.push(proxy);
+    const auth = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+
+    const answer = await get(proxy.port, `http://[::1]:${port}/hello`, auth);
+
+    expect(answer).toEqual({ status: 200, body: 'upstream says hi' });
+  });
+
+  it('destroys the socket for a CONNECT authority it cannot read', async () => {
+    const proxy = await startEgressProxy({
+      seam: allowAll(),
+      port: 0,
+      log: () => undefined,
+    });
+    opened.push(proxy);
+    const auth = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+
+    await expect(tunnelTo(proxy.port, ':::::', auth)).rejects.toThrow();
+
+    const port = await upstream();
+    expect(await get(proxy.port, `http://127.0.0.1:${port}/hello`, auth)).toEqual({
+      status: 200,
+      body: 'upstream says hi',
+    });
+  });
+
+  /* The body was decoded to a string and written back out as one, so binary gained
+     replacement characters; past the limit it was dropped and the request still went,
+     with a content-length that promised bytes and an upstream that got none. */
+  async function recordingUpstream(): Promise<{ port: number; received: Buffer[] }> {
+    const received: Buffer[] = [];
+    const server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        received.push(Buffer.concat(chunks));
+        res.end('stored');
+      });
+    });
+    opened.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const address = server.address();
+    const port = typeof address === 'object' && address !== null ? address.port : 0;
+    return { port, received };
+  }
+
+  function post(
+    proxyPort: number,
+    target: string,
+    auth: string,
+    body: Buffer,
+  ): Promise<{ status: number; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: proxyPort,
+          path: target,
+          method: 'POST',
+          headers: {
+            'proxy-authorization': auth,
+            'content-type': 'application/octet-stream',
+            'content-length': String(body.length),
+          },
+        },
+        (res) => {
+          let text = '';
+          res.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text }));
+        },
+      );
+      req.on('error', reject);
+      req.end(body);
+    });
+  }
+
+  it('forwards a binary body byte for byte', async () => {
+    const { port, received } = await recordingUpstream();
+    const proxy = await startEgressProxy({
+      seam: allowAll(),
+      port: 0,
+      log: () => undefined,
+    });
+    opened.push(proxy);
+    const auth = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+    // Not valid UTF-8 anywhere: a gzip header and bytes no text decoder keeps.
+    const binary = Buffer.from([
+      0x1f, 0x8b, 0x08, 0x00, 0xff, 0xfe, 0x80, 0xc3, 0x28, 0x00,
+    ]);
+
+    const answer = await post(
+      proxy.port,
+      `http://127.0.0.1:${port}/upload`,
+      auth,
+      binary,
+    );
+
+    expect(answer.status).toBe(200);
+    expect(received[0]?.equals(binary)).toBe(true);
+  });
+
+  it('refuses a body past the limit, and never sends it on empty', async () => {
+    const { port, received } = await recordingUpstream();
+    const rulings: EgressRuling[] = [];
+    const seam = new EgressSeam({
+      authorizer: new HookAuthorizer({}),
+      ruled: async (ruling) => void rulings.push(ruling),
+    });
+    const proxy = await startEgressProxy({ seam, port: 0, log: () => undefined });
+    opened.push(proxy);
+    const auth = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+
+    const answer = await post(
+      proxy.port,
+      `http://127.0.0.1:${port}/upload`,
+      auth,
+      Buffer.alloc(EGRESS_MAX_BODY_BYTES + 1, 0x61),
+    );
+
+    expect(answer.status).toBe(403);
+    expect(received).toEqual([]);
+    expect(rulings[0]?.effect).toBe(DECISION_EFFECT.DENY);
+    expect(rulings[0]?.reason).toContain('could not be inspected');
+  });
+
+  it('still forwards a body exactly at the limit', async () => {
+    const { port, received } = await recordingUpstream();
+    const proxy = await startEgressProxy({
+      seam: allowAll(),
+      port: 0,
+      log: () => undefined,
+    });
+    opened.push(proxy);
+    const auth = basicOf(
+      proxyUrlFor(proxy.port, { sessionId: 'ses_1', agent: 'codex-cli' }),
+    );
+
+    const answer = await post(
+      proxy.port,
+      `http://127.0.0.1:${port}/upload`,
+      auth,
+      Buffer.alloc(EGRESS_MAX_BODY_BYTES, 0x61),
+    );
+
+    expect(answer.status).toBe(200);
+    expect(received[0]?.length).toBe(EGRESS_MAX_BODY_BYTES);
+  });
 
   it('forwards an allowed request, and tells the seam who asked', async () => {
     const port = await upstream();

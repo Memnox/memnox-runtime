@@ -228,3 +228,54 @@ describe('a decision this gate cannot enforce never makes a rule more permissive
     expect(written(rule).policies[0]?.decision['effect']).toBe(DECISION_EFFECT.ASK);
   });
 });
+
+describe('a rule scoped to a kind of machine, and who decided it', () => {
+  const serversOnly: BundleRule = {
+    ...deployRule({ effect: DECISION_EFFECT.ASK }),
+    machineClasses: ['server'],
+    project: 'billing',
+    decidedBy: 'Ada',
+    decidedAt: '2026-10-01T09:00:00.000Z',
+  };
+  const names = (machineClass?: 'server' | 'workstation'): string[] =>
+    (documentFrom(bundleOf([serversOnly]), machineClass) as Written).policies.map(
+      (policy) => policy.name,
+    );
+
+  it('holds on a server and stands aside on a workstation', () => {
+    expect(names('server')).toEqual(['deploys']);
+    expect(names('workstation')).toEqual([]);
+  });
+
+  it('reads the class sent among its conditions, and keeps it out of what each call matches', () => {
+    const { machineClasses: _top, ...plain } = serversOnly;
+    const inConditions: BundleRule = {
+      ...plain,
+      conditions: { machineClasses: ['server'] },
+    };
+    const onServer = documentFrom(bundleOf([inConditions]), 'server') as {
+      policies: { match: Record<string, unknown> }[];
+    };
+
+    expect(onServer.policies).toHaveLength(1);
+    expect(onServer.policies[0]?.match).not.toHaveProperty('machineClasses');
+    expect(
+      (documentFrom(bundleOf([inConditions]), 'workstation') as Written).policies,
+    ).toEqual([]);
+  });
+
+  it('carries the project, the workspace mark and who decided it to the gate', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-bundle-provenance-'));
+    await applyBundle(home, bundleOf([serversOnly]), { machineClass: 'server' });
+    const [policy] = await loadPoliciesFromFile(orgPolicyPath(home));
+
+    expect(policy).toMatchObject({
+      name: 'deploys',
+      project: 'billing',
+      workspace: true,
+      decidedBy: 'Ada',
+      decidedAt: '2026-10-01T09:00:00.000Z',
+    });
+    await rm(home, { recursive: true, force: true });
+  });
+});

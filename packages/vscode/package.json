@@ -1,0 +1,11 @@
+{
+  "name": "@memnox/vscode",
+  "version": "0.13.14",
+  "description": "The VS Code side of the Memnox voice: brings forward the integrated terminal a session runs in, and types into it an instruction the person said yes to.",
+  "private": true,
+  "license": "Apache-2.0",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "tsup"
+  }
+}

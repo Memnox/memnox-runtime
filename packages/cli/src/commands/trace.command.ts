@@ -3,7 +3,12 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import type { Command } from 'commander';
-import { ENFORCEMENT_MODE, LEDGER_LOOKUP_LIMIT, type MemnoxEvent } from '@memnox/core';
+import {
+  ENFORCEMENT_MODE,
+  LEDGER_LOOKUP_LIMIT,
+  type MemnoxEvent,
+  delegationChain,
+} from '@memnox/core';
 import type { CliContext } from '../cli-context';
 import type { FlowRow } from '../flow';
 import { withEvents } from '../event-store';
@@ -67,7 +72,7 @@ function renderEvent(context: CliContext, event: MemnoxEvent): void {
   const observing = event.mode === ENFORCEMENT_MODE.OBSERVE ? ' (observing)' : '';
   flow.rows(event.operation, [
     rowOf('target', event.target),
-    rowOf('agent', event.agent),
+    rowOf('agent', delegationChain(event)),
     rowOf('session', event.sessionId),
     rowOf('at', event.at),
     rowOf('decision', style.effect(event.effect, `${event.effect}${observing}`)),

@@ -4,7 +4,12 @@
  */
 import { execFile, spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { ownProcessEnv } from '@memnox/core';
+import { updatesLogPath } from '../../memnox-paths';
+import { installedFrom, judgeRelease, type Verdict } from './provenance';
 
 /** The name this CLI is published under. */
 const PACKAGE = 'memnox';
@@ -12,6 +17,9 @@ const LATEST = `${PACKAGE}@latest`;
 
 /** Long enough for a slow registry, short enough that an offline laptop is not left waiting. */
 const LOOKUP_TIMEOUT_MS = 10_000;
+
+/** A whole install into a scratch directory and an audit of it, on a slow connection. */
+const VERIFY_TIMEOUT_MS = 180_000;
 
 export const INSTALL_METHOD = {
   NPM: 'npm global',
@@ -84,6 +92,81 @@ export function latestPublished(): Promise<string | null> {
         const version = String(stdout).trim();
         resolve(err === null && version !== '' ? version : null);
       },
+    );
+  });
+}
+
+/** The upgrade pinned to the version that was verified, so a release cut since cannot slip in. */
+export function pinnedTo(command: readonly string[], version: string): string[] {
+  return command.map((part) => (part === LATEST ? `${PACKAGE}@${version}` : part));
+}
+
+/**
+ * Installs exactly the release into a scratch directory with no scripts run, then lets npm
+ * check every signature and attestation in it; the verdict on who built ours is ours to give.
+ */
+export async function verifyRelease(version: string): Promise<Verdict> {
+  const scratch = await mkdtemp(join(tmpdir(), 'memnox-verify-'));
+  try {
+    await writeFile(join(scratch, 'package.json'), '{"private":true}\n');
+    const install = await npmIn(scratch, [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      `${PACKAGE}@${version}`,
+    ]);
+    if (!install.ok)
+      return {
+        ok: false,
+        reason: `npm could not fetch ${PACKAGE}@${version} to check it`,
+      };
+    // Exit code 1 is how npm reports a bad signature, so the JSON is read either way.
+    const audit = await npmIn(scratch, [
+      'audit',
+      'signatures',
+      '--json',
+      '--include-attestations',
+    ]);
+    const lockfile = await readFile(join(scratch, 'package-lock.json'), 'utf8');
+    return judgeRelease(audit.stdout, installedFrom(lockfile), version);
+  } catch {
+    return { ok: false, reason: 'npm could not be run to check the release' };
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/** What one upgrade was, kept whether or not it was verified. */
+export interface UpdateRecord {
+  at: string;
+  from: string;
+  to: string;
+  verified: boolean;
+}
+
+/** Appended owner only, because an install somebody chose not to verify is worth finding later. */
+export async function recordUpdate(home: string, record: UpdateRecord): Promise<void> {
+  const path = updatesLogPath(home);
+  await mkdir(dirname(path), { recursive: true });
+  await appendFile(path, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+}
+
+function npmIn(
+  cwd: string,
+  args: readonly string[],
+): Promise<{ ok: boolean; stdout: string }> {
+  return new Promise((resolve) => {
+    execFile(
+      'npm',
+      [...args],
+      {
+        cwd,
+        env: ownProcessEnv(),
+        timeout: VERIFY_TIMEOUT_MS,
+        maxBuffer: 64 * 1024 * 1024,
+      },
+      (err, stdout) => resolve({ ok: err === null, stdout: String(stdout) }),
     );
   });
 }

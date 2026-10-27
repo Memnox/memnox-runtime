@@ -4,6 +4,7 @@ import {
   UNNAMED_AGENT,
   type MemnoxEvent,
   redactSecrets,
+  uploadedRef,
 } from '@memnox/core';
 
 import { CLOUD_EVENT, eventOf, MAX_POST, type CloudEvent } from './cloud-event';
@@ -38,7 +39,7 @@ interface FittedBatch {
  * One action, in the kind the control plane's activity projection reads. The payload's
  * field names are the projection's, spelled out here rather than left to match by luck.
  */
-export function draftFrom(event: MemnoxEvent): CloudEvent {
+export function draftFrom(event: MemnoxEvent, pathKey: Buffer | null = null): CloudEvent {
   return eventOf({
     kind: CLOUD_EVENT.ACTION_RECORDED,
     // Stable across a resend, which is what lets the control plane deduplicate.
@@ -48,7 +49,7 @@ export function draftFrom(event: MemnoxEvent): CloudEvent {
     actorType: event.actorType,
     occurredAt: Date.parse(event.at),
     agentSessionId: event.sessionId,
-    payload: { ...actionOf(event), ...verdictOf(event), ...resultOf(event) },
+    payload: { ...actionOf(event, pathKey), ...verdictOf(event), ...resultOf(event) },
   });
 }
 
@@ -56,7 +57,10 @@ export function draftFrom(event: MemnoxEvent): CloudEvent {
  * As many actions as fit, with every row each implies, counted in rows rather than
  * actions so the batch is not refused. The cursor advances only past what was included.
  */
-export function fitting(events: readonly MemnoxEvent[]): FittedBatch {
+export function fitting(
+  events: readonly MemnoxEvent[],
+  pathKey: Buffer | null = null,
+): FittedBatch {
   const sessions = new Set<string>();
   const through: MemnoxEvent[] = [];
   let rows = 0;
@@ -74,7 +78,7 @@ export function fitting(events: readonly MemnoxEvent[]): FittedBatch {
   return {
     drafts: [
       ...sessionsFrom(through),
-      ...through.flatMap((event) => [draftFrom(event), ...approvalsFrom(event)]),
+      ...through.flatMap((event) => [draftFrom(event, pathKey), ...approvalsFrom(event)]),
     ],
     through,
   };
@@ -89,7 +93,8 @@ function agentOf(event: MemnoxEvent, ...keys: readonly string[]): Record<string,
   return Object.fromEntries(keys.map((key) => [key, event.agent]));
 }
 
-function actionOf(event: MemnoxEvent): Record<string, unknown> {
+/** `pathKey` is the machine's own, given only when the person chose to send paths hashed. */
+function actionOf(event: MemnoxEvent, pathKey: Buffer | null): Record<string, unknown> {
   return {
     // Both projections key their rows on this and neither falls back to anything.
     ...agentOf(event, 'agentId'),
@@ -97,7 +102,9 @@ function actionOf(event: MemnoxEvent): Record<string, unknown> {
     operation: event.operation,
     classes: [event.class],
     // The local ledger keeps the target whole for `why`; what leaves the machine is masked.
-    ...(event.target === undefined ? {} : { resourceRef: redactSecrets(event.target) }),
+    ...(event.target === undefined
+      ? {}
+      : { resourceRef: uploadedRef(event.operation, event.target, pathKey) }),
     ...(event.argsDigest === undefined ? {} : { argsDigest: event.argsDigest }),
     // Ids only: the control plane holds the decisions and asks whoever answers for one.
     ...(event.decisionIds === undefined ? {} : { decisionIds: [...event.decisionIds] }),

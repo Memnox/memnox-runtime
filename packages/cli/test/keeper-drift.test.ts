@@ -353,6 +353,7 @@ describe('dormant agents', () => {
             daemon: 'keeping',
             agents: 2,
             hooked: [],
+            unhooked: [],
             mcpServers: 0,
             mcpWrapped: 0,
             rules: 0,

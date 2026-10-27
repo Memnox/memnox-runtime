@@ -74,6 +74,23 @@ export function sessionOf(hook: HookFields): string {
   return '';
 }
 
+/** Who an action is filed under below the agent: the helper it handed the work to. */
+export interface Delegation {
+  subagent?: string;
+  subagentType?: string;
+}
+
+/**
+ * The helper a tool call came from, where the host names one. Claude Code sets these on
+ * a subagent's own calls and leaves them off the main turn's, so absent means the agent.
+ */
+export function delegationOf(hook: HookFields): Delegation {
+  const subagent = firstText(hook, ['agent_id']);
+  if (subagent === undefined) return {};
+  const subagentType = firstText(hook, ['agent_type']);
+  return { subagent, ...(subagentType === undefined ? {} : { subagentType }) };
+}
+
 /** Where the agent is working: its own `cwd`, or the first folder Cursor has open. */
 export function cwdOf(hook: HookFields): string | undefined {
   const cwd = hook['cwd'];

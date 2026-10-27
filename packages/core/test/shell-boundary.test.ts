@@ -38,6 +38,8 @@ describe('the project boundary, through the shell', () => {
     "cd /Users/me/work/runtime && python3 - <<'EOF'\nopen('src/gate.ts','w').write('x')\nEOF",
     `python3 -c "open('/Users/me/work/runtime/src/gate.ts','w').write('x')"`,
     'git -C /Users/me/work/runtime commit -am wip',
+    'cd /Users/me/work/runtime && $EDITOR src/gate.ts',
+    'cd /Users/me/work/runtime && f=$(ls src | head -1); sed -i "" s/a/b/ $f',
   ])('asks before `%s` reaches another repository', (line) => {
     expect(effectsOf(line)).toContain('ask');
   });
@@ -47,6 +49,7 @@ describe('the project boundary, through the shell', () => {
     'cat /Users/me/work/runtime/src/gate.ts',
     'grep -r lease /Users/me/work/runtime/src',
     'pnpm test',
+    'cd /Users/me/work/runtime && f=$(grep -rl lease src | head -1); grep -n token $f',
   ])('leaves `%s` alone, inside the project or only reading', (line) => {
     expect(effectsOf(line)).not.toContain('ask');
   });

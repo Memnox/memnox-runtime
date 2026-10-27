@@ -7,6 +7,7 @@ import {
   msToMinutes,
   secondsToMs,
   type Account,
+  type MachineClass,
 } from '@memnox/core';
 
 import { CLI_VERSION } from '../defaults';
@@ -35,6 +36,8 @@ export interface Collected {
   workspaceId: string;
   /** Where an advisory principal talks to, present when it enrolled as one. */
   mcpUrl?: string;
+  /** The person who approved it and so owns it, where the control plane says. */
+  ownerPersonId?: string;
 }
 
 /** What the control plane says while nobody has answered yet. */
@@ -60,6 +63,8 @@ interface EnrolOptions {
   mode?: string;
   /** `mcp` for an advisory principal, shown on the approval screen as cooperation rather than interposition. */
   connection?: string;
+  /** A server or a workstation, kept by the control plane from enrolment on and never from a heartbeat. */
+  machineClass?: MachineClass;
 }
 
 /** Ed25519, generated here. The private half never leaves this process. */
@@ -105,6 +110,7 @@ function codeRequestBody(
     runtimeVersion: CLI_VERSION,
     ...(options.mode === undefined ? {} : { mode: options.mode }),
     ...(options.connection === undefined ? {} : { connection: options.connection }),
+    ...(options.machineClass === undefined ? {} : { machineClass: options.machineClass }),
   };
 }
 
@@ -233,7 +239,40 @@ export function accountFrom(
     enrolledAt: at,
     // Recorded as heard rather than applied, or the first heartbeat would rewrite `config.toml`.
     ...(isEnforcementMode(collected.mode) ? { cloudMode: collected.mode } : {}),
+    ...(options.machineClass === undefined ? {} : { machineClass: options.machineClass }),
+    ...(collected.ownerPersonId === undefined
+      ? {}
+      : { ownerPersonId: collected.ownerPersonId }),
   };
 }
+
+/** What the console's join token refusal says, for a token used, expired or revoked. */
+const JOIN_REFUSED =
+  'That join token was already used, has expired, or was revoked. Make a new one in the console.';
+
+/**
+ * Enrols with a single use join token an admin made in the console, so a server joins in one line
+ * with no browser. The token is the approval; the machine's own key is still made here and never leaves.
+ */
+export async function joinWithToken(
+  options: EnrolOptions & { joinToken: string },
+  publicKey: string,
+): Promise<Collected> {
+  const answer = await callCloud<Collected>({
+    baseUrl: options.baseUrl,
+    path: '/v1/machines/join',
+    method: 'POST',
+    body: { token: options.joinToken, ...codeRequestBody(options, publicKey) },
+  });
+  const ok = answer.status === HTTP.OK || answer.status === HTTP.CREATED;
+  if (ok && answer.body !== undefined) return answer.body;
+  if (answer.status >= HTTP.BAD_REQUEST && answer.status < SERVER_ERRORS) {
+    throw new EnrolmentRefused(JOIN_REFUSED);
+  }
+  throw new EnrolmentRefused(`the control plane answered ${answer.status}.`);
+}
+
+/** The first status that is the control plane's own fault rather than the request's. */
+const SERVER_ERRORS = 500;
 
 export { CloudUnreachable };

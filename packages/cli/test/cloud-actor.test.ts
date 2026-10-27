@@ -24,7 +24,7 @@ describe('who acted, in the control plane’s own word', () => {
         kind: 'protection_stopped',
         id: 'c1',
         at: '2026-09-27T00:00:00.000Z',
-        by: 'moise',
+        by: 'maya',
         mode: 'enforce',
       },
       {

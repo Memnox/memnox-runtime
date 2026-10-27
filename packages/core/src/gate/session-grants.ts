@@ -9,6 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { TOOL_CLASS } from '../discovery/classify';
 import { MEMNOX_HOME } from '../config/config';
+import { exclusively } from '../store/exclusive';
 import { readJsonFile, writeJsonFile } from '../store/json-records';
 
 /** Two yeses to the same action in one session, and the third is not asked. */
@@ -186,24 +187,39 @@ export class FileGrants implements SessionGrants {
   }
 
   async grant(subject: GrantSubject): Promise<void> {
-    await this.write(subject, withGrant(await this.read(subject), subject));
+    await this.locked(async () => {
+      await this.write(subject, withGrant(await this.read(subject), subject));
+    });
   }
 
   async approved(subject: GrantSubject): Promise<boolean> {
-    const { record, learned } = withApproval(await this.read(subject), subject);
-    await this.write(subject, record);
-    return learned;
+    return this.locked(async () => {
+      const { record, learned } = withApproval(await this.read(subject), subject);
+      await this.write(subject, record);
+      return learned;
+    });
   }
 
   /** "Once" was the answer: one call, before the question would have run out. */
   async allowOnce(subject: GrantSubject, until: string): Promise<void> {
-    const record = await this.read(subject);
-    const once = [...record.once, { key: onceKey(subject), until }];
-    await this.write(subject, { ...record, once });
+    await this.locked(async () => {
+      const record = await this.read(subject);
+      const once = [...record.once, { key: onceKey(subject), until }];
+      await this.write(subject, { ...record, once });
+    });
   }
 
   /** Spends a single yes for this call, true where there was one still good. */
   async takeOnce(subject: GrantSubject, now: string): Promise<boolean> {
+    return this.locked(() => this.spendOnce(subject, now));
+  }
+
+  /** Two processes spending one yes at once must not both get it, so every change is serialized. */
+  private locked<T>(work: () => Promise<T>): Promise<T> {
+    return exclusively(join(this.home, MEMNOX_HOME, GRANTS_DIR), work);
+  }
+
+  private async spendOnce(subject: GrantSubject, now: string): Promise<boolean> {
     const record = await this.read(subject);
     const live = record.once.filter((each) => each.until > now);
     const at = live.findIndex((each) => each.key === onceKey(subject));

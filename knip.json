@@ -1,6 +1,11 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "ignore": [
-    "packages/*/test/*-harness.ts"
+    "packages/*/test/*-harness.ts",
+    "packages/cli/src/protect/agent-plugins/**"
+  ],
+  "ignoreDependencies": [
+    "vscode",
+    "@memnox/vscode"
   ]
 }

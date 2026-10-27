@@ -190,6 +190,38 @@ describe('novelty: this agent has never done this before', () => {
     expect(verdict.reason).toContain('This is destructive.');
   });
 
+  it('does not let reads through a database tool vouch for its first delete', () => {
+    const { notice } = rig();
+    const query = (toolClass: string): ActionRequest => ({
+      action: 'mcp.query',
+      target: 'support-db',
+      toolClass,
+    });
+    expect(notice.consider(query('read'), allowed()).effect).toBe(DECISION_EFFECT.ALLOW);
+
+    const bounded = notice.consider(query('write'), allowed());
+    expect(bounded.effect).toBe(DECISION_EFFECT.ASK);
+    expect(bounded.reason).toContain('first change through query on support-db');
+    notice.personAllowed(query('write'));
+    expect(notice.consider(query('write'), allowed()).effect).toBe(DECISION_EFFECT.ALLOW);
+
+    // A DELETE with no WHERE is classed destructive, so routine bounded deletes do not cover it.
+    const unbounded = notice.consider(query('destructive'), allowed());
+    expect(unbounded.effect).toBe(DECISION_EFFECT.ASK);
+    expect(unbounded.reason).toContain(
+      'first destructive call through query on support-db',
+    );
+  });
+
+  it('keeps the key a tool already had where the call does what the name says', () => {
+    const named = shapeOf(request('mcp.create_issue', 'github'));
+    const called = shapeOf({
+      ...request('mcp.create_issue', 'github'),
+      toolClass: 'write',
+    });
+    expect(called.novelty).toEqual(named.novelty);
+  });
+
   it('forgets what is older than the history, so last year is not a licence', () => {
     const { notice, clock } = rig();
     const ssh = request('network.ssh', 'deploy@db.internal');

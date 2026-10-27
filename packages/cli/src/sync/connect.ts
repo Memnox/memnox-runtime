@@ -1,4 +1,4 @@
-import { hostname } from 'node:os';
+import { hostname, platform } from 'node:os';
 
 import {
   ENFORCEMENT_MODE,
@@ -6,7 +6,9 @@ import {
   saveConfig,
   writeAccount,
   accountPathFor,
+  detectMachineClass,
   type Account,
+  type MachineClass,
 } from '@memnox/core';
 
 import type { CliContext } from '../cli-context';
@@ -14,12 +16,14 @@ import { askOnTerminal, type NameAsker } from '../agents/name-prompt';
 import { Flow } from '../flow';
 import { openBrowser } from './browser';
 import { insecureBaseUrl } from './client';
+import { claimDeviceSpace } from './device-space';
 import {
   accountFrom,
   approvalUrl,
   CloudUnreachable,
   EnrolmentRefused,
   goodFor,
+  joinWithToken,
   machineKeypair,
   pageCarriesCode,
   requestCode,
@@ -34,8 +38,7 @@ import {
  * so there is one device flow and one check that refuses `http://`.
  */
 
-/** Where a workspace lives unless somebody says otherwise. */
-export const DEFAULT_BASE_URL = 'https://api.memnox.com';
+export { DEFAULT_BASE_URL } from './cloud-url';
 
 interface ConnectOptions {
   url: string;
@@ -44,6 +47,10 @@ interface ConnectOptions {
   open?: boolean;
   /** Given rather than asked for, so a script names each box and never hangs on a question. */
   name?: string;
+  /** Said by the person with --class, otherwise read off this machine. */
+  machineClass?: MachineClass;
+  /** A single use token from the console, which stands in for approving in a browser. */
+  joinToken?: string;
 }
 
 export type ConnectSeams = WaitSeams & {
@@ -59,6 +66,7 @@ interface EnrolmentRequest {
   baseUrl: string;
   mode?: string;
   label?: string;
+  machineClass?: MachineClass;
 }
 
 interface ApprovalStepInput {
@@ -101,13 +109,19 @@ export async function connectMachine(
     baseUrl: options.url,
     ...(options.enforce === true ? { mode: ENFORCEMENT_MODE.ENFORCE } : {}),
     ...(named === undefined ? {} : { label: named }),
+    machineClass: options.machineClass ?? detectMachineClass(platform(), process.env),
   };
-  const offer = await request(enrolment, keys.publicKey);
-  await renderApprovalStep({ flow, options, offer, seams });
-  const collected = await waitForApproval(options.url, offer, seams);
+  const collected = await approvedBy(flow, {
+    enrolment,
+    options,
+    seams,
+    publicKey: keys.publicKey,
+  });
 
   const account = accountFrom(enrolment, keys, collected, new Date().toISOString());
   await writeAccount(home, account);
+  // A space this Mac acted in before any account moves its paired phones onto this machine now.
+  await claimDeviceSpace(home).catch(() => null);
   if (options.enforce === true) await enforceHere(home);
   renderEnrolled({ flow, home, named, collected });
 
@@ -117,6 +131,41 @@ export async function connectMachine(
     workspaceId: collected.workspaceId,
     mode: collected.mode,
   };
+}
+
+interface Approval {
+  enrolment: EnrolmentRequest;
+  options: ConnectOptions;
+  seams: ConnectSeams;
+  publicKey: string;
+}
+
+/** A join token from the console, or a person approving in the browser, whichever this run has. */
+async function approvedBy(flow: Flow, approval: Approval): Promise<Collected> {
+  const { enrolment, options, seams, publicKey } = approval;
+  const joinToken = options.joinToken;
+  if (joinToken !== undefined) {
+    flow.step('Joining with the token from the console');
+    return refusedPlainly(enrolment.baseUrl, () =>
+      joinWithToken({ ...enrolment, joinToken }, publicKey),
+    );
+  }
+  const offer = await request(enrolment, publicKey);
+  await renderApprovalStep({ flow, options, offer, seams });
+  return waitForApproval(options.url, offer, seams);
+}
+
+/** A refusal said in a sentence, and an unreachable plane said as one that changed nothing. */
+async function refusedPlainly<T>(baseUrl: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (err instanceof CloudUnreachable) {
+      throw new Error(`Could not reach ${baseUrl}. This machine is unchanged.`);
+    }
+    if (err instanceof EnrolmentRefused) throw new Error(err.message);
+    throw err;
+  }
 }
 
 /** Before a key is generated, so a refused URL never reads as a network fault. */

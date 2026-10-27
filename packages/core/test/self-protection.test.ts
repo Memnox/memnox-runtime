@@ -32,6 +32,33 @@ describe('what governs an agent is never the agent’s to change', () => {
     expect(verdict.reason).toContain('a person changes and an agent never does');
   });
 
+  it.each([
+    '/Users/me/.claude/projects/-Users-me-work/9be31b1c.jsonl',
+    '/Users/me/.codex/sessions/2026/10/23/rollout.jsonl',
+  ])(
+    'denies rewriting the session record at %s, which would be editing the evidence',
+    (target) => {
+      for (const action of ['filesystem.write', 'filesystem.delete']) {
+        expect(gate().evaluate({ action, toolClass: 'write', target }).effect).toBe(
+          'deny',
+        );
+      }
+    },
+  );
+
+  it('leaves the rest of a project folder and reading a session record alone', () => {
+    const memory = '/Users/me/.claude/projects/-Users-me-work/memory/notes.md';
+    expect(
+      gate().evaluate({ action: 'filesystem.write', toolClass: 'write', target: memory })
+        .effect,
+    ).toBe('allow');
+    const record = '/Users/me/.claude/projects/-Users-me-work/9be31b1c.jsonl';
+    expect(
+      gate().evaluate({ action: 'filesystem.read', toolClass: 'read', target: record })
+        .effect,
+    ).toBe('allow');
+  });
+
   it('leaves a write anywhere else to the rules', () => {
     const verdict = gate().evaluate({
       action: 'filesystem.write',
@@ -49,6 +76,15 @@ describe('what governs an agent is never the agent’s to change', () => {
     'uninstall',
     'rewind --last',
     'rewind --to ms_1',
+    'voice forget-key',
+    'voice forget-key --yes',
+    'pair',
+    'pair --name hostinger',
+    'devices grant dev_1 rules',
+    'signin',
+    'signout',
+    'next --hand-over git.push',
+    'autopilot --revoke ern_1',
   ])('denies `memnox %s` typed by an agent', (line) => {
     const [binary, ...args] = ['memnox', ...line.split(' ')];
     const resolved = resolveAction(binary as string, args);
@@ -67,6 +103,13 @@ describe('what governs an agent is never the agent’s to change', () => {
     'report',
     'allow --list',
     'rewind --list',
+    'voice',
+    'devices',
+    'devices list',
+    'next',
+    'next --agent claude-code',
+    'autopilot',
+    'autopilot --list',
   ])('lets `memnox %s` through, since it only reads', (line) => {
     expect(loosens(line)).toBe(false);
   });
@@ -157,5 +200,36 @@ describe('what governs an agent, reached some other way', () => {
       target: join(root, 'project', 'g', 'grants', 'session.json'),
     });
     expect(verdict.effect).toBe('deny');
+  });
+});
+
+/* Who an agent is and who it works for are what the rules decide on, so an agent that
+   could set them for itself could hand itself any person's authority. */
+describe('who the rules take an agent to be is never the agent’s to say', () => {
+  const line = (target: string): string =>
+    gate().evaluate({ action: 'shell.execute', target }).effect;
+
+  it.each([
+    'MEMNOX_PRINCIPAL=dba-ana psql -c "delete from customers"',
+    'export MEMNOX_AGENT_ROLE=deployer',
+    'env MEMNOX_AGENT_NAME=codex claude -p fix',
+    'unset MEMNOX_PARENT_AGENTS; claude -p fix',
+    'env -u MEMNOX_PARENT_AGENTS claude -p fix',
+  ])('denies `%s`', (target) => {
+    expect(line(target)).toBe('deny');
+  });
+
+  it.each([
+    'echo $MEMNOX_PRINCIPAL',
+    'printenv MEMNOX_AGENT_ROLE',
+    'MY_MEMNOX_PRINCIPAL=x make',
+  ])('still lets `%s` run', (target) => {
+    expect(line(target)).toBe('allow');
+  });
+
+  it('treats naming a person or a job for a run as loosening, and a bare run as not', () => {
+    expect(loosens('run --for dba-ana -- claude')).toBe(true);
+    expect(loosens('run --role=deployer -- claude')).toBe(true);
+    expect(loosens('run --task "fix the build" -- claude')).toBe(false);
   });
 });

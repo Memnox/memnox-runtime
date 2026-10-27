@@ -8,6 +8,7 @@ import {
   EXECUTION,
   localRuleRef,
   newEventId,
+  ruledFor,
   UNNAMED_AGENT,
   UNNAMED_SESSION,
   type EventSink,
@@ -51,7 +52,8 @@ export function callEventFor(
     operation: operationFor(record.tool),
     // The server, which is what the call reached through and what the rule scoped on.
     target: record.server,
-    class: classifyTool({ name: record.tool }).class,
+    // What the call was handed decides where the proxy read it, as it did for the verdict.
+    class: record.class ?? classifyTool({ name: record.tool }).class,
     effect: record.effect,
     mode: ENFORCEMENT_MODE.ENFORCE,
     reason: record.reason,
@@ -59,6 +61,7 @@ export function callEventFor(
     argsDigest: record.argsDigest,
     execution: blocked ? EXECUTION.BLOCKED : EXECUTION.COMPLETED,
     ...(record.rule === undefined ? {} : { rule: localRuleRef(record.rule) }),
+    ...ruledFor(record),
   };
 }
 

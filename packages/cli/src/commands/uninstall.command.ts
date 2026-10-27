@@ -29,6 +29,10 @@ import type { CliContext } from '../cli-context';
 import { OFFBOARD, offboardAgent } from '../agents/onboard';
 import { listRecords } from '../agents/onboarding';
 import { removeClaudeHook } from '../protect/claude-hook';
+import { removeHermesPlugin } from '../protect/hermes-plugin';
+import { removeOpenClawPlugin } from '../protect/openclaw-plugin';
+import { removeCopilotHook, removeDevinHook } from '../protect/named-host-hooks';
+import { removeOpenCodePlugin } from '../protect/opencode-plugin';
 import { forgetKept } from '../keeper/kept';
 import { forgetKeeperState } from '../keeper/keeper-state';
 import {
@@ -205,6 +209,11 @@ async function removeTheEditorHooks(
     ['Cursor', await removeCursorHook(home)],
     ['Gemini CLI', await removeGeminiHook(home)],
     ['Windsurf', await removeWindsurfHook(home)],
+    ['Hermes', await removeHermesPlugin(home)],
+    ['OpenClaw', await removeOpenClawPlugin(home)],
+    ['Copilot CLI', await removeCopilotHook(home)],
+    ['Devin', await removeDevinHook(home)],
+    ['OpenCode', await removeOpenCodePlugin(home)],
   ] as const;
   const editors = others.filter(([, removed]) => removed).map(([name]) => name);
 

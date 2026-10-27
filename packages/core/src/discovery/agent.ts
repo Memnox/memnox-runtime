@@ -1,3 +1,5 @@
+import type { AgentHost } from './agent-host';
+import type { ApprovalPosture } from './approval-posture';
 import type { DiscoveredAgentKind } from './discovery.constants';
 
 /** What every agent id starts with, and the only place it is spelled. */
@@ -28,6 +30,10 @@ export interface DiscoveredAgent {
   keypairPath?: string;
   /** The operating-system user, until a person confirms it. */
   ownerHint: string;
+  /** Whether it asks before acting, from the setting it reads. Set by discovery, not a detector. */
+  approval?: ApprovalPosture;
+  /** The binary it runs as, when the product installs one and it is on PATH. */
+  host?: AgentHost;
   firstSeen: string;
   lastSeen: string;
 }

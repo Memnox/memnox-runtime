@@ -111,6 +111,22 @@ describe('what is holding one agent', () => {
     expect(coverageSummary(coverage)).toEqual({ held: 0, total: 1 });
   });
 
+  /* A desktop is driven through the platform's own input and accessibility APIs. There is
+     no wrapper to install, so the honest line is that nothing holds it, never a next step. */
+  it('says plainly that nothing here holds the desktop, and never counts it as held', () => {
+    const coverage = coverageFor(
+      'claude-code',
+      'agt_x',
+      surfaces([SURFACE_KIND.MCP, SURFACE_KIND.DESKTOP], []),
+      EVERYTHING,
+    );
+
+    const desktop = seam(coverage, 'desktop');
+    expect(desktop?.state).toBe(SEAM_STATE.NO_SEAM);
+    expect(desktop?.next).toBeUndefined();
+    expect(coverageSummary(coverage)).toEqual({ held: 0, total: 1 });
+  });
+
   it('reads as fully held once every seam is in place', () => {
     const coverage = coverageFor(
       'codex-cli',

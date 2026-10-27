@@ -26,7 +26,7 @@ const DELETE: ChatQuestion = {
 };
 
 function context(home: string): PickerContext {
-  return { home, runSession: undefined, now: () => NOW, person: () => 'moise' };
+  return { home, runSession: undefined, now: () => NOW, person: () => 'maya' };
 }
 
 async function held(): Promise<{ home: string; held: PendingApproval }> {
@@ -140,7 +140,7 @@ describe('a held question answered in Claude Code’s own picker', () => {
     await new PendingApprovals(home).answer(
       raised.id,
       'session',
-      'Moise in Discord',
+      'Maya in Discord',
       NOW.toISOString(),
     );
 
@@ -156,7 +156,7 @@ describe('a held question answered in Claude Code’s own picker', () => {
     expect(said.hookSpecificOutput.permissionDecisionReason).toContain(
       'said yes for the rest of this session',
     );
-    expect(said.systemMessage).toContain('Moise in Discord already answered this');
+    expect(said.systemMessage).toContain('Maya in Discord already answered this');
   });
 
   it('keeps the DM answer when it lands while the picker is open, and says the pick was not used', async () => {
@@ -165,7 +165,7 @@ describe('a held question answered in Claude Code’s own picker', () => {
     await new PendingApprovals(home).answer(
       raised.id,
       'session',
-      'Moise in Discord',
+      'Maya in Discord',
       NOW.toISOString(),
     );
 

@@ -1,5 +1,12 @@
 import {
   breakerPauseFor,
+  outcomesFrom,
+  describeStrain,
+  isStrained,
+  POST_KIND,
+  SessionPosts,
+  strainOf,
+  type SessionStrain,
   describePause,
   REPLAY_LIMIT,
   SessionPauses,
@@ -58,7 +65,10 @@ async function resumedAt(home: string, sessionId: string): Promise<string | null
  * Only what happened since the last resume, or the
  * failures that caused the pause trip it again.
  */
-async function readSinceResume(home: string, sessionId: string): Promise<MemnoxEvent[]> {
+export async function readSinceResume(
+  home: string,
+  sessionId: string,
+): Promise<MemnoxEvent[]> {
   const since = await resumedAt(home, sessionId);
   const store = SqliteEventStore.forHome(home);
   try {
@@ -96,4 +106,48 @@ export async function observeSession(
     // No ledger, or it would not open. The command has already run either way.
     return null;
   }
+}
+
+/**
+ * What this session has failed at and not got past, since the last resume, for the gate to
+ * narrow on. A ledger that will not open is no strain, never a refusal.
+ */
+export async function strainHolding(
+  home: string,
+  sessionId: string | undefined,
+  agent = 'an agent',
+): Promise<SessionStrain | null> {
+  if (sessionId === undefined || sessionId === '') return null;
+  try {
+    const strain = strainOf(outcomesFrom(await readSinceResume(home, sessionId)));
+    await postStrain(home, { sessionId, agent }, strain);
+    return strain;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Said once when a session starts struggling and taken back once it got past it, so a person
+ * away hears it at the moment its reach narrowed and not on every command after.
+ */
+async function postStrain(
+  home: string,
+  who: { sessionId: string; agent: string },
+  strain: SessionStrain,
+): Promise<void> {
+  const posts = new SessionPosts(home);
+  const posted = await posts.read(POST_KIND.STRUGGLING, who.sessionId);
+  if (!isStrained(strain)) {
+    if (posted !== null) await posts.remove(POST_KIND.STRUGGLING, who.sessionId);
+    return;
+  }
+  if (posted !== null) return;
+  await posts.put({
+    kind: POST_KIND.STRUGGLING,
+    sessionId: who.sessionId,
+    agent: who.agent,
+    summary: `${who.agent} is struggling: ${describeStrain(strain)}.`,
+    at: new Date().toISOString(),
+  });
 }

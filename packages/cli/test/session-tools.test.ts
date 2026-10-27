@@ -153,7 +153,7 @@ async function call(
 }
 
 describe('the session tools', () => {
-  it('offers exactly why, status, replay, decisions, memory, brief, fingerprint and rewind', () => {
+  it('offers exactly why, status, replay, decisions, memory, brief, work, fingerprint and rewind', () => {
     expect(SESSION_TOOLS.map((tool) => tool.name)).toEqual([
       'why',
       'status',
@@ -161,6 +161,7 @@ describe('the session tools', () => {
       'decisions',
       'memory',
       'brief',
+      'work',
       'fingerprint',
       'rewind',
     ]);
@@ -388,6 +389,20 @@ describe('what the workspace settled, asked from the session', () => {
     expect(read.withheld).toContain('2 fact(s)');
   });
 
+  it('answers "all the decisions" with what it holds rather than with nothing, as in the voice log', async () => {
+    const answer = await call({ deps: depsFor(await connected()) }, 'memory', {
+      about: 'decisions',
+    });
+    const read = JSON.parse(answer.text) as {
+      facts: { statement: string; kind: string }[];
+      said: string;
+    };
+
+    expect(read.facts).toHaveLength(2);
+    expect(read.facts[0]?.kind).toBe('decision');
+    expect(read.said).toContain('sources');
+  });
+
   it('says a machine that never pulled one holds none, rather than that nothing was settled', async () => {
     const answer = await call({ deps: depsFor(await machine()) }, 'memory', {
       about: 'payments',
@@ -424,6 +439,23 @@ describe('what the workspace settled, asked from the session', () => {
 
     expect(await said(await connected())).toContain('call "brief"');
     expect(await said(await machine())).not.toContain('brief');
+    expect(await said(await connected())).not.toContain('unconfirmed');
+    const guessing = await machine();
+    await writeWorkspaceMemory(guessing, {
+      ...SETTLED,
+      unconfirmed: [
+        {
+          id: 'c1',
+          kind: 'decision',
+          statement: 'Retries move to the queue worker.',
+          subject: 'payments',
+          standing: 'candidate',
+          approved: false,
+          sources: ['slack'],
+        },
+      ],
+    });
+    expect(await said(guessing)).toContain('never as a decision or as permission');
   });
 
   it('briefs from the workspace when it can be asked', async () => {
@@ -440,6 +472,67 @@ describe('what the workspace settled, asked from the session', () => {
 
     expect(asked).toEqual([['src/payments', 'src/billing']]);
     expect(JSON.parse(answer.text)).toMatchObject({ from: 'the workspace, just now' });
+    expect(JSON.parse(answer.text)).not.toHaveProperty('first');
+  });
+
+  it('says a teammate on the file first, in words, beside the brief itself', async () => {
+    const deps = {
+      ...depsFor(await connected()),
+      brief: async () => ({
+        humanWork: [
+          {
+            kind: 'pull_request',
+            person: 'Priya Shah',
+            paths: ['src/billing/invoice.ts'],
+            url: 'https://github.com/acme/api/pull/12',
+            title: 'Retry failed charges',
+          },
+        ],
+      }),
+    };
+
+    const answer = await call({ deps }, 'brief', { paths: 'src/billing' });
+    const read = JSON.parse(answer.text) as { first?: string; brief: unknown };
+
+    expect(read.first).toContain(
+      '- Priya Shah has an open pull request "Retry failed charges" on src/billing/invoice.ts (https://github.com/acme/api/pull/12)',
+    );
+    expect(read.brief).toMatchObject({ humanWork: [{ person: 'Priya Shah' }] });
+  });
+
+  it('hands over what connected tools said apart from the facts, labelled as approved by nobody', async () => {
+    const home = await machine();
+    await writeWorkspaceMemory(home, {
+      ...SETTLED,
+      unconfirmed: [
+        {
+          id: 'c_retry',
+          kind: 'decision',
+          statement: 'Payment retries move to the queue worker.',
+          subject: 'payments',
+          standing: 'candidate',
+          approved: false,
+          sources: ['slack'],
+        },
+      ],
+    });
+
+    const answer = await call({ deps: depsFor(home) }, 'memory', {
+      about: 'payment retries',
+    });
+    const read = JSON.parse(answer.text) as {
+      facts: { statement: string }[];
+      unconfirmed: { note: string; candidates: { approved: boolean; from: string }[] };
+    };
+
+    expect(read.facts.map((each) => each.statement)).toEqual([
+      'Retry logic must remain inside PaymentService.',
+    ]);
+    expect(read.unconfirmed.note).toContain('approved by nobody');
+    expect(read.unconfirmed.candidates[0]).toMatchObject({
+      approved: false,
+      from: 'read from Slack',
+    });
   });
 
   it('briefs from what this machine holds when the workspace cannot be asked', async () => {

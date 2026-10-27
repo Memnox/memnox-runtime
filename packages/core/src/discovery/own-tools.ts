@@ -28,6 +28,7 @@ export const WORKSPACE_TOOL_ANNOTATIONS: Readonly<Record<string, McpToolAnnotati
   memnox_people: READS,
   memnox_workspace: READS,
   memnox_sources: READS,
+  memnox_source: READS,
   // These write the workspace's own ledger, approvals and leases, and nothing outside Memnox.
   memnox_report_action: WRITES,
   memnox_request_approval: WRITES,
@@ -45,6 +46,7 @@ export const SESSION_TOOL_ANNOTATIONS: Readonly<Record<string, McpToolAnnotation
   decisions: READS,
   memory: READS,
   brief: READS,
+  work: READS,
   // Writes one file in `.memnox`, and only ever adds what agents are held to.
   fingerprint: WRITES,
   rewind: DESTROYS,

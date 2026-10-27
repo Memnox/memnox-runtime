@@ -3,11 +3,26 @@
  * back, the transcript teed beside the terminal, and the interceptors row on the screen.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createWriteStream, mkdirSync, readdirSync, type WriteStream } from 'node:fs';
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  type WriteStream,
+} from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable, Transform } from 'node:stream';
 
-import { interceptorDirFor } from '@memnox/interceptors';
+import { pathValueOf, realPath } from '@memnox/core';
+import {
+  interceptorDirFor,
+  resolveReal,
+  shimNamesIn,
+  spawnPlanFor,
+  WINDOWS,
+  type SpawnPlan,
+} from '@memnox/interceptors';
 import type { CliContext } from '../../cli-context';
 import type { FlowRow } from '../../flow';
 import { maskEach } from './transcript';
@@ -15,7 +30,8 @@ import { maskEach } from './transcript';
 /** What is actually in the interceptor directory. Empty when there is no directory. */
 export function interceptorsIn(home: string): readonly string[] {
   try {
-    return readdirSync(interceptorDirFor(home));
+    // One per binary, though Windows keeps a `.cmd` beside each script.
+    return shimNamesIn(readdirSync(interceptorDirFor(home)));
   } catch {
     // Not there, which is the same answer as empty: nothing on PATH will be wrapped.
     return [];
@@ -48,17 +64,18 @@ export function defaultStart(
   env: NodeJS.ProcessEnv,
   transcript?: string,
 ): Promise<number> {
-  if (transcript === undefined) return startPlain(command, args, env);
-  return startTeed(command, args, env, transcript);
+  const plan = startPlanFor(command, args, env);
+  const options = { env, windowsVerbatimArguments: plan.verbatim };
+  if (transcript === undefined) return startPlain(plan, options);
+  return startTeed(plan, options, transcript);
 }
 
-function startPlain(
-  command: string,
-  args: readonly string[],
-  env: NodeJS.ProcessEnv,
-): Promise<number> {
+/** What the plan and the environment settle before either start is chosen. */
+type StartOptions = { env: NodeJS.ProcessEnv; windowsVerbatimArguments: boolean };
+
+function startPlain(plan: SpawnPlan, options: StartOptions): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn(command, [...args], { stdio: 'inherit', env });
+    const child = spawn(plan.file, plan.args, { stdio: 'inherit', ...options });
     // The agent's exit code is the caller's; a wrapper that swallowed it would lie.
     child.on('exit', (code) => resolve(code ?? 1));
     child.on('error', () => resolve(127));
@@ -67,14 +84,16 @@ function startPlain(
 
 /** Teed rather than intercepted: the terminal sees it unchanged and a masked copy stays for claims. */
 function startTeed(
-  command: string,
-  args: readonly string[],
-  env: NodeJS.ProcessEnv,
+  plan: SpawnPlan,
+  options: StartOptions,
   transcript: string,
 ): Promise<number> {
   mkdirSync(join(transcript, '..'), { recursive: true, mode: 0o700 });
   const log = createWriteStream(transcript, { mode: 0o600 });
-  const child = spawn(command, [...args], { stdio: ['inherit', 'pipe', 'pipe'], env });
+  const child = spawn(plan.file, plan.args, {
+    stdio: ['inherit', 'pipe', 'pipe'],
+    ...options,
+  });
   child.stdout?.pipe(process.stdout);
   child.stderr?.pipe(process.stderr);
   return teedExitCode(
@@ -131,4 +150,22 @@ function teedExitCode(
 
 function isReadable(stream: Readable | null): stream is Readable {
   return stream !== null;
+}
+
+/**
+ * The agent by name everywhere but Windows, where an npm installed agent is a `.cmd` that
+ * Node will not start directly, so it is found through PATHEXT and run under cmd.exe.
+ */
+export function startPlanFor(
+  command: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): SpawnPlan {
+  if (platform !== WINDOWS) return { file: command, args: [...args], verbatim: false };
+  const named = /[\\/]/.test(command);
+  // Our own launcher directory taken off, or `claude` would find the launcher that started this.
+  const path = realPath(pathValueOf(env), homedir());
+  const real = named ? command : resolveReal(command, path, existsSync, { platform });
+  return spawnPlanFor(real ?? command, args, { platform, comspec: env['ComSpec'] });
 }

@@ -7,11 +7,17 @@ import {
   ENFORCEMENT_MODE,
   FileGrants,
   LocalGate,
+  type MemnoxEvent,
   type Policy,
 } from '@memnox/core';
 import { HookAuthorizer } from '../src/hook-authorizer';
-import { learnFromAnswer, rememberQuestion } from '../src/prompt-answers';
+import {
+  learnFromAnswer,
+  learnFromRefusal,
+  rememberQuestion,
+} from '../src/prompt-answers';
 import { answerToolCall } from '../src/tool-hook';
+import { canonicalPayload } from '../src/openclaw-payload';
 
 /**
  * Somebody allowing the same read three times in one session, which is what
@@ -116,5 +122,114 @@ describe('the same yes in the same session', () => {
     const { deps } = await machine();
     for (const id of ['t1', 't2']) await allowedInPrompt(deps, id, 'railway down');
     expect(await allowedInPrompt(deps, 't3', 'railway down')).toBe(DECISION_EFFECT.ASK);
+  });
+});
+
+describe("a yes at OpenClaw's own approval", () => {
+  /* OpenClaw puts Memnox's question through its own approval and says nothing back on a
+     yes; the call running is the yes, matched by the id OpenClaw gives the call. */
+  function exec(event: string, id: string, command: string): unknown {
+    return canonicalPayload({
+      hook_event_name: event,
+      session_id: 'agent:main:main',
+      tool_name: 'exec',
+      tool_use_id: id,
+      tool_input: { command },
+    });
+  }
+
+  async function allowedInOpenClaw(
+    deps: Parameters<typeof learnFromAnswer>[1],
+    id: string,
+    command: string,
+  ): Promise<string> {
+    const before = exec('before_tool_call', id, command);
+    const answer = await answerToolCall(
+      before,
+      { ...deps, agent: 'openclaw', personThere: true },
+      { authorizer: deps.authorizer!, mode: ENFORCEMENT_MODE.ENFORCE, sink: null },
+    );
+    if (answer === null) throw new Error('no answer');
+    if (answer.asked) {
+      await rememberQuestion(before, answer, deps);
+      await learnFromAnswer(exec('after_tool_call', id, command), deps);
+    }
+    return answer.ruling.effect;
+  }
+
+  it('is learned like a yes in Claude Code, so the third is let through', async () => {
+    const { deps } = await machine();
+    expect(await allowedInOpenClaw(deps, 'c1', 'gh pr view 12')).toBe(
+      DECISION_EFFECT.ASK,
+    );
+    expect(await allowedInOpenClaw(deps, 'c2', 'gh pr view 13')).toBe(
+      DECISION_EFFECT.ASK,
+    );
+    expect(await allowedInOpenClaw(deps, 'c3', 'gh pr view 14')).toBe(
+      DECISION_EFFECT.ALLOW,
+    );
+  });
+});
+
+describe("a no at OpenClaw's own approval", () => {
+  /* OpenClaw says how its approval ended, so a no, a timeout and a question nobody could
+     see each become a row; Claude Code's prompt tells nobody about a no at all. */
+  function call(event: string, extra: Record<string, unknown> = {}): unknown {
+    return canonicalPayload({
+      hook_event_name: event,
+      session_id: 'agent:main:main',
+      tool_name: 'exec',
+      tool_use_id: 'c9',
+      tool_input: { command: 'gh pr merge 12' },
+      ...extra,
+    });
+  }
+
+  async function answered(decision: string): Promise<MemnoxEvent[]> {
+    const { deps } = await machine();
+    const rows: MemnoxEvent[] = [];
+    const sink = {
+      append: async (row: MemnoxEvent): Promise<void> => {
+        rows.push(row);
+      },
+      query: async (): Promise<MemnoxEvent[]> => rows,
+    };
+    const withSink = { ...deps, agent: 'openclaw', sink, person: () => 'moise' };
+    const before = call('before_tool_call');
+    const answer = await answerToolCall(
+      before,
+      { ...withSink, personThere: true },
+      { authorizer: deps.authorizer!, mode: ENFORCEMENT_MODE.ENFORCE, sink: null },
+    );
+    if (answer === null || !answer.asked) throw new Error('the merge is asked about');
+    await rememberQuestion(before, answer, withSink);
+    expect(
+      await learnFromRefusal(call('approval_resolved', { decision }), withSink),
+    ).toBe(true);
+    return rows;
+  }
+
+  it('records a no as the person refusing, by name', async () => {
+    const [row] = await answered('deny');
+
+    expect(row).toMatchObject({
+      effect: DECISION_EFFECT.DENY,
+      execution: 'blocked',
+      actorType: 'human',
+      principal: 'moise',
+      operation: 'gh.pr-merge',
+    });
+    expect(row?.reason).toContain("moise said no in openclaw's own approval");
+  });
+
+  it('records a timeout as nobody answering, naming no one', async () => {
+    const [row] = await answered('timeout');
+
+    expect(row).toMatchObject({ execution: 'timed-out', actorType: 'agent' });
+    expect(row?.principal).toBeUndefined();
+  });
+
+  it('leaves a yes to the call running, so it is never recorded twice', async () => {
+    expect(await answered('allow-once')).toEqual([]);
   });
 });

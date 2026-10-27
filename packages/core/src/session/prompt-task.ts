@@ -28,17 +28,48 @@ export function intentOfPrompt(prompt: string): TaskIntent | undefined {
   return undefined;
 }
 
-/** The first line of the prompt, clipped, which is the ask as the person put it. */
+/** A pasted log line, a tag, an image marker or a fence: what somebody pasted, never what they asked. */
+const NOT_THEIR_WORDS =
+  /^(\d{4}-\d{2}-\d{2}[T ]\d|<\/?[a-z_-]+|\[(image|pasted)|```|\$ |>)/i;
+
+/** Quotes and code marks somebody typed around a paste, which are not part of the ask. */
+const WRAPPING = new Set(['`', "'", '"']);
+
+/** A line without its wrapping and spaces at either end, by a loop rather than a pattern that could backtrack. */
+function unwrapped(line: string): string {
+  const wraps = (char: string | undefined): boolean =>
+    char !== undefined && (WRAPPING.has(char) || char.trim() === '');
+  let start = 0;
+  let end = line.length;
+  while (start < end && wraps(line[start])) start += 1;
+  while (end > start && wraps(line[end - 1])) end -= 1;
+  return line.slice(start, end);
+}
+
+/** Enough letters to be a sentence somebody typed rather than a stray mark. */
+const MOST_WORDS_NEEDED = 3;
+
+/**
+ * The first line the person wrote themselves, clipped, which is the ask as they put it. A prompt
+ * that opens with a pasted log or a stray backtick still has its question further down.
+ */
 export function statementOfPrompt(prompt: string): string {
-  const line = prompt.trim().split('\n')[0] ?? '';
+  const lines = prompt
+    .split('\n')
+    .map((each) => unwrapped(each).trim())
+    .filter((each) => each !== '' && !NOT_THEIR_WORDS.test(each));
+  const line =
+    lines.find((each) => (each.match(/[a-z]{2,}/gi) ?? []).length >= MOST_WORDS_NEEDED) ??
+    lines.find((each) => /[a-z]/i.test(each)) ??
+    '';
   return line.length <= MOST_STATEMENT_CHARS
     ? line
     : `${line.slice(0, MOST_STATEMENT_CHARS - 1)}…`;
 }
 
 /**
- * The task a prompt declares, or null for one that declares nothing to go on. A task a
- * person declared by hand is never replaced by one read from a prompt.
+ * The task a prompt declares, or null for one that declares nothing. A hand declared task is never
+ * replaced; the first prompt stays the mission and a follow up like "go ahead" is the latest ask.
  */
 export function taskFromPrompt(
   prompt: string,
@@ -48,18 +79,24 @@ export function taskFromPrompt(
   if (existing !== null && existing.declaredBy !== DECLARED_BY_PROMPT) return null;
   const statement = statementOfPrompt(prompt);
   if (statement === '') return null;
+  // The intent follows the latest prompt, so "now fix it" still lifts an investigation.
   const intent = intentOfPrompt(prompt);
+  const task = taskFor(
+    {
+      sessionId: moment.sessionId,
+      statement: existing?.statement ?? statement,
+      scope: {},
+      ...(intent === undefined ? {} : { intent }),
+    },
+    moment.now,
+  );
+  if (existing === null) return { ...task, declaredBy: DECLARED_BY_PROMPT };
   return {
-    ...taskFor(
-      {
-        sessionId: moment.sessionId,
-        statement,
-        scope: {},
-        ...(intent === undefined ? {} : { intent }),
-      },
-      moment.now,
-    ),
+    ...task,
+    id: existing.id,
+    declaredAt: existing.declaredAt,
     declaredBy: DECLARED_BY_PROMPT,
+    latestAsk: statement,
   };
 }
 

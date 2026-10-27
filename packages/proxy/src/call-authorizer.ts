@@ -1,14 +1,21 @@
 import {
+  alternativeFor,
   classifyToolCall,
+  databaseToolCall,
+  LocalGate,
+  withStatement,
+  type DatabaseToolCall,
   environmentOfArguments,
   DECISION_EFFECT,
   PROTECTION_STOPPED_REASON,
   type ActionRequest,
   type Alternative,
   type DecisionEffect,
-  type LocalGate,
+  type LocalVerdict,
+  withOutgoingData,
 } from '@memnox/core';
 
+import { fixedGate, type GateSource } from './live-gate';
 import { operationFor } from './ledger';
 import type { ToolManifest } from './tool-manifest';
 import { heldReason, type SessionLimits } from './session-limits';
@@ -24,6 +31,8 @@ export interface CallVerdict {
   reason: string;
   /** What the local pass found: rule ids only, safe to send onward. */
   signals?: string[];
+  /** The person this was ruled for, as the run named them. */
+  principal?: string;
   /** What the agent may use instead, carried into the denial the client reads. */
   alternative?: Alternative;
   /** The verdict this came from, so a proxied call joins its decision in the ledger. */
@@ -86,31 +95,65 @@ export class StoppedAuthorizer implements CallAuthorizer {
 
 /** Argument-level rules without shipping the payload anywhere; see LocalGate. */
 export class LocalGateAuthorizer implements CallAuthorizer {
+  private readonly gates: GateSource;
+
   constructor(
-    private readonly gate: LocalGate,
+    gate: LocalGate | GateSource,
     private readonly serverName: string,
     private readonly sessionId?: string,
     private readonly manifest?: ToolManifest,
-  ) {}
+    /** What the wrapped server was started with, which says whose database it reaches. */
+    private readonly server: {
+      command?: readonly string[];
+      env?: NodeJS.ProcessEnv;
+    } = {},
+  ) {
+    this.gates = gate instanceof LocalGate ? fixedGate(gate) : gate;
+  }
 
   async authorize(call: ToolCall): Promise<CallVerdict> {
-    const verdict = this.gate.evaluate(this.requestFor(call));
+    // Read per call, so a pause or a pulled bundle decides this call rather than the next start.
+    const gate = await this.gates.current();
+    if (gate === null) {
+      return { effect: DECISION_EFFECT.ALLOW, reason: 'no runtime configured' };
+    }
+    const database = databaseToolCall(call.name, call.arguments, {
+      server: this.serverName,
+      ...this.server,
+    });
+    // Where the payload carries a customer, also ruled on at each place it is going.
+    const verdict = strictestOf(
+      [
+        ...withOutgoingData(this.requestFor(call, database), call.arguments),
+        ...(database === null ? [] : [this.statementRequest(call, database)]),
+      ].map((request) => gate.evaluate(request)),
+    );
     const decided = verdict.matchedPolicies[0];
+    // A refusal of a statement names the bounded one, on its table, as the shell seam does.
+    const alternative =
+      verdict.effect === DECISION_EFFECT.ALLOW
+        ? verdict.alternative
+        : alternativeFor(
+            verdict.alternative,
+            database?.alternative,
+            operationFor(call.name),
+          );
     return {
       effect: verdict.effect,
       reason: verdict.reason,
       signals: verdict.signals,
+      ...(verdict.principal === undefined ? {} : { principal: verdict.principal }),
       // A local refusal names its alternative too, or offline is a dead end.
-      ...(verdict.alternative === undefined ? {} : { alternative: verdict.alternative }),
+      ...(alternative === undefined ? {} : { alternative }),
       ...(decided === undefined ? {} : { rule: decided.name }),
     };
   }
 
   personAllowed(call: ToolCall): void {
-    this.gate.personAllowed(this.requestFor(call));
+    this.gates.latest()?.personAllowed(this.requestFor(call, null));
   }
 
-  private requestFor(call: ToolCall): ActionRequest {
+  private requestFor(call: ToolCall, database: DatabaseToolCall | null): ActionRequest {
     const environment = environmentOfArguments(call.arguments);
     return {
       ...(environment === undefined ? {} : { environment }),
@@ -122,10 +165,35 @@ export class LocalGateAuthorizer implements CallAuthorizer {
         call.arguments,
         this.manifest?.declaration(call.name),
       ).class,
-      arguments: call.arguments,
+      arguments: withStatement(call.arguments, database),
       ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
     };
   }
+
+  /** The statement as a database client on PATH would be ruled on, last so a tie keeps the tool's name. */
+  private statementRequest(call: ToolCall, database: DatabaseToolCall): ActionRequest {
+    const environment = environmentOfArguments(call.arguments);
+    return {
+      ...(environment === undefined ? {} : { environment }),
+      action: database.action,
+      ...(database.target === undefined ? {} : { target: database.target }),
+      toolClass: database.class,
+      ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
+    };
+  }
+}
+
+const SEVERITY: Readonly<Record<string, number>> = {
+  [DECISION_EFFECT.ALLOW]: 0,
+  [DECISION_EFFECT.ASK]: 1,
+  [DECISION_EFFECT.DENY]: 2,
+};
+
+/** Deny beats ask beats allow; the first of equals, which is the call as the server sees it. */
+function strictestOf(verdicts: readonly LocalVerdict[]): LocalVerdict {
+  return verdicts.reduce((worst, next) =>
+    (SEVERITY[next.effect] ?? 0) > (SEVERITY[worst.effect] ?? 0) ? next : worst,
+  );
 }
 
 /**

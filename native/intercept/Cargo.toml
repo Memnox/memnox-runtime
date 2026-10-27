@@ -1,0 +1,19 @@
+[package]
+name = "memnox-intercept-native"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "The native front of memnox-intercept: one connect to the daemon instead of a Node start."
+publish = false
+
+# Standard library only, so the binary that stands in front of git has nothing else to trust.
+[dependencies]
+
+[[bin]]
+name = "memnox-intercept-native"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"

@@ -168,8 +168,10 @@ function defaultName(kind: string): string {
   const words = kind
     .split(/[-_\s]+/)
     .filter((word) => word !== '')
-    .map((word) =>
-      ACRONYMS.has(word.toLowerCase()) ? word.toUpperCase() : capital(word),
+    .map(
+      (word) =>
+        SPELLED.get(word.toLowerCase()) ??
+        (ACRONYMS.has(word.toLowerCase()) ? word.toUpperCase() : capital(word)),
     );
   return words.length === 0 ? kind : words.join(' ');
 }
@@ -177,10 +179,19 @@ function defaultName(kind: string): string {
 /** A tab or a newline in a name would corrupt every column and prompt that prints it. */
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
+/** Products spelled their own way, which no title case pass reaches. */
+const SPELLED: ReadonlyMap<string, string> = new Map([
+  ['opencode', 'OpenCode'],
+  ['openclaw', 'OpenClaw'],
+  ['vscode', 'VS Code'],
+]);
+
 /** Words a title case pass would otherwise turn into "Cli" and "Mcp". */
 const ACRONYMS = new Set(['cli', 'mcp', 'ide', 'api', 'ai']);
 
 function capital(word: string): string {
+  // A capital inside the word is its maker's own spelling, as iTerm or macOS, which title case would break.
+  if (/[A-Z]/.test(word.slice(1))) return word;
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 

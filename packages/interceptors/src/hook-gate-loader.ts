@@ -19,10 +19,23 @@ import {
 } from '@memnox/core';
 
 import { repositoryRootOf } from './seam-runtime';
+import { strainHolding } from './breaker-seam';
 
 import { containmentFor } from './containment-loader';
 import type { HookConfig } from './hook-config';
 import { DEFAULT_AGENT_NAME } from './tool-hook.constants';
+
+/** Where a command runs and with what, which the daemon is handed rather than inherits. */
+export interface SeamScene {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  /** Asked three times per load, so a caller that can answer it once passes this. */
+  rootOf?: (cwd: string) => string | null;
+}
+
+function ownScene(): SeamScene {
+  return { cwd: process.cwd(), env: process.env };
+}
 
 /**
  * Null leaves the runtime as the only gate: no rule file and nothing to contain.
@@ -34,9 +47,10 @@ export async function loadHookGate(
   warn: (message: string) => void = (message) => {
     process.stderr.write(`[memnox] ${message}\n`);
   },
+  scene: SeamScene = ownScene(),
 ): Promise<LocalGate | null> {
-  const { task, containment } = await readSession(config, home, now);
-  const fingerprint = await fingerprintRules(warn);
+  const { task, containment } = await readSession(config, home, now, scene);
+  const fingerprint = await fingerprintRules(warn, scene);
   if (
     config.policyFiles.length === 0 &&
     containment === null &&
@@ -65,12 +79,18 @@ export async function loadHookGate(
     {
       agentName: config.agentName ?? DEFAULT_AGENT_NAME,
       ...(config.agentRole === undefined ? {} : { agentRole: config.agentRole }),
+      ...(config.principal === undefined ? {} : { principal: config.principal }),
       task,
       stateFacts: stateLabelsOf(overlays, now()),
       ...(containment === null ? {} : { containment }),
       allowances: await new FileAllowances(home).inForce(now()),
       // An agent another agent started is held to that agent's rules as well as its own.
-      parents: parentAgentsOf(process.env, config.agentName ?? DEFAULT_AGENT_NAME),
+      parents: parentAgentsOf(scene.env, config.agentName ?? DEFAULT_AGENT_NAME),
+      strain: await strainHolding(
+        home,
+        config.sessionId ?? config.hostSessionId,
+        config.agentName ?? DEFAULT_AGENT_NAME,
+      ),
     },
   );
   return noticing(gate, config, home);
@@ -80,8 +100,11 @@ export async function loadHookGate(
  * The conventions the repository the agent works in states for itself, as rules. A check
  * that could not be read is skipped out loud, since one bad entry must not stop every write.
  */
-async function fingerprintRules(warn: (message: string) => void): Promise<Policy[]> {
-  const root = repositoryRootOf(process.cwd());
+async function fingerprintRules(
+  warn: (message: string) => void,
+  scene: SeamScene,
+): Promise<Policy[]> {
+  const root = (scene.rootOf ?? repositoryRootOf)(scene.cwd);
   if (root === null) return [];
   const fingerprint = await readCodeFingerprint(root);
   if (fingerprint === null) return [];
@@ -118,6 +141,7 @@ async function readSession(
   config: HookConfig,
   home: string,
   now: () => string,
+  scene: SeamScene,
 ): Promise<{ task: SessionTask | null; containment: Containment | null }> {
   const sessionId = config.sessionId ?? config.hostSessionId;
   const declared =
@@ -125,11 +149,15 @@ async function readSession(
   // A session nobody named a task for takes the one somebody declared for its repository.
   const task =
     declared ??
-    (await new RepositoryTasks(home).inForce(repositoryRootOf(process.cwd()), now()));
+    (await new RepositoryTasks(home).inForce(
+      (scene.rootOf ?? repositoryRootOf)(scene.cwd),
+      now(),
+    ));
   const containment = await containmentFor({
     home,
-    env: process.env,
-    cwd: process.cwd(),
+    env: scene.env,
+    cwd: scene.cwd,
+    ...(scene.rootOf === undefined ? {} : { rootOf: scene.rootOf }),
     now: new Date(now()),
     ...(config.agentName === undefined ? {} : { agent: config.agentName }),
     ...(task?.scope.paths === undefined ? {} : { paths: task.scope.paths }),

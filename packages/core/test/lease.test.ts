@@ -175,6 +175,18 @@ describe('what the holder has been doing', () => {
       'the repository root',
     );
   });
+
+  it('says where the holder works when that is another checkout of the project', () => {
+    const lease = leaseFor(
+      { path: 'src/billing', holder, repository: '/work/api', project: 'acme/api' },
+      NOW,
+    );
+    expect(describeLease(lease, at(1), '/work/api-feature')).toContain(
+      'in another checkout at /work/api',
+    );
+    expect(describeLease(lease, at(1), '/work/api')).not.toContain('another checkout');
+    expect(describeLease(lease, at(1))).not.toContain('another checkout');
+  });
 });
 
 describe('a read never waits', () => {

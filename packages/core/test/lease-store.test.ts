@@ -276,3 +276,56 @@ describe('a hold that lasts while its session works', () => {
     expect(await registry.held(at(20))).toHaveLength(1);
   });
 });
+
+describe('two worktrees of one repository', () => {
+  const PROJECT = 'github.com/acme/api';
+  const inA = { repository: '/work/api', project: PROJECT };
+  const inB = { repository: '/work/api-feature', project: PROJECT };
+
+  it('meet on the same file, as two clones already do in the workspace register', async () => {
+    const registry = new LeaseRegistry(await home(), living);
+    await registry.take({ path: 'src/billing.ts', holder: cursor, ...inA }, NOW);
+
+    const second = await registry.take(
+      { path: 'src/billing.ts', holder: claude, ...inB },
+      at(1),
+    );
+
+    expect(second.outcome).toBe(LEASE_OUTCOME.HELD_BY_ANOTHER);
+    if (second.outcome !== LEASE_OUTCOME.HELD_BY_ANOTHER) return;
+    expect(second.holding.repository).toBe('/work/api');
+    expect(second.holding.project).toBe(PROJECT);
+  });
+
+  it('stay apart when they are two different projects', async () => {
+    const registry = new LeaseRegistry(await home(), living);
+    await registry.take({ path: 'src/billing.ts', holder: cursor, ...inA }, NOW);
+
+    const other = await registry.take(
+      {
+        path: 'src/billing.ts',
+        holder: claude,
+        repository: '/work/web',
+        project: 'github.com/acme/web',
+      },
+      at(1),
+    );
+
+    expect(other.outcome).toBe(LEASE_OUTCOME.TAKEN);
+  });
+
+  it('read a lease kept before the project was recorded by its checkout alone', async () => {
+    const registry = new LeaseRegistry(await home(), living);
+    await registry.take(
+      { path: 'src/billing.ts', holder: cursor, repository: '/work/api' },
+      NOW,
+    );
+
+    const elsewhere = await registry.take(
+      { path: 'src/billing.ts', holder: claude, ...inB },
+      at(1),
+    );
+
+    expect(elsewhere.outcome).toBe(LEASE_OUTCOME.TAKEN);
+  });
+});

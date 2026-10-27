@@ -48,6 +48,11 @@ export interface Lease {
   takenOver?: LeaseTakeover;
   /** The checkout the path is relative to; absent from records written before it was kept. */
   repository?: string;
+  /**
+   * The repository every worktree and clone of it shares, so two checkouts of one project
+   * meet here as they already do in the workspace register. Absent, checkouts stay apart.
+   */
+  project?: string;
   /** The lines of a file it holds, where narrower than the file; absent is the whole path. */
   lines?: LineRange[];
   /** The declarations those lines sit in, which win over lines where both sides name them. */
@@ -153,6 +158,8 @@ export interface LeaseRequest {
   region?: WrittenRegion;
   /** The checkout the path is relative to, since this register serves every repository here. */
   repository?: string;
+  /** What every checkout of this repository shares. See `Lease.project`. */
+  project?: string;
 }
 
 // Clamped rather than refused, so an agent asking for a day gets the maximum instead of an error.
@@ -177,6 +184,7 @@ export function leaseFor(request: LeaseRequest, now: string): Lease {
     expiresAt: expiryAfter(now, request.minutes ?? DEFAULT_LEASE_MINUTES),
     activity: activity === undefined ? [] : [activity],
     ...(request.repository === undefined ? {} : { repository: request.repository }),
+    ...(request.project === undefined ? {} : { project: request.project }),
     ...regionFields(request.region),
   };
 }
@@ -206,19 +214,28 @@ export function withActivity(lease: Lease, note: string): Lease {
   return { ...lease, activity: kept };
 }
 
-/** The line a refusal is built from: who, how long, and what they have been doing. */
-export function describeLease(lease: Lease, moment: string): string {
+/**
+ * The line a refusal is built from: who, how long, and what they have been doing. Given
+ * the asker's checkout, a holder in another worktree of the project is named by where it is.
+ */
+export function describeLease(lease: Lease, moment: string, from?: string): string {
   const minutes = Math.max(
     0,
     msToMinutes(Date.parse(moment) - Date.parse(lease.takenAt)),
   );
   const held = minutes < 1 ? 'just now' : describeSpan(minutesToMs(minutes), IN_MINUTES);
   const path = lease.path === '' ? 'the repository root' : lease.path;
-  const since = `(${held}, session ${lease.holder.sessionId})`;
+  const since = `(${held}, session ${lease.holder.sessionId}${elsewhere(lease, from)})`;
   const part = partHeld(lease);
   return part === null
     ? `${lease.holder.agent} has ${path} ${since}`
     : `${lease.holder.agent} is editing ${part} of ${path} ${since}. The rest of the file is free`;
+}
+
+/** Where the holder works, when that is another checkout of the same project. */
+function elsewhere(lease: Lease, from: string | undefined): string {
+  if (from === undefined || lease.repository === undefined) return '';
+  return lease.repository === from ? '' : `, in another checkout at ${lease.repository}`;
 }
 
 /** `PaymentService.retryCharge (lines 6 to 12)`, or null where the lease holds the whole path. */

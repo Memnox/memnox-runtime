@@ -14,6 +14,7 @@ Published as JSON Schema at `https://memnox.dev/schema/event-v1.json`, and expor
 | `costUsd` | number ≥ 0 | What the action cost, when something reported it. Memnox prices nothing: absent means nobody said, which is not the same as zero. Something that knows the price reports it through `EventCost`. |
 | `bundleHash` | string | Which workspace bundle this machine held. `policyHash` covers the whole stack as this machine assembled it, which is not a thing the control plane can name. |
 | `conditionsInForce` | string[] | The conditions in force when the verdict was reached. The engine computed a state version for every decision and nothing carried it to the ledger, so the field built to make a freeze visible afterwards was stamped and dropped. |
+| `signals` | string[] | What the gate found, as ids: each matched rule (`policy:`), the part of the context each rule that agreed with the verdict was written about (`person:`, `agent:`, `intent:`, `systems:`), how the call sat against the declared task (`scope:`), and what noticing saw (`notice:novel` and the rest). Empty means the gate found nothing; absent means a row from before signals were kept. Never the matched text. Kept on this machine and not sent to the workspace. |
 
 ## Required
 
@@ -37,6 +38,8 @@ Published as JSON Schema at `https://memnox.dev/schema/event-v1.json`, and expor
 | Field | Notes |
 |---|---|
 | `principal` | whose authority it ran under |
+| `subagent` | the helper the agent handed this to, by the id its host gave it. Absent is the agent's own turn |
+| `subagentType` | what kind of helper, as the host named it, e.g. `Explore` |
 | `target` | a path, a branch, a host. Never a payload |
 | `shadowEffect` | what enforce would have said, when the mode stopped it applying |
 | `rule` | `{ name, layer, file, line }` — enough to open the file |
@@ -44,6 +47,7 @@ Published as JSON Schema at `https://memnox.dev/schema/event-v1.json`, and expor
 | `policyHash` | the rule set in force then, not now |
 | `bundleHash` | the workspace bundle this machine was running. Absent means not logged in, which is not the same as behind |
 | `conditionsInForce` | ids of the freezes and incidents in force at the verdict, so it can be replayed against them |
+| `signals` | ids of what the gate found, which `why` reads the context back from |
 | `argsDigest` | a hash. The arguments never reach a row |
 | `execution` | `completed` \| `failed` \| `blocked` \| `timed-out` |
 | `exitCode`, `durationMs` | |

@@ -601,10 +601,10 @@ describe('naming the machine at enrolment', () => {
   });
 
   it('sends the name a person typed, and says it back', async () => {
-    const { sent, out } = await enrol({}, "Moise's laptop");
+    const { sent, out } = await enrol({}, "Maya's laptop");
 
-    expect(sent[0]?.['label']).toBe("Moise's laptop");
-    expect(out.notes.join('\n')).toContain("Moise's laptop");
+    expect(sent[0]?.['label']).toBe("Maya's laptop");
+    expect(out.notes.join('\n')).toContain("Maya's laptop");
   });
 
   it('sends the hostname when Enter keeps what was offered', async () => {

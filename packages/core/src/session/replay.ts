@@ -15,6 +15,7 @@ export function outcomesFrom(events: readonly MemnoxEvent[]): ActionOutcome[] {
       // Operation and target rather than the argument digest, which a retry regenerates.
       fingerprint: workKey(event),
       action: event.operation,
+      ...(event.target === undefined ? {} : { target: event.target }),
       at: event.at,
       failed: didFail(event),
       ...(event.exitCode === undefined || event.exitCode === 0

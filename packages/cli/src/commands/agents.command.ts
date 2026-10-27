@@ -13,6 +13,7 @@ import { runName, type NameOptions } from './agents/name';
 import { runStatus } from './agents/status';
 import { runOffboard, runOnboard, type OnboardOptions } from './agents/onboard';
 import { runControl } from './agents/control';
+import { runPause, runResumeAgent, type PauseOptions } from './agents/pause';
 
 /** Everything but the context, for a test to swap; each has a real default. */
 type AgentsSeams = Omit<AgentsDeps, 'context'>;
@@ -42,6 +43,29 @@ export function registerAgentsCommand(
   registerLocalSubcommands(agents, deps);
   registerWorkspaceSubcommands(agents, deps);
   registerTrustSubcommand(agents, deps);
+  registerPauseSubcommands(agents, deps);
+}
+
+/** One agent held on this machine at once and let go again, the rest left working. */
+function registerPauseSubcommands(agents: Command, deps: AgentsDeps): void {
+  agents
+    .command('pause <agent>')
+    .description(
+      'Stop one agent on this machine now, every session of it, until you resume it',
+    )
+    .option('--reason <why>', 'why, kept with the pause')
+    .option('--json', 'machine-readable output')
+    .action(async (agent: string, options: PauseOptions) =>
+      runPause(deps, agent, options),
+    );
+
+  agents
+    .command('resume <agent>')
+    .description('Let a paused agent carry on, here and in the workspace')
+    .option('--json', 'machine-readable output')
+    .action(async (agent: string, options: JsonOptions) =>
+      runResumeAgent(deps, agent, options),
+    );
 }
 
 /** Ends the probation an agent the daemon adopted started on. */
@@ -103,13 +127,15 @@ function registerLocalSubcommands(agents: Command, deps: AgentsDeps): void {
 /** The subcommands that put an agent under the workspace, take it out, or hear from it. */
 function registerWorkspaceSubcommands(agents: Command, deps: AgentsDeps): void {
   agents
-    .command('onboard [agent]')
-    .description('Put an agent under Memnox, backing up its config first')
+    .command('onboard [agents...]')
+    .description('Put one or more agents under Memnox, backing up each config first')
     .option('--name <name>', 'what the workspace should call it, rather than being asked')
     .option('--json', 'machine-readable output')
-    .action(async (agent: string | undefined, options: OnboardOptions) =>
-      runOnboard(deps, agent, options),
-    );
+    .action(async (agents: string[], options: OnboardOptions) => {
+      if (agents.length === 0) return runOnboard(deps, undefined, options);
+      // One after another, since each rewrites a config and enrols against the same account.
+      for (const agent of agents) await runOnboard(deps, agent, options);
+    });
 
   agents
     .command('offboard <agent>')

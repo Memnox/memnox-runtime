@@ -147,6 +147,7 @@ describe('the doctor, on a chain', () => {
 
   it('raises the band, and names the rule that did it', () => {
     const band = bandFor({
+      agents: [],
       surfaces: [],
       resources: [],
       reachability: [],

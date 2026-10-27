@@ -8,6 +8,7 @@ import type { WiringSeams } from '../src/setup-wiring';
 import type { offboardAgent } from '../src/agents/onboard';
 import { readNames } from '../src/agents/names';
 import { readDeclined } from '../src/agents/declined';
+import { CLOUD_REFUSAL } from '../src/agents/enrol-agent';
 import { readRecord, retireRecord } from '../src/agents/onboarding';
 import { runCommand } from './cli-harness';
 import { RecordedOutput } from '../src/cli-output';
@@ -86,7 +87,12 @@ const json = (body: unknown): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
-/** Nothing real is installed: a test that loaded a service would configure the machine running it. */
+/** A test that loaded a service would configure the machine running it. */
+const fakeService: NonNullable<WiringSeams['service']> = async () => ({
+  state: { supported: true, installed: true, path: '/tmp/svc', manager: 'launchd' },
+});
+
+/** Nothing real is installed. */
 function fakeWiring(wired: string[]): WiringSeams {
   return {
     interceptors: async (at) => {
@@ -99,15 +105,18 @@ function fakeWiring(wired: string[]): WiringSeams {
         launchers: [],
       };
     },
-    service: async () => ({
-      state: { supported: true, installed: true, path: '/tmp/svc', manager: 'launchd' },
-    }),
+    service: fakeService,
     rules: async () => 5,
     claudeHook: async () => false,
     codexHook: async () => false,
     cursorHook: async () => false,
     geminiHook: async () => false,
     windsurfHook: async () => false,
+    hermesHook: async () => false,
+    openClawHook: async () => false,
+    copilotHook: async () => false,
+    devinHook: async () => false,
+    openCodeHook: async () => false,
     mcp: async () => ({ wrapped: 0, skipped: false }),
     keep: async () => undefined,
   };
@@ -221,9 +230,12 @@ describe('memnox setup', () => {
             confirm: async (_question, fallback) =>
               fallback === false ? driven.move === true : driven.yes !== false,
             interactive: () => driven.interactive !== false,
-            ...(driven.wired === undefined
-              ? {}
-              : { wiringSeams: fakeWiring(driven.wired) }),
+            // Never the real launchctl or systemctl: on a machine running a daemon each run
+            // would stop and restart it, which on Linux outlasts the test's timeout.
+            wiringSeams:
+              driven.wired === undefined
+                ? { service: fakeService }
+                : fakeWiring(driven.wired),
             reportScan: async (at: string) => {
               reports.push(at);
               return driven.reported !== false;
@@ -430,15 +442,15 @@ describe('memnox setup', () => {
     it('forgets the names and answers given for the workspace it is leaving', async () => {
       /* "Call it something your workspace will recognise" and "put it under
          Memnox" were both asked about the plane being left, so a laptop moved
-         off localhost kept offering "Moise claude" as the name the new
+         off localhost kept offering "Maya claude" as the name the new
          workspace knew it by. It had never heard of it. */
       await run({
         enrolledAt: LOCAL,
         url: LOCAL,
         yes: false,
-        names: { 'Claude Code': 'Moise claude' },
+        names: { 'Claude Code': 'Maya claude' },
       });
-      expect(await readNames(home)).toMatchObject({ 'agt_claude-code': 'Moise claude' });
+      expect(await readNames(home)).toMatchObject({ 'agt_claude-code': 'Maya claude' });
 
       const { out } = await run({ enrolledAt: LOCAL, url: BASE, move: true, yes: false });
 
@@ -446,7 +458,7 @@ describe('memnox setup', () => {
       expect(text).toContain('for the workspace you left');
       /* What it asked about on the way through is the detected name, because
          that is all there is once the chosen one is gone. */
-      expect(text).not.toContain('Moise claude');
+      expect(text).not.toContain('Maya claude');
     });
 
     it('says an agent belongs to another workspace rather than reporting it done', async () => {
@@ -601,6 +613,48 @@ describe('memnox setup', () => {
 
     expect(out.notes).toEqual([]);
     expect(out.lines.join('\n')).toContain('is under Memnox');
+  });
+
+  it('governs an agent on this machine when the workspace plan is full', async () => {
+    /* The plan caps credentials in the workspace and never this machine. Reporting
+       the refusal as a failure told somebody with five agents that two were not
+       under Memnox, while every hook and rule on the laptop held them all. */
+    vi.stubGlobal('fetch', (async (url: URL | string) =>
+      String(url).endsWith('/agents')
+        ? new Response(
+            JSON.stringify({
+              error: CLOUD_REFUSAL.AGENTS_EXHAUSTED,
+              message: 'Free governs 1 agent at once, and 1 already holds a credential.',
+            }),
+            { status: 409, headers: { 'content-type': 'application/json' } },
+          )
+        : deviceFlow(String(url))) as typeof fetch);
+    await run({ yes: false });
+
+    const { out } = await run({ yes: true });
+
+    const text = out.text;
+    expect(text).toContain('this machine');
+    expect(text).toContain('2 agents are under Memnox');
+    expect(text).toContain('governed on this machine only');
+    expect(text).not.toContain('failed');
+    expect(await readRecord(home, 'agt_claude-code')).toBeNull();
+    expect(await readDeclined(home)).toEqual({});
+  });
+
+  it('still reports any other refusal as a failure', async () => {
+    vi.stubGlobal('fetch', (async (url: URL | string) =>
+      String(url).endsWith('/agents')
+        ? new Response(JSON.stringify({ message: 'the workspace is suspended' }), {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+          })
+        : deviceFlow(String(url))) as typeof fetch);
+
+    const { out } = await run({ yes: true });
+
+    expect(out.text).toContain('failed');
+    expect(out.text).toContain('the workspace is suspended');
   });
 
   it('says plainly that authority did not change', async () => {

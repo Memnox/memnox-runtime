@@ -11,9 +11,12 @@ import {
   type HoldRequest,
   type HoldUnanswered,
 } from './hold';
-import { PendingApprovals, waitForAnswer } from './pending';
+import { PARKED_HOURS, PendingApprovals, waitForAnswer } from './pending';
 import { TtyHoldPrompt } from './tty-prompt';
-import { msToSeconds } from '../domain/time';
+import { ledgerWork, WorkEvidencePrompt, type WorkReader } from './work-prompt';
+import { HOUR_MS, msToSeconds } from '../domain/time';
+import { readApprovalRoute } from '../config/config-store';
+import type { ApprovalRoute } from '../constants/approval-route.constants';
 
 /**
  * A held call, written down first and answered from wherever an answer turns up: this
@@ -28,6 +31,13 @@ export interface RoutedPromptDeps {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   pollMs?: number;
+  /** Whether the workspace is asked too, read when the question is raised so a change applies at once. */
+  route?: () => Promise<ApprovalRoute>;
+  /**
+   * How long a question nobody answered is kept for later, so an agent left alone carries on
+   * rather than ending its night on it. Absent drops it at the deadline, as it always did.
+   */
+  parkMs?: number;
 }
 
 export class RoutedHoldPrompt implements HoldPrompt {
@@ -40,7 +50,12 @@ export class RoutedHoldPrompt implements HoldPrompt {
     const now = this.deps.now ?? Date.now;
     const askedAt = new Date(now()).toISOString();
 
-    const pending = await this.deps.approvals.raise(request, askedAt, timeoutMs);
+    // Asked already and kept for later: answered from where it waits, never asked twice.
+    const parked = await this.fromParked(request, askedAt);
+    if (parked !== null) return parked;
+
+    const route = await this.deps.route?.();
+    const pending = await this.deps.approvals.raise(request, askedAt, timeoutMs, route);
     // The card names the id itself, so a separate line would say it twice.
     if (this.deps.tty === undefined) this.announce(pending.id, request, timeoutMs);
 
@@ -67,10 +82,39 @@ export class RoutedHoldPrompt implements HoldPrompt {
     }
 
     const answer = await firstAnswer(answers);
+    if (answer === null && this.deps.parkMs !== undefined) {
+      const until = new Date(now() + this.deps.parkMs).toISOString();
+      await this.deps.approvals.park(pending.id, new Date(now()).toISOString(), until);
+      return { unanswered: HOLD_OUTCOME.PARKED, approvalId: pending.id };
+    }
+    // Read before it is cleared, so the row this hold leaves can say who answered it.
+    const settled = await this.deps.approvals.read(pending.id);
     // Cleared either way, or somebody answers it later for a command long gone.
     await this.deps.approvals.clear(pending.id);
     // Somebody could have answered and nobody did, which is a timeout and not the rule's refusal.
-    return answer ?? { unanswered: HOLD_OUTCOME.TIMED_OUT };
+    if (answer === null) return { unanswered: HOLD_OUTCOME.TIMED_OUT };
+    const by = settled?.answeredBy;
+    return by === undefined ? answer : { ...answer, by };
+  }
+
+  /**
+   * The answer a person gave while the agent was busy elsewhere, spent once and cleared, or
+   * the same question still waiting. Null when this call was never parked.
+   */
+  private async fromParked(
+    request: HoldRequest,
+    moment: string,
+  ): Promise<HoldAsked | HoldUnanswered | null> {
+    const parked = await this.deps.approvals.parkedFor(request, moment);
+    if (parked === null) return null;
+    if (parked.answer === undefined) {
+      return { unanswered: HOLD_OUTCOME.PARKED, approvalId: parked.id };
+    }
+    await this.deps.approvals.clear(parked.id);
+    return {
+      answer: parked.answer,
+      ...(parked.answeredBy === undefined ? {} : { by: parked.answeredBy }),
+    };
   }
 
   /** Writes the terminal's answer to the file too, so the record says who decided. */
@@ -136,16 +180,25 @@ export interface HoldForInput {
   interactive: boolean;
   announce?: (message: string) => void;
   timeoutMs?: number;
+  /** What the session did before it asked. The ledger on this machine unless replaced. */
+  work?: WorkReader;
+  /** Whether a question nobody answered is kept for later. On unless a caller turns it off. */
+  park?: boolean;
 }
 
 /** Somebody to ask, composed here because the shell wrapper and the MCP proxy both need it. */
 export function holdFor(deps: HoldForInput): HoldService {
   return new HoldService(
-    new RoutedHoldPrompt({
-      approvals: new PendingApprovals(deps.home),
-      ...(deps.interactive ? { tty: new TtyHoldPrompt() } : {}),
-      ...(deps.announce === undefined ? {} : { announce: deps.announce }),
-    }),
+    new WorkEvidencePrompt(
+      new RoutedHoldPrompt({
+        approvals: new PendingApprovals(deps.home),
+        route: () => readApprovalRoute(deps.home),
+        ...(deps.interactive ? { tty: new TtyHoldPrompt() } : {}),
+        ...(deps.announce === undefined ? {} : { announce: deps.announce }),
+        ...(deps.park === false ? {} : { parkMs: PARKED_HOURS * HOUR_MS }),
+      }),
+      deps.work ?? ledgerWork(deps.home),
+    ),
     // Somebody elsewhere has to be found and their answer travel back, so they get longer.
     deps.timeoutMs ??
       (deps.interactive ? DEFAULT_HOLD_TIMEOUT_MS : DEFAULT_UNATTENDED_HOLD_TIMEOUT_MS),

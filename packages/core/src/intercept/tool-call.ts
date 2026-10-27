@@ -43,11 +43,8 @@ export function classifyToolCall(
 ): Classification {
   // The server's own hints where it listed them, since it knows its tool better than a name.
   const named = classifyTool(declared ?? { name });
-  const talksToDatabase = nameSegments(name).some((word) =>
-    DATABASE_WORDS.includes(word),
-  );
-  const statement = talksToDatabase ? statementArgument(args) : null;
-  if (statement === null || !OPENS_LIKE_SQL.test(statement)) return named;
+  const statement = databaseStatementOf(name, args);
+  if (statement === null) return named;
 
   const sql = inspectSql(statement);
   if (sql.risk !== SQL_RISK.UNKNOWN) {
@@ -56,6 +53,18 @@ export function classifyToolCall(
   return named.class === TOOL_CLASS.READ
     ? { class: TOOL_CLASS.UNKNOWN, from: EFFECT_INFERENCE.NAME }
     : named;
+}
+
+/** The SQL a database sounding tool was handed, or null where there is none to read. */
+export function databaseStatementOf(
+  name: string,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  const talksToDatabase = nameSegments(name).some((word) =>
+    DATABASE_WORDS.includes(word),
+  );
+  const statement = talksToDatabase ? statementArgument(args) : null;
+  return statement !== null && OPENS_LIKE_SQL.test(statement) ? statement : null;
 }
 
 function statementArgument(args: Readonly<Record<string, unknown>>): string | null {

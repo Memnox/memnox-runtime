@@ -4,8 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DECISION_EFFECT, HOLD_ANSWER, HoldService, LocalGate } from '@memnox/core';
 import {
+  AGENT_FROZEN_REASON,
+  DECISION_EFFECT,
+  ENFORCEMENT_MODE,
+  HOLD_ANSWER,
+  HoldService,
+  LocalGate,
+} from '@memnox/core';
+import {
+  adviceLine,
   installInterceptors,
   interceptorDirFor,
   INTERCEPT_BINARY,
@@ -99,6 +107,81 @@ describe('the interceptor runtime', () => {
     });
     expect(outcome.allowed).toBe(false);
     expect(outcome.message).toContain('memnox run');
+  });
+
+  /* The hook read the machine's mode and this seam never did, so in observe a force push
+     was annotated through Claude Code and refused through git on PATH, in the same minute. */
+  it('lets observe run what a rule denies, and keeps the verdict beside the row', async () => {
+    const outcome = await ruleOnCommand('git', ['push', '--force'], {
+      gate: gate(DECISION_EFFECT.DENY, 'git.push-force'),
+      mode: ENFORCEMENT_MODE.OBSERVE,
+    });
+    expect(outcome.allowed).toBe(true);
+    expect(outcome.message).toBeUndefined();
+    expect(outcome.mode).toBe(ENFORCEMENT_MODE.OBSERVE);
+    expect(outcome.shadowEffect).toBe(DECISION_EFFECT.DENY);
+    expect(outcome.reason).toBe('history is shared');
+    expect(outcome.rule?.name).toBe('no-force-push');
+  });
+
+  it('asks nobody in observe, since a held command is a stopped one', async () => {
+    let asked = 0;
+    const hold = new HoldService({
+      ask: async () => {
+        asked += 1;
+        return { answer: HOLD_ANSWER.ONCE };
+      },
+    });
+    const outcome = await ruleOnCommand('rm', ['-rf', 'build'], {
+      gate: gate(DECISION_EFFECT.ASK, 'filesystem.delete'),
+      hold,
+      mode: ENFORCEMENT_MODE.OBSERVE,
+    });
+    expect(outcome.allowed).toBe(true);
+    expect(outcome.shadowEffect).toBe(DECISION_EFFECT.ASK);
+    expect(asked).toBe(0);
+  });
+
+  it('says in advise what enforce would have done, and nothing in observe', async () => {
+    const deps = { gate: gate(DECISION_EFFECT.DENY, 'git.push-force') };
+    const advised = await ruleOnCommand('git', ['push', '--force', 'origin', 'main'], {
+      ...deps,
+      mode: ENFORCEMENT_MODE.ADVISE,
+    });
+    expect(advised.allowed).toBe(true);
+    expect(adviceLine(advised)).toContain('would have refused git.push-force main');
+    const observed = await ruleOnCommand('git', ['push', '--force', 'origin', 'main'], {
+      ...deps,
+      mode: ENFORCEMENT_MODE.OBSERVE,
+    });
+    expect(adviceLine(observed)).toBeNull();
+  });
+
+  it('rules as enforce when no mode is given, since a seam that cannot read it fails closed', async () => {
+    const outcome = await ruleOnCommand('git', ['push', '--force'], {
+      gate: gate(DECISION_EFFECT.DENY, 'git.push-force'),
+    });
+    expect(outcome.allowed).toBe(false);
+    expect(outcome.mode).toBe(ENFORCEMENT_MODE.ENFORCE);
+    expect(outcome.shadowEffect).toBeUndefined();
+  });
+
+  it('does not soften a freeze in observe, as the hook does not', async () => {
+    // A gate standing in for one with a freeze overlay in force, which is what the reason names.
+    const frozen = {
+      evaluate: () => ({
+        effect: DECISION_EFFECT.DENY,
+        reason: AGENT_FROZEN_REASON,
+        signals: [],
+        matchedPolicies: [],
+      }),
+      personAllowed: (): void => undefined,
+    } as unknown as LocalGate;
+    const outcome = await ruleOnCommand('git', ['push', '--force'], {
+      gate: frozen,
+      mode: ENFORCEMENT_MODE.OBSERVE,
+    });
+    expect(outcome.allowed).toBe(false);
   });
 
   it('records a digest of the arguments and never the arguments', async () => {

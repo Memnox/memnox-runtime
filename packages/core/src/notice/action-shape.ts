@@ -10,6 +10,7 @@ import { RISK_LEVEL, type RiskLevel } from '../constants/risk.constants';
 import {
   changesExternalState,
   classifyTool,
+  isToolClass,
   TOOL_CLASS,
   type ToolClass,
 } from '../discovery/classify';
@@ -92,7 +93,7 @@ const HIGH_RISK: readonly RiskLevel[] = [RISK_LEVEL.HIGH, RISK_LEVEL.CRITICAL];
 export function shapeOf(request: ActionRequest, home = ''): ActionShape {
   const { action, target } = request;
   return (
-    mcpShape(action, target) ??
+    mcpShape(request) ??
     hostShape(action, target) ??
     pushShape(action, target) ??
     acquireShape(action, target === undefined ? undefined : shortened(target, home)) ??
@@ -119,11 +120,15 @@ export function isNoticeable(shape: ActionShape): boolean {
   );
 }
 
-function mcpShape(action: string, target: string | undefined): ActionShape | null {
+function mcpShape(request: ActionRequest): ActionShape | null {
+  const { action, target } = request;
   if (!action.startsWith(MCP_PREFIX)) return null;
   const tool = action.slice(MCP_PREFIX.length);
   const server = target ?? 'its server';
-  const toolClass = classifyTool({ name: tool }).class;
+  const named = classifyTool({ name: tool }).class;
+  // What this call was handed decides, so a DELETE through a tool named `query` is no read.
+  const called = request.toolClass;
+  const toolClass = called !== undefined && isToolClass(called) ? called : named;
   const link = chainLinkOfName(tool);
   const acquires =
     link === CHAIN_LINK.ACQUIRE &&
@@ -133,9 +138,7 @@ function mcpShape(action: string, target: string | undefined): ActionShape | nul
   // A read-only tool used for the first time is ordinary; one that changes or takes is not.
   const remembered = destructive || acquires || toolClass !== TOOL_CLASS.READ;
   return {
-    novelty: remembered
-      ? { key: `mcp:${server}/${tool}`, first: `first use of ${tool} on ${server}` }
-      : null,
+    novelty: remembered ? mcpNovelty(server, tool, toolClass, named) : null,
     link: emits ? CHAIN_LINK.EMIT : acquires ? CHAIN_LINK.ACQUIRE : null,
     step: `${server}.${tool}`,
     // A write through a server changes a system this machine does not own.
@@ -143,6 +146,34 @@ function mcpShape(action: string, target: string | undefined): ActionShape | nul
     destructive,
   };
 }
+
+/**
+ * Keyed by what the call does where that differs from what the tool is named for, so a
+ * thousand reads through one tool do not vouch for its first delete, nor bounded deletes
+ * for the first that has no WHERE. The plain key is kept, so nothing seen before is forgotten.
+ */
+function mcpNovelty(
+  server: string,
+  tool: string,
+  toolClass: ToolClass,
+  named: ToolClass,
+): Novelty {
+  const key = `mcp:${server}/${tool}`;
+  if (toolClass === named) return { key, first: `first use of ${tool} on ${server}` };
+  return {
+    key: `${key}:${toolClass}`,
+    first: `first ${CALL_WORDS[toolClass]} through ${tool} on ${server}`,
+  };
+}
+
+/** How a call of each class is said in "first destructive call through query". */
+const CALL_WORDS: Readonly<Record<ToolClass, string>> = {
+  [TOOL_CLASS.READ]: 'read',
+  [TOOL_CLASS.WRITE]: 'change',
+  [TOOL_CLASS.DESTRUCTIVE]: 'destructive call',
+  [TOOL_CLASS.COMMUNICATION]: 'message',
+  [TOOL_CLASS.UNKNOWN]: 'unrecognised call',
+};
 
 function hostShape(action: string, target: string | undefined): ActionShape | null {
   const reaching = HOST_ACTIONS[action];

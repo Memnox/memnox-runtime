@@ -1,4 +1,5 @@
 import {
+  ruledFor,
   ACTION,
   DECISION_EFFECT,
   describeAlternative,
@@ -23,9 +24,11 @@ import {
   ProbationRegister,
   quoteShellWords,
   type ActionRequest,
+  type ResolvedAction,
   type Alternative,
   type DecisionEffect,
   type HoldService,
+  Clashes,
 } from '@memnox/core';
 
 import {
@@ -60,6 +63,10 @@ export interface ShellDecision {
   alternative?: Alternative;
   environment?: string;
   outOfScope?: boolean;
+  /** What the gate found, as ids, so the row can say which part of the context decided. */
+  signals?: readonly string[];
+  /** The person this was ruled for, as the run named them. */
+  principal?: string;
 }
 
 export interface ShellOutcome {
@@ -174,14 +181,11 @@ export class ShellSeam {
     for (const resolved of resolveShellLine(line, this.deps.env ?? {}).actions) {
       if (resolved.action === SHELL_ACTION) continue;
       for (const target of targetsRuledOn(resolved, line)) {
-        const request = this.requestFor(resolved.action, target ?? line, {
-          toolClass: String(resolved.class),
-          ...(resolved.method === undefined ? {} : { method: resolved.method }),
-          ...(resolved.environment === undefined
-            ? {}
-            : { environment: resolved.environment }),
-          ...(resolved.content === undefined ? {} : { content: resolved.content }),
-        });
+        const request = this.requestFor(
+          resolved.action,
+          target ?? line,
+          detailsOf(resolved),
+        );
         const verdict = await this.deps.authorizer.authorize(request);
         const alternative = alternativeFor(
           verdict.alternative,
@@ -246,6 +250,7 @@ export class ShellSeam {
       reason: ruling.verdict.reason,
       command: line,
       class: ruling.class,
+      ...(ruling.verdict.rule === undefined ? {} : { rule: ruling.verdict.rule }),
     };
     const result = await hold.hold(request);
     // One yes covered the whole line, so everything it asked about is learned.
@@ -318,34 +323,40 @@ export class ShellSeam {
         const intent = `${resolved.action} ${target ?? ''}`.trim();
         const verdict = await leases.gate.claim(scope, leases.holder, intent);
         if (proceeds(verdict)) continue;
-        return {
-          message: verdict.message ?? `${scope} is held by another agent.`,
-          exitCode: SHELL_EXIT_WITHHELD,
-        };
+        const message = verdict.message ?? `${scope} is held by another agent.`;
+        await this.noteClash(scope, verdict.asked ?? message, verdict.sharedLeaseId);
+        return { message, exitCode: SHELL_EXIT_WITHHELD };
       }
     }
     return null;
   }
 
+  /** Kept for the voice to tell the person; never in the way of the refusal itself. */
+  private async noteClash(what: string, said: string, leaseId?: string): Promise<void> {
+    const { home, leases } = this.deps;
+    if (home === undefined || leases === undefined) return;
+    await new Clashes(home)
+      .note({
+        at: new Date().toISOString(),
+        sessionId: leases.holder.sessionId,
+        agent: leases.holder.agent,
+        what,
+        said,
+        ...(leaseId === undefined ? {} : { leaseId }),
+      })
+      .catch(() => undefined);
+  }
+
   private requestFor(
     action: string,
     target: string,
-    {
-      toolClass,
-      method,
-      environment,
-      content,
-    }: {
-      toolClass?: string;
-      method?: string;
-      environment?: string;
-      content?: readonly string[];
-    } = {},
+    { toolClass, method, environment, content, dataClassification }: RequestDetails = {},
   ): ActionRequest {
     return {
       action,
       target,
       ...(toolClass === undefined ? {} : { toolClass }),
+      ...(dataClassification === undefined ? {} : { dataClassification }),
       ...(environment === undefined ? {} : { environment }),
       // LOCAL ONLY, as an edit's content is: read by a `content` convention, never recorded.
       ...(content === undefined ? {} : { content }),
@@ -360,6 +371,27 @@ export class ShellSeam {
         : { workingDirectory: this.deps.workingDirectory }),
     };
   }
+}
+
+/** What a request carries beyond its action and target, as a resolved command names it. */
+interface RequestDetails {
+  toolClass?: string;
+  method?: string;
+  environment?: string;
+  content?: readonly string[];
+  dataClassification?: string;
+}
+
+function detailsOf(resolved: ResolvedAction): RequestDetails {
+  return {
+    toolClass: String(resolved.class),
+    ...(resolved.method === undefined ? {} : { method: resolved.method }),
+    ...(resolved.environment === undefined ? {} : { environment: resolved.environment }),
+    ...(resolved.content === undefined ? {} : { content: resolved.content }),
+    ...(resolved.dataClassification === undefined
+      ? {}
+      : { dataClassification: resolved.dataClassification }),
+  };
 }
 
 function nothingToRun(): ShellOutcome {
@@ -392,5 +424,6 @@ function decisionOf(ruling: Ruling, asked: boolean): ShellDecision {
       ? {}
       : { environment: ruling.verdict.environment }),
     ...(ruling.verdict.outOfScope === true ? { outOfScope: true } : {}),
+    ...ruledFor(ruling.verdict),
   };
 }

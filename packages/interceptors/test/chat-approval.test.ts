@@ -13,7 +13,8 @@ import {
 } from '@memnox/core';
 import { HookAuthorizer } from '../src/hook-authorizer';
 import { answerInChat, answersArrived } from '../src/in-session';
-import { answerToolCall, readApprovalRoute } from '../src/tool-hook';
+import { readApprovalRoute } from '@memnox/core';
+import { answerToolCall } from '../src/tool-hook';
 
 /* An agent that could not show its own prompt had every ask refused outright, with a note
    that a yes in the conversation could not help. Now the question is held, the person's
@@ -62,7 +63,7 @@ async function ask(home: string, route: ApprovalRoute, personThere = false) {
 }
 
 const home = () => mkdtemp(join(tmpdir(), 'memnox-chat-approval-'));
-const person = () => 'moise';
+const person = () => 'maya';
 
 describe('a question the agent cannot show a prompt for', () => {
   it('is held, and the agent is told to ask the person here', async () => {
@@ -97,11 +98,11 @@ describe('a question the agent cannot show a prompt for', () => {
     await ask(machine, APPROVAL_ROUTE.SESSION);
 
     const said = await answerInChat(machine, 's1', 'yes', NOW, person);
-    expect(said).toContain('moise said yes, once: you may');
+    expect(said).toContain('maya said yes, once: you may');
     const retry = await ask(machine, APPROVAL_ROUTE.SESSION);
 
     expect(retry?.ruling.effect).toBe(DECISION_EFFECT.ALLOW);
-    expect(retry?.ruling.reason).toContain('moise allowed this');
+    expect(retry?.ruling.reason).toContain('maya allowed this');
     // Once is once: the call after that is asked about again.
     expect((await ask(machine, APPROVAL_ROUTE.SESSION))?.ruling.effect).toBe(
       DECISION_EFFECT.ASK,
@@ -128,7 +129,7 @@ describe('a question the agent cannot show a prompt for', () => {
 
     const retry = await ask(machine, APPROVAL_ROUTE.SESSION);
     expect(retry?.ruling.effect).toBe(DECISION_EFFECT.DENY);
-    expect(retry?.ruling.reason).toContain('moise said no to this');
+    expect(retry?.ruling.reason).toContain('maya said no to this');
   });
 
   it('reads an ordinary prompt as a prompt, never as an answer', async () => {
@@ -176,7 +177,7 @@ describe('a person who also takes questions in their DM', () => {
       await approvals.answer(
         held.id,
         'once',
-        'moise in Slack',
+        'maya in Slack',
         new Date(clock).toISOString(),
       );
     };
@@ -188,7 +189,7 @@ describe('a person who also takes questions in their DM', () => {
       sleep: sleep,
     });
 
-    expect(said).toContain('moise in Slack said yes, once: you may');
+    expect(said).toContain('maya in Slack said yes, once: you may');
     expect(said).toContain('Try the same call again now and carry on');
     expect((await ask(machine, APPROVAL_ROUTE.BOTH))?.ruling.effect).toBe(
       DECISION_EFFECT.ALLOW,
@@ -201,7 +202,7 @@ describe('a person who also takes questions in their DM', () => {
     const approvals = new PendingApprovals(machine);
     const [held] = await approvals.list(NOW.toISOString());
     if (held === undefined) throw new Error('the question was held');
-    await approvals.answer(held.id, 'deny', 'moise in Discord', NOW.toISOString());
+    await approvals.answer(held.id, 'deny', 'maya in Discord', NOW.toISOString());
 
     const said = await answersArrived({
       home: machine,
@@ -209,7 +210,7 @@ describe('a person who also takes questions in their DM', () => {
       now: () => NOW,
       waitMs: 0,
     });
-    expect(said).toContain('moise in Discord said no');
+    expect(said).toContain('maya in Discord said no');
     expect(
       await answersArrived({ home: machine, sessionId: 's1', now: () => NOW, waitMs: 0 }),
     ).toBeNull();
@@ -256,5 +257,162 @@ describe('where the route comes from', () => {
     await mkdir(join(machine, '.memnox'), { recursive: true });
     await writeFile(configPathFor(machine), 'approvals = "both"\n');
     expect(await readApprovalRoute(machine)).toBe(APPROVAL_ROUTE.BOTH);
+  });
+});
+
+describe('a question a paired phone can answer', () => {
+  async function askWithPhone(machine: string) {
+    const gate = new LocalGate(ASK_MERGES as never, { agentName: 'claude-code' });
+    return answerToolCall(
+      merge(),
+      {
+        home: machine,
+        agent: 'claude-code',
+        runSession: undefined,
+        env: {},
+        personThere: false,
+        now: () => NOW,
+      },
+      {
+        authorizer: new HookAuthorizer({ gate }),
+        mode: ENFORCEMENT_MODE.ENFORCE,
+        sink: null,
+        route: APPROVAL_ROUTE.SESSION,
+        voiceThere: async () => false,
+        pairedThere: async () => true,
+      },
+    );
+  }
+
+  it('opens no picker, since an answer on the phone could never close it', async () => {
+    const machine = await home();
+    const answer = await askWithPhone(machine);
+    expect(answer?.ruling.effect).toBe(DECISION_EFFECT.ASK);
+    expect(answer?.reply?.stdout).not.toContain('AskUserQuestion');
+    expect(answer?.reply?.stdout).toContain('their paired phone');
+    expect(answer?.reply?.stdout).toContain('It was also sent to your paired phone');
+  });
+
+  it('tells the agent at the turn end once the phone answer lands', async () => {
+    const machine = await home();
+    await askWithPhone(machine);
+    const approvals = new PendingApprovals(machine);
+    const [held] = await approvals.list(NOW.toISOString());
+    if (held === undefined) throw new Error('the question was held');
+    expect(held.alsoOn).toEqual(['paired']);
+    let clock = NOW.getTime();
+    const sleep = async (ms: number): Promise<void> => {
+      clock += ms;
+      await approvals.answer(
+        held.id,
+        'once',
+        'person (Face ID, iPhone)',
+        NOW.toISOString(),
+      );
+    };
+    const said = await answersArrived({
+      home: machine,
+      sessionId: 's1',
+      now: () => new Date(clock),
+      waitMs: 60_000,
+      sleep,
+    });
+    expect(said).toContain('said yes, once');
+  });
+});
+
+describe('a question while the Mac voice is listening', () => {
+  async function askWithVoice(
+    machine: string,
+    voiceWaitMs: number,
+    answering?: (approvals: PendingApprovals) => Promise<void>,
+  ) {
+    const gate = new LocalGate(ASK_MERGES as never, { agentName: 'claude-code' });
+    const approvals = new PendingApprovals(machine);
+    const asking = answerToolCall(
+      merge(),
+      {
+        home: machine,
+        agent: 'claude-code',
+        runSession: undefined,
+        env: {},
+        personThere: false,
+        now: () => NOW,
+      },
+      {
+        authorizer: new HookAuthorizer({ gate }),
+        mode: ENFORCEMENT_MODE.ENFORCE,
+        sink: null,
+        route: APPROVAL_ROUTE.SESSION,
+        voiceThere: async () => true,
+        voiceWaitMs,
+        pairedThere: async () => false,
+      },
+    );
+    if (answering !== undefined) {
+      // The voice answers while the call is still waiting, as Touch ID does.
+      for (;;) {
+        const [held] = await approvals.list(NOW.toISOString());
+        if (held !== undefined) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await answering(approvals);
+    }
+    return asking;
+  }
+
+  it('lets the call through on a spoken yes, with no picker left to click', async () => {
+    const machine = await home();
+    const answer = await askWithVoice(machine, 5_000, async (approvals) => {
+      const [held] = await approvals.list(NOW.toISOString());
+      await approvals.answer(held?.id ?? '', 'session', 'voice', NOW.toISOString());
+    });
+    expect(answer?.ruling.effect).toBe(DECISION_EFFECT.ALLOW);
+    expect(answer?.reply?.stdout ?? '').not.toContain('AskUserQuestion');
+    expect(await new PendingApprovals(machine).list(NOW.toISOString())).toEqual([]);
+    // For this session, so the next one goes through without being put to anybody.
+    expect((await ask(machine, APPROVAL_ROUTE.SESSION))?.ruling.effect).toBe(
+      DECISION_EFFECT.ALLOW,
+    );
+  });
+
+  it('refuses on a spoken no', async () => {
+    const machine = await home();
+    const answer = await askWithVoice(machine, 5_000, async (approvals) => {
+      const [held] = await approvals.list(NOW.toISOString());
+      await approvals.answer(held?.id ?? '', 'deny', 'voice', NOW.toISOString());
+    });
+    expect(answer?.ruling.effect).toBe(DECISION_EFFECT.DENY);
+  });
+
+  it('leaves the question on the Mac rather than opening a picker it could never close', async () => {
+    const machine = await home();
+    const answer = await askWithVoice(machine, 50);
+    expect(answer?.ruling.effect).toBe(DECISION_EFFECT.ASK);
+    expect(answer?.reply?.stdout).not.toContain('AskUserQuestion');
+    expect(answer?.reply?.stdout).toContain('from the Memnox Mac app');
+    const [held] = await new PendingApprovals(machine).list(NOW.toISOString());
+    expect(held?.alsoOn).toEqual(['mac']);
+  });
+
+  it('tells the agent at the turn end once the Mac answer lands', async () => {
+    const machine = await home();
+    await askWithVoice(machine, 50);
+    const approvals = new PendingApprovals(machine);
+    const [held] = await approvals.list(NOW.toISOString());
+    if (held === undefined) throw new Error('the question was held');
+    let clock = NOW.getTime();
+    const sleep = async (ms: number): Promise<void> => {
+      clock += ms;
+      await approvals.answer(held.id, 'session', 'person (Touch ID)', NOW.toISOString());
+    };
+    const said = await answersArrived({
+      home: machine,
+      sessionId: 's1',
+      now: () => new Date(clock),
+      waitMs: 60_000,
+      sleep,
+    });
+    expect(said).toContain('said yes for the rest of this session');
   });
 });

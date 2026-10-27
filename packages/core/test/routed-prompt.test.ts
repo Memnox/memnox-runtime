@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RoutedHoldPrompt } from '../src/gate/routed-prompt';
-import { PendingApprovals } from '../src/gate/pending';
+import {
+  goesToWorkspace,
+  PendingApprovals,
+  type PendingApproval,
+} from '../src/gate/pending';
 import {
   HOLD_ANSWER,
   DEFAULT_HOLD_TIMEOUT_MS,
@@ -74,8 +78,26 @@ describe('a held call is written down before anybody is asked', () => {
     expect(said.join(' ')).toContain('memnox approve');
     expect(said.join(' ')).toContain(waiting);
 
-    await approvals.answer(waiting, HOLD_ANSWER.ONCE, 'tresor', new Date().toISOString());
-    expect(await asking).toEqual({ answer: HOLD_ANSWER.ONCE });
+    await approvals.answer(waiting, HOLD_ANSWER.ONCE, 'ada', new Date().toISOString());
+    expect(await asking).toEqual({ answer: HOLD_ANSWER.ONCE, by: 'ada' });
+  }, 30_000);
+
+  it('keeps a question on this machine when the route says the session only', async () => {
+    const approvals = new PendingApprovals(await home());
+    const prompt = new RoutedHoldPrompt({
+      approvals,
+      pollMs: POLL_MS,
+      route: async () => 'session',
+    });
+
+    const asking = prompt.ask(request, PATIENT_MS);
+    const waiting = await held(approvals);
+    const raised = await approvals.read(waiting);
+    await approvals.answer(waiting, HOLD_ANSWER.DENY, 'ada', new Date().toISOString());
+    await asking;
+
+    expect(raised?.route).toBe('session');
+    expect(goesToWorkspace(raised as PendingApproval)).toBe(false);
   }, 30_000);
 
   /* The card on the terminal names the id itself, so a line above it saying the same is
@@ -96,7 +118,10 @@ describe('a held call is written down before anybody is asked', () => {
       pollMs: POLL_MS,
     });
 
-    expect(await prompt.ask(request, PATIENT_MS)).toEqual({ answer: HOLD_ANSWER.ONCE });
+    expect(await prompt.ask(request, PATIENT_MS)).toEqual({
+      answer: HOLD_ANSWER.ONCE,
+      by: 'the terminal',
+    });
     expect(said).toEqual([]);
     expect(seen[0]).toMatch(/^apr_/);
   }, 30_000);
@@ -110,9 +135,9 @@ describe('a held call is written down before anybody is asked', () => {
 
     const asking = prompt.ask(request, PATIENT_MS);
     const waiting = await held(approvals);
-    await approvals.answer(waiting, HOLD_ANSWER.DENY, 'tresor', new Date().toISOString());
+    await approvals.answer(waiting, HOLD_ANSWER.DENY, 'ada', new Date().toISOString());
 
-    expect(await asking).toEqual({ answer: HOLD_ANSWER.DENY });
+    expect(await asking).toEqual({ answer: HOLD_ANSWER.DENY, by: 'ada' });
   }, 30_000);
 
   /* A walk-away must not become a yes, and it must not hang the agent either. */
@@ -146,6 +171,7 @@ describe('a held call is written down before anybody is asked', () => {
     });
     expect(await prompt.ask(request, PATIENT_MS)).toEqual({
       answer: HOLD_ANSWER.SESSION,
+      by: 'the terminal',
     });
   });
 
@@ -169,7 +195,7 @@ describe('a held call is written down before anybody is asked', () => {
       new Date().toISOString(),
     );
 
-    expect(await asking).toEqual({ answer: HOLD_ANSWER.ONCE });
+    expect(await asking).toEqual({ answer: HOLD_ANSWER.ONCE, by: 'somebody elsewhere' });
   }, 30_000);
 });
 
@@ -189,7 +215,7 @@ describe('what the seams now get', () => {
 
     const holding = service.hold(request);
     const waiting = await held(approvals);
-    await approvals.answer(waiting, HOLD_ANSWER.ONCE, 'tresor', new Date().toISOString());
+    await approvals.answer(waiting, HOLD_ANSWER.ONCE, 'ada', new Date().toISOString());
 
     expect((await holding).outcome).toBe(HOLD_OUTCOME.ALLOWED);
   }, 30_000);

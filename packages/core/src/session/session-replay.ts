@@ -6,6 +6,7 @@
 import { DECISION_EFFECT, type DecisionEffect } from '../constants/decision.constants';
 import { ENFORCEMENT_MODE } from '../constants/enforcement.constants';
 import type { MemnoxEvent } from '../event/event';
+import { helperOf } from '../event/delegation';
 import { didFail } from '../event/outcome';
 import type { PendingApproval } from '../gate/pending';
 import type { Milestone } from '../recovery/milestone';
@@ -60,6 +61,8 @@ export interface ReplayStep {
   wouldBe?: DecisionEffect;
   exitCode?: number;
   failed?: boolean;
+  /** The subagent the host handed this to, so "the agent did it" can name which helper did. */
+  by?: string;
   reason?: string;
   rule?: string;
   /** Who released a held call, where somebody did. */
@@ -118,6 +121,9 @@ function actionStep(event: MemnoxEvent): ReplayStep {
     reason: event.reason,
     ...(event.target === undefined ? {} : { target: event.target }),
     ...(event.shadowEffect === undefined ? {} : { wouldBe: event.shadowEffect }),
+    ...(event.subagent === undefined
+      ? {}
+      : { by: helperOf(event.subagent, event.subagentType) }),
     ...(event.exitCode === undefined ? {} : { exitCode: event.exitCode }),
     ...(event.rule === undefined ? {} : { rule: event.rule.name }),
     ...(event.authorizedBy === undefined ? {} : { answeredBy: event.authorizedBy }),

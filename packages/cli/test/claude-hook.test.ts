@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   editHookCommand,
@@ -25,7 +27,8 @@ describe("Claude Code's settings with the lease hook", () => {
       { matcher: 'Bash', hooks: [{ type: 'command', command: 'lint-it' }] },
       {
         matcher: 'Write|Edit|MultiEdit|NotebookEdit',
-        hooks: [{ type: 'command', command: OURS }],
+        // Past the host's sixty seconds, so an agent's questions can be answered step by step.
+        hooks: [{ type: 'command', command: OURS, timeout: 300 }],
       },
     ]);
     expect(next.hooks?.['SessionEnd']).toEqual([
@@ -49,27 +52,21 @@ describe("Claude Code's settings with the lease hook", () => {
   });
 });
 
-/* The bare name on a machine where it is not on PATH fails on every write, and the
-   editor says so where nobody reads it, so the lease is silently never taken. */
+/* The agent runs the hook with its own PATH, not the installer's, so a bare name found
+   on the installer's PATH still fails on every tool call where the agent cannot find it. */
 describe('what the hook entry runs', () => {
-  it('names the binary where it is on PATH', () => {
-    expect(
-      editHookCommand(
-        '/usr/local/bin',
-        (file) => file === '/usr/local/bin/memnox-edit-hook',
-        '/x/edit-hook.js',
-      ),
-    ).toBe(OURS);
-  });
-
-  it('runs the built one by its path where it is not, and is still found as ours', () => {
+  it('runs the built one by its path, and is still found as ours', () => {
     const command = editHookCommand(
-      '/usr/bin',
       (file) => file === '/x/edit-hook.js',
       '/x/edit-hook.js',
     );
 
-    expect(command).toContain('"/x/edit-hook.js"');
+    // The launcher by its path, so a host that hashes the entry keeps trusting it through updates.
+    expect(command).toBe(`"${join(homedir(), '.memnox', 'hooks', OURS)}"`);
     expect(withoutEditHook(withEditHook({}, command))).toEqual({});
+  });
+
+  it('falls back to the name only where nothing is built beside it', () => {
+    expect(editHookCommand(() => false, '/x/edit-hook.js')).toBe(OURS);
   });
 });

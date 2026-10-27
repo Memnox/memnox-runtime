@@ -1,0 +1,4 @@
+# The simulators under scripts/ are local tools that are never published: posting a file they
+# saved, or logging what a test client sent, is what they are for, so scanning them only adds noise.
+paths-ignore:
+  - scripts

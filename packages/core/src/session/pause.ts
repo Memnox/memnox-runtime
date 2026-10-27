@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { MEMNOX_HOME } from '../config/config';
+import { exclusively } from '../store/exclusive';
 import { JsonRecordDir } from '../store/json-records';
 import type { BreakerSignal } from './breaker';
 
@@ -30,14 +31,16 @@ export function pauseDirFor(home: string): string {
 export class SessionPauses {
   private readonly records: JsonRecordDir<SessionPause>;
 
-  constructor(home: string) {
+  constructor(private readonly home: string) {
     this.records = new JsonRecordDir(pauseDirFor(home));
   }
 
   async pause(pause: SessionPause): Promise<void> {
     // First one wins, so a held session keeps the reason somebody may be reading.
-    if ((await this.inForce(pause.sessionId)) !== null) return;
-    await this.write(pause);
+    await exclusively(pauseDirFor(this.home), async () => {
+      if ((await this.inForce(pause.sessionId)) !== null) return;
+      await this.write(pause);
+    });
   }
 
   /** Null when never paused, which is the ordinary case. */

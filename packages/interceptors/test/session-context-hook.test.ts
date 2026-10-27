@@ -17,6 +17,9 @@ import {
   MOST_DECISIONS_PER_CALL,
   MOST_FACTS_PER_CALL,
   writeWorkspaceMemory,
+  WORK_BRIEF_VAR,
+  WorkBriefs,
+  MOST_CANDIDATES_PER_CALL,
   type WorkspaceFact,
   NOTICE_MODE,
   renderConfig,
@@ -132,13 +135,54 @@ describe('the boundary, when a session starts', () => {
     expect(text.length).toBeLessThanOrEqual(MOST_BOUNDARY_CHARS);
   });
 
+  it('hands a session started on a ticket its whole brief before the first turn', async () => {
+    const base = await machine();
+    await new WorkBriefs(base.home).write({
+      id: 'wrk_abc123',
+      about: 'Fix auth token refresh',
+      at: NOW.toISOString(),
+      sources: [
+        {
+          title: 'Fix auth token refresh',
+          excerpt: 'Refresh before the call fails.',
+          content: 'Refresh before the call fails. Acceptance: never log the token.',
+          system: 'linear',
+          at: '2026-09-20T09:00:00.000Z',
+          link: 'https://linear.app/acme/issue/ENG-12',
+        },
+      ],
+      decisions: [
+        { statement: 'Refresh stays in the session client.', settled: 'a decision' },
+      ],
+      withheld: 0,
+    });
+    const deps = { ...base, env: { ...base.env, [WORK_BRIEF_VAR]: 'wrk_abc123' } };
+    const text = (
+      JSON.parse(await answerSessionStart({ sessionId: 's1' }, deps)) as {
+        hookSpecificOutput: { additionalContext: string };
+      }
+    ).hookSpecificOutput.additionalContext;
+    expect(text).toContain('Workspace brief wrk_abc123, for: Fix auth token refresh.');
+    expect(text).toContain(
+      '"Refresh before the call fails. Acceptance: never log the token."',
+    );
+    expect(text).toContain('its code fingerprint and the rules in force on this session');
+    expect(text).toContain('Decision (a decision): Refresh stays in the session client.');
+    expect(text).toContain('stop before you change anything and ask your person');
+
+    const forged = { ...base, env: { ...base.env, [WORK_BRIEF_VAR]: '../../account' } };
+    expect(await answerSessionStart({ sessionId: 's1' }, forged)).not.toContain(
+      'Workspace brief',
+    );
+  });
+
   /* A stop turns every seam off, and a session that heard nothing would assume it was
      still being watched. */
   it('says protection is stopped, by whom, and how to turn it back on', async () => {
     const deps = await machine();
     await writeProtectionStop(deps.home, {
       at: '2026-09-24T09:00:00.000Z',
-      by: 'moise',
+      by: 'maya',
       reason: 'demo',
       mode: ENFORCEMENT_MODE.ENFORCE,
     });
@@ -149,7 +193,7 @@ describe('the boundary, when a session starts', () => {
     ).hookSpecificOutput.additionalContext;
 
     expect(text).toContain('stopped');
-    expect(text).toContain('moise');
+    expect(text).toContain('maya');
     expect(text).toContain('memnox start');
   });
 
@@ -269,6 +313,48 @@ describe('what the workspace settled, where the agent meets it', () => {
     expect(facts(first)).toHaveLength(MOST_FACTS_PER_CALL);
     expect(facts(await decisionsAt(lookup, deps))).toHaveLength(2);
     expect(await decisionsAt(lookup, deps)).toBeNull();
+  });
+
+  it('says a candidate once, opening with that nobody approved it, and never as settled', async () => {
+    const deps = await machine();
+    await writeWorkspaceMemory(deps.home, {
+      hash: 'm1',
+      facts: [settled('f1')],
+      unconfirmed: [
+        {
+          id: 'c1',
+          kind: 'decision',
+          statement: 'Payment refunds go through the queue now.',
+          subject: 'payments',
+          standing: 'candidate',
+          approved: false,
+          sources: ['linear'],
+        },
+        {
+          id: 'c2',
+          kind: 'decision',
+          statement: 'Payment refunds are capped at fifty.',
+          subject: 'payments',
+          standing: 'candidate',
+          approved: false,
+          sources: ['slack'],
+        },
+      ],
+      withheld: 0,
+      syncedAt: NOW.toISOString(),
+    });
+    const lookup = { sessionId: 's1', prompt: 'why do payment refunds fail' };
+
+    const lines = ((await decisionsAt(lookup, deps)) ?? '').split('\n');
+    const guesses = lines.filter((line) => line.startsWith('Not approved by anyone'));
+
+    expect(guesses).toHaveLength(MOST_CANDIDATES_PER_CALL);
+    expect(guesses[0]).toContain('Context only');
+    expect(
+      lines.filter(
+        (line) => line.includes('Payment refunds') && line.startsWith('Your workspace'),
+      ),
+    ).toEqual([]);
   });
 
   it('tells the agent at session start to ask before it changes code', async () => {

@@ -1,22 +1,13 @@
 import { minutesToMs } from '../domain/time';
 import { MemoryGrants, type GrantSubject, type SessionGrants } from './session-grants';
+import { HOLD_ANSWER, type HoldAnswer } from './answers';
+
+export { HOLD_ANSWER, type HoldAnswer };
 
 /**
  * Holding a call for a person while the agent waits on the other end of a pipe, so every
  * path ends in a decision: answered, timed out, or refused because nobody could be asked.
  */
-
-export const HOLD_ANSWER = {
-  /** This call only. The next identical one asks again. */
-  ONCE: 'once',
-  /** Every identical call for the rest of this session. */
-  SESSION: 'session',
-  DENY: 'deny',
-  /** The command was wrong rather than the rule, so the person fixes it and the loop survives. */
-  EDIT: 'edit',
-} as const;
-
-export type HoldAnswer = (typeof HOLD_ANSWER)[keyof typeof HOLD_ANSWER];
 
 export const HOLD_OUTCOME = {
   ALLOWED: 'allowed',
@@ -27,6 +18,11 @@ export const HOLD_OUTCOME = {
   TIMED_OUT: 'timed-out',
   /** No terminal to ask at. Denied, because a firewall fails closed. */
   UNATTENDED: 'unattended',
+  /**
+   * Nobody answered in time, so the question was kept for a person to answer later and the
+   * call refused for now. The agent carries on with what does not need it and retries.
+   */
+  PARKED: 'parked',
 } as const;
 
 export type HoldOutcome = (typeof HOLD_OUTCOME)[keyof typeof HOLD_OUTCOME];
@@ -61,12 +57,23 @@ export interface HoldRequest {
   grantKey?: string;
   /** Where the question also waits, so a second terminal or the workspace can answer it. */
   approvalId?: string;
+  /** The rule that asked, by name, so the workspace can put it to that rule's approvers. */
+  rule?: string;
+  /** The way forward the rule named, as the agent reads it, so a no still leaves it one. */
+  alternative?: string;
+  /**
+   * Everything it changes stays inside the session's repository, so a yes needs no
+   * fingerprint. Absent asks for one, which is every call that reaches further.
+   */
+  withinSession?: true;
 }
 
 export interface HoldAsked {
   answer: HoldAnswer;
   /** What the person typed instead, for HOLD_ANSWER.EDIT. */
   command?: string;
+  /** Who answered, where the route that carried it knows: the terminal, a phone, the workspace. */
+  by?: string;
 }
 
 /**
@@ -74,7 +81,9 @@ export interface HoldAsked {
  * is nobody to ask, because a slow approver and a refusal have to read differently.
  */
 export interface HoldUnanswered {
-  unanswered: typeof HOLD_OUTCOME.TIMED_OUT;
+  unanswered: typeof HOLD_OUTCOME.TIMED_OUT | typeof HOLD_OUTCOME.PARKED;
+  /** The question still waiting, so the agent and the person can name the same one. */
+  approvalId?: string;
 }
 
 export function isUnanswered(
@@ -104,6 +113,10 @@ export interface HoldResult {
   edited?: string;
   /** This yes was the one that taught the session to stop asking about the action. */
   learned?: true;
+  /** Who answered, so the row the seam writes names them rather than a bare allow. */
+  by?: string;
+  /** For a parked call, the question a person will answer later. */
+  approvalId?: string;
 }
 
 export function isAllowed(result: HoldResult): boolean {
@@ -144,14 +157,20 @@ export class HoldService {
     }
 
     if (asked === null) return { outcome: HOLD_OUTCOME.UNATTENDED };
-    if (isUnanswered(asked)) return { outcome: asked.unanswered };
+    if (isUnanswered(asked)) {
+      return {
+        outcome: asked.unanswered,
+        ...(asked.approvalId === undefined ? {} : { approvalId: asked.approvalId }),
+      };
+    }
     return this.resultOf(asked, request);
   }
 
   private async resultOf(asked: HoldAsked, request: HoldRequest): Promise<HoldResult> {
     const answer = asked.answer;
+    const by = asked.by === undefined ? {} : { by: asked.by };
     if (answer === HOLD_ANSWER.DENY) {
-      return { outcome: HOLD_OUTCOME.DENIED, answer };
+      return { outcome: HOLD_OUTCOME.DENIED, answer, ...by };
     }
     if (answer === HOLD_ANSWER.EDIT) return editedResult(asked, request);
     const subject = holdGrantSubject(request);
@@ -161,6 +180,7 @@ export class HoldService {
       outcome: HOLD_OUTCOME.ALLOWED,
       answer,
       ...(learned ? { learned: true } : {}),
+      ...by,
     };
   }
 
@@ -200,15 +220,28 @@ export function describeHeldCall(
     : `${request.operation} ${request.target}`;
 }
 
+/**
+ * Written for the agent, which acts on it: keep going with everything else, come back to
+ * this later, and do not reach the same end another way while a person has not decided.
+ */
+function describeParked(what: string, approvalId: string | undefined): string {
+  const id = approvalId === undefined ? '' : ` as ${approvalId}`;
+  return `Nobody is here to answer, so ${what} is parked${id} until a person decides. It did not run. Carry on with the parts of the task that do not need it, say in your summary that it is waiting, and try it again later: it goes through once they say yes. Do not reach the same result another way.`;
+}
+
 /** What the caller is told when a hold did not end in an allow. */
 export function describeHold(result: HoldResult, request: HoldRequest): string {
   const what = describeHeldCall(request);
   if (result.outcome === HOLD_OUTCOME.DENIED) {
-    return `A person denied ${what}.`;
+    // Named where the route knew, since "who refused this" is asked as often as who allowed it.
+    const who = result.by === undefined ? 'A person' : `A person, ${result.by},`;
+    return `${who} denied ${what}.`;
   }
   if (result.outcome === HOLD_OUTCOME.EDITED) {
     return `A person replaced that command with: ${result.edited ?? ''}`;
   }
+  if (result.outcome === HOLD_OUTCOME.PARKED)
+    return describeParked(what, result.approvalId);
   if (result.outcome === HOLD_OUTCOME.TIMED_OUT) {
     return `Nobody answered in time, so ${what} did not run. Ask again when someone is at the keyboard.`;
   }

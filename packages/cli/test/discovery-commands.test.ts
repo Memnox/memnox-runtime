@@ -171,6 +171,136 @@ describe('memnox (scan)', () => {
     expect(out.text).toContain('No AI agents found on this machine.');
     expect(out.text).toContain('Nothing was transmitted.');
   });
+
+  it('counts the hooks somebody else installed, and says a hook runs unasked', async () => {
+    const machine = FakeMachine.from({
+      ...MACHINE,
+      [`${HOME}/.claude/settings.json`]: JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [{ type: 'command', command: './guard.sh' }] },
+            {
+              matcher: '*',
+              hooks: [{ type: 'command', command: 'memnox-edit-hook --policy' }],
+            },
+          ],
+        },
+      }),
+    });
+
+    const { out } = await runCommand(
+      (program, context) =>
+        registerScanCommand(program, context, { buildSeams: () => fakeSeams(machine) }),
+      ['scan'],
+    );
+
+    expect(out.text).toMatch(/hooks\s+1 in claude-code/);
+    expect(out.text).toContain('no permission prompt sees it');
+    expect(out.text).toContain('1 can stop a tool call');
+    expect(out.text).not.toContain('memnox-edit-hook');
+  });
+
+  it('says which servers download whatever was published last', async () => {
+    const machine = FakeMachine.from({
+      [`${HOME}/.claude.json`]: JSON.stringify({
+        mcpServers: {
+          github: { command: 'npx', args: ['-y', '@x/github-mcp'] },
+          pinned: { command: 'npx', args: ['-y', '@x/pinned-mcp@1.2.3'] },
+        },
+      }),
+    });
+
+    const { out } = await runCommand(
+      (program, context) =>
+        registerScanCommand(program, context, { buildSeams: () => fakeSeams(machine) }),
+      ['scan'],
+    );
+
+    expect(out.text).toContain(
+      'github downloads whatever was last published each time it starts',
+    );
+    expect(out.text).not.toMatch(/pinned downloads/);
+  });
+});
+
+describe('memnox scan --sarif', () => {
+  const HOOKED = {
+    ...MACHINE,
+    [`${PROJECT}/.claude/settings.json`]: JSON.stringify({
+      hooks: {
+        SessionStart: [{ hooks: [{ type: 'command', command: 'node inject.js' }] }],
+      },
+    }),
+  };
+
+  it('reports a hook that arrived since the kept scan as an error the gate failed on', async () => {
+    const snapshots = new MemorySnapshots();
+    await runCommand(
+      (program, context) =>
+        registerScanCommand(program, context, {
+          buildSeams: () => fakeSeams(FakeMachine.from(MACHINE), { snapshots }),
+        }),
+      ['scan', '--save', '--json'],
+    );
+
+    const { out } = await runCommand(
+      (program, context) =>
+        registerScanCommand(program, context, {
+          buildSeams: () =>
+            fakeSeams(FakeMachine.from(HOOKED), {
+              snapshots,
+              times: ['2026-01-02T00:00:00.000Z'],
+            }),
+        }),
+      ['scan', '--fail-on', 'any', '--sarif'],
+    );
+    const failed = process.exitCode;
+    process.exitCode = undefined;
+
+    const log = JSON.parse(out.text) as {
+      version: string;
+      runs: {
+        results: {
+          ruleId: string;
+          level: string;
+          locations?: { physicalLocation: { artifactLocation: { uri: string } } }[];
+        }[];
+      }[];
+    };
+    expect(log.version).toBe('2.1.0');
+    const hook = log.runs[0]?.results.find(
+      (each) => each.ruleId === 'memnox/widened-hook',
+    );
+    expect(hook?.level).toBe('error');
+    expect(hook?.locations?.[0]?.physicalLocation.artifactLocation.uri).toBe(
+      '.claude/settings.json',
+    );
+    expect(failed).toBeGreaterThan(0);
+  });
+
+  it('is an empty run on a first scan, so a pipeline upload never fails on it', async () => {
+    const { out } = await runCommand(
+      (program, context) =>
+        registerScanCommand(program, context, {
+          buildSeams: () => fakeSeams(FakeMachine.from(MACHINE)),
+        }),
+      ['scan', '--fail-on', 'any', '--sarif'],
+    );
+    const log = JSON.parse(out.text) as { runs: { results: unknown[] }[] };
+    expect(log.runs[0]?.results).toEqual([]);
+  });
+
+  it('refuses to run without a comparison, and names the flags that make one', async () => {
+    await expect(
+      runCommand(
+        (program, context) =>
+          registerScanCommand(program, context, {
+            buildSeams: () => fakeSeams(FakeMachine.from(MACHINE)),
+          }),
+        ['scan', '--sarif'],
+      ),
+    ).rejects.toThrow(/--fail-on, --since or --from/);
+  });
 });
 
 describe('memnox doctor', () => {

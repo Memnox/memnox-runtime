@@ -1,6 +1,8 @@
 import {
   CloudLeases,
   CloudNotes,
+  DELIVERY,
+  deliveryRow,
   desktopNotice,
   LeaseRegistry,
   markActivity,
@@ -9,7 +11,9 @@ import {
   readWorkspaceMemory,
   renderNotes,
   SECOND_MS,
+  SpokenInstructions,
   SqliteEventStore,
+  type NoteKind,
   type SessionNote,
 } from '@memnox/core';
 
@@ -19,6 +23,7 @@ import { EDIT_IDLE_MINUTES } from './edit-hook';
 import { markIfDue } from './edit-marks';
 import {
   activityOf,
+  readsNotesAt,
   SESSION_MOMENT,
   sessionAnswer,
   withDecisions,
@@ -42,6 +47,9 @@ const NOTES_EVERY_MS = 10 * SECOND_MS;
  */
 const RENEW_EVERY_MS = MINUTE_MS;
 
+/** How often another agent's question may wake a session whose turn ended. */
+const AGENT_WAKE_EVERY_MS = 2 * MINUTE_MS;
+
 /**
  * What the host reads back at this pause, with a trailing newline, or empty for nothing.
  * `said` is anything else this pause carries, such as a decision the prompt names.
@@ -54,6 +62,12 @@ export async function answerPause(
   await recordActivity(pause, context);
   if (pause.moment === SESSION_MOMENT.AFTER_TOOL) await takeOverIfAllowed(pause, context);
   const notes = await notesAt(pause, context);
+  await recordPickedUp(
+    notes.filter(fromAnAgent),
+    pause.sessionId,
+    context,
+    FROM_AN_AGENT,
+  );
   // A collision note goes on the person's screen
   // too, since they are usually in another window.
   const collided = notes.filter((note) => note.kind === NOTE_KIND.COORDINATION);
@@ -104,17 +118,25 @@ async function notesAt(
   const inbox = new CloudNotes(home);
   // The holds are filed under the session `memnox run` set, where there is one.
   const holder = context.runSession ?? pause.sessionId;
-  // Windsurf reads nothing back, so a note collected
-  // here would be marked delivered and never seen.
-  if (pause.host === EDIT_HOST.WINDSURF) {
+  // A host that reads nothing back here would have a collected note marked delivered and never seen.
+  if (!readsNotesAt(pause.host, pause.moment)) {
     await keepHoldsAlive(holder, context);
     return [];
   }
+  const spoken = await spokenFor(home, [pause.sessionId, holder], agent);
+  await recordPickedUp(spoken, pause.sessionId, context);
   if (pause.moment === SESSION_MOMENT.TURN_END) {
-    return inbox.collect(agent, pause.sessionId, [NOTE_KIND.OPERATOR]);
+    return [
+      ...spoken,
+      ...(await inbox.collect(
+        agent,
+        pause.sessionId,
+        await turnEndKinds(pause, context),
+      )),
+    ];
   }
   if (pause.moment === SESSION_MOMENT.PROMPT)
-    return inbox.collect(agent, pause.sessionId);
+    return [...spoken, ...(await inbox.collect(agent, pause.sessionId))];
 
   const chore = { name: 'notes', sessionId: pause.sessionId, everyMs: NOTES_EVERY_MS };
   const [, notes] = await Promise.all([
@@ -123,7 +145,79 @@ async function notesAt(
       due ? inbox.collect(agent, pause.sessionId) : [],
     ),
   ]);
-  return notes;
+  return [...spoken, ...notes];
+}
+
+/**
+ * What may wake a session whose turn ended: a person's turn always, and another agent's
+ * question at most every few minutes, so two agents can never keep each other running.
+ */
+export async function turnEndKinds(
+  pause: SessionEvent,
+  context: EditHookContext,
+): Promise<NoteKind[]> {
+  const chore = {
+    name: 'woken',
+    sessionId: pause.sessionId,
+    everyMs: AGENT_WAKE_EVERY_MS,
+  };
+  const wakes = await markIfDue(context.home, chore, context.now());
+  return wakes ? [NOTE_KIND.OPERATOR, NOTE_KIND.AGENT_ASK] : [NOTE_KIND.OPERATOR];
+}
+
+/** What the person said to this session out loud, under either id it goes by. */
+async function spokenFor(
+  home: string,
+  ids: readonly string[],
+  agent: string,
+): Promise<SessionNote[]> {
+  const inbox = new SpokenInstructions(home);
+  const found: SessionNote[] = [];
+  for (const id of new Set(ids))
+    found.push(...(await inbox.collect(agent, id).catch(() => [])));
+  return found;
+}
+
+/** What the hook says it handed over from another agent, so `why` and the timeline show the conversation. */
+const FROM_AN_AGENT =
+  "another agent's message, handed to the session by its own hook at its next step";
+
+function fromAnAgent(note: SessionNote): boolean {
+  return note.kind === NOTE_KIND.AGENT || note.kind === NOTE_KIND.AGENT_ASK;
+}
+
+/** What the hook says it handed over, so the person's words are only called delivered once the session took them. */
+const PICKED_UP = "the session's own hook handing it over at its next step";
+
+async function recordPickedUp(
+  spoken: readonly SessionNote[],
+  sessionId: string,
+  context: EditHookContext,
+  checked: string = PICKED_UP,
+): Promise<void> {
+  if (spoken.length === 0) return;
+  const at = context.now().toISOString();
+  try {
+    const ledger = SqliteEventStore.forHome(context.home);
+    try {
+      for (const note of spoken) {
+        await ledger.append(
+          deliveryRow({
+            sessionId,
+            agent: context.agent,
+            text: note.message,
+            outcome: DELIVERY.VERIFIED,
+            proof: { checked },
+            at,
+          }),
+        );
+      }
+    } finally {
+      ledger.close();
+    }
+  } catch {
+    // A lost row is a lost row; the note was already handed over.
+  }
 }
 
 /**

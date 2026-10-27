@@ -124,6 +124,18 @@ describe('a session replayed', () => {
     expect(replay.steps[0]?.summary).toContain('would be deny');
   });
 
+  it('names the subagent a step was handed to, and nobody when the host named none', () => {
+    const replay = buildReplay({
+      sessionId: 'ses_1',
+      events: [
+        event('a', 1, { subagent: 'agent_7f3a9c2e11', subagentType: 'Explore' }),
+        event('b', 2),
+      ],
+    });
+    expect(replay.steps[0]?.by).toBe('Explore subagent agent_7f');
+    expect(replay.steps[1]?.by).toBeUndefined();
+  });
+
   it('tells a failure the session went past from one it ended on', () => {
     const replay = buildReplay({
       sessionId: 'ses_1',

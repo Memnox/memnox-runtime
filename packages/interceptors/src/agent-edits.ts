@@ -1,5 +1,7 @@
 import { patchEditsOf } from './codex-patch';
-import { COME_BACK, EDIT_HOOK_EVENT, editDenial, editOf } from './edit-hook';
+import { COME_BACK, EDIT_HOOK_EVENT, EDIT_TOOLS, editDenial, editOf } from './edit-hook';
+import { OPENCLAW_EVENT } from './openclaw-payload';
+import { COPILOT_EVENT, DEVIN_EVENT, OPENCODE_EVENT } from './named-hosts';
 import {
   changeIn,
   CODEX_PATCH_TOOL,
@@ -33,6 +35,22 @@ export const EDIT_HOST = {
    * by exit code 2 with the reason on stderr.
    */
   WINDSURF: 'windsurf',
+  /**
+   * Hermes's shell hooks: `pre_tool_call`, refused by `{ decision: "block" }`, and read
+   * back only before a model call, where `{ context }` is added to the person's words.
+   */
+  HERMES: 'hermes',
+  /**
+   * OpenClaw, through Memnox's plugin in it: `before_tool_call`, refused by
+   * `{ decision: "block" }` and asked by `{ decision: "ask" }`, its own approval.
+   */
+  OPENCLAW: 'openclaw',
+  /** GitHub Copilot CLI: `{ permissionDecision }`, which asks its person on `ask`. */
+  COPILOT: 'copilot-cli',
+  /** Devin: Claude Code's events and `{ decision: "block" }`, and no question of its own. */
+  DEVIN: 'devin',
+  /** OpenCode, through Memnox's plugin in it, which throws on a block. */
+  OPENCODE: 'opencode',
 } as const;
 
 export type EditHost = (typeof EDIT_HOST)[keyof typeof EDIT_HOST];
@@ -46,6 +64,27 @@ export const GEMINI_EVENT = {
   AFTER_TOOL: 'AfterTool',
   BEFORE_AGENT: 'BeforeAgent',
   AFTER_AGENT: 'AfterAgent',
+} as const;
+
+/** Hermes's own file tools that write: one whole file, or a replacement or a V4A patch. */
+export const HERMES_EDIT_TOOLS: readonly string[] = ['write_file', 'patch'];
+
+/** What Memnox's plugin in Hermes sets on each payload, since only the plugin can ask. */
+export const HERMES_PLUGIN_MARK = 'hermes_plugin';
+
+/** Hermes's patch tool, which in its `patch` mode carries a V4A patch over several files. */
+export const HERMES_PATCH_TOOL = 'patch';
+
+/**
+ * Hermes's events, which its shell hooks receive as `hook_event_name`. `on_session_end`
+ * fires when a turn finalizes; the session itself ends at `on_session_finalize`.
+ */
+export const HERMES_EVENT = {
+  PRE_TOOL_CALL: 'pre_tool_call',
+  POST_TOOL_CALL: 'post_tool_call',
+  PRE_LLM_CALL: 'pre_llm_call',
+  TURN_END: 'on_session_end',
+  SESSION_FINALIZE: 'on_session_finalize',
 } as const;
 
 /** Windsurf's events around a write, by the name each payload carries. */
@@ -107,6 +146,14 @@ export const CONTENT_KEYS: readonly string[] = ['content', 'contents'];
 /** Where Cursor names the file a write goes to. */
 const CURSOR_PATH_KEYS: readonly string[] = ['file_path', 'path', 'target_file'];
 
+/** The hosts whose payload is already read into Claude Code's names, by their before-tool event. */
+const CANONICAL_BEFORE_TOOL: Readonly<Record<string, EditHost>> = {
+  [OPENCLAW_EVENT.BEFORE_TOOL]: EDIT_HOST.OPENCLAW,
+  [COPILOT_EVENT.PRE_TOOL]: EDIT_HOST.COPILOT,
+  [DEVIN_EVENT.PRE_TOOL]: EDIT_HOST.DEVIN,
+  [OPENCODE_EVENT.PRE_TOOL]: EDIT_HOST.OPENCODE,
+};
+
 /** Every write in this payload, or null where it is not one this reads. */
 export function agentEditsOf(payload: unknown): AgentEdits | null {
   const hook = fieldsOf(payload);
@@ -125,6 +172,14 @@ export function agentEditsOf(payload: unknown): AgentEdits | null {
   if (event === GEMINI_EVENT.BEFORE_TOOL) {
     const edit = usesTool(hook, GEMINI_EDIT_TOOLS) ? geminiEdit(hook) : null;
     return editsAt(EDIT_MOMENT.BEFORE, EDIT_HOST.GEMINI, listOf(edit));
+  }
+  const canonical = typeof event === 'string' ? CANONICAL_BEFORE_TOOL[event] : undefined;
+  if (canonical !== undefined) {
+    return editsAt(EDIT_MOMENT.BEFORE, canonical, canonicalEdits(hook));
+  }
+  if (event === HERMES_EVENT.PRE_TOOL_CALL) {
+    const edits = usesTool(hook, HERMES_EDIT_TOOLS) ? hermesEdits(hook) : null;
+    return editsAt(EDIT_MOMENT.BEFORE, EDIT_HOST.HERMES, edits);
   }
   const windsurf = hook['agent_action_name'];
   if (windsurf === WINDSURF_EVENT.PRE_WRITE || windsurf === WINDSURF_EVENT.POST_WRITE) {
@@ -168,10 +223,23 @@ export function endedSessionOf(payload: unknown): string | null {
   const hook = fieldsOf(payload);
   if (hook === null) return null;
   const event = hook['hook_event_name'];
-  if (event !== EDIT_HOOK_EVENT.SESSION_END && event !== CURSOR_EVENT.SESSION_END)
-    return null;
+  const ends: readonly unknown[] = [
+    EDIT_HOOK_EVENT.SESSION_END,
+    CURSOR_EVENT.SESSION_END,
+    HERMES_EVENT.SESSION_FINALIZE,
+    OPENCLAW_EVENT.SESSION_END,
+    COPILOT_EVENT.SESSION_END,
+    DEVIN_EVENT.SESSION_END,
+    OPENCODE_EVENT.SESSION_END,
+  ];
+  if (!ends.includes(event)) return null;
   const session = sessionOf(hook);
   return session === '' ? null : session;
+}
+
+/** The block Hermes and Memnox's OpenClaw plugin read from stdout, in the words both take. */
+export function blockDecision(reason: string): string {
+  return JSON.stringify({ decision: 'block', reason });
 }
 
 /**
@@ -183,6 +251,10 @@ export function agentDenial(host: EditHost, reason: string): string {
     return JSON.stringify({ decision: 'deny', reason: `${reason} ${COME_BACK}` });
   }
   if (host === EDIT_HOST.WINDSURF) return `${reason} ${COME_BACK}`;
+  if (BLOCKING_HOSTS.includes(host)) {
+    return blockDecision(`${reason} ${COME_BACK}`);
+  }
+  if (host === EDIT_HOST.COPILOT) return copilotDenial(`${reason} ${COME_BACK}`);
   if (host !== EDIT_HOST.CURSOR) return editDenial(reason);
   return JSON.stringify({
     permission: 'deny',
@@ -213,6 +285,48 @@ function geminiEdit(hook: HookFields): EditIntent | null {
   const path = firstText(fields, ['file_path']);
   if (session === '' || path === undefined) return null;
   return intentOf(path, session, cwdOf(hook), changeIn(fields, CONTENT_KEYS));
+}
+
+/**
+ * A Hermes write: `write_file` with its content, `patch` replacing a string in one file,
+ * or `patch` in its patch mode, whose V4A text is the format Codex's patch is read in.
+ */
+function hermesEdits(hook: HookFields): EditIntent[] | null {
+  const fields = fieldsOf(hook['tool_input']);
+  if (fields === null) return null;
+  const session = sessionOf(hook);
+  if (session === '') return null;
+  const patch = fields['patch'];
+  if (hook['tool_name'] === HERMES_PATCH_TOOL && typeof patch === 'string') {
+    return patchEditsOf({ ...hook, tool_input: { command: patch } });
+  }
+  const path = firstText(fields, ['path']);
+  if (path === undefined) return null;
+  return [intentOf(path, session, cwdOf(hook), changeIn(fields, CONTENT_KEYS))];
+}
+
+/** The hosts that read a refusal as `{ decision: "block", reason }`. */
+export const BLOCKING_HOSTS: readonly string[] = [
+  EDIT_HOST.HERMES,
+  EDIT_HOST.OPENCLAW,
+  EDIT_HOST.DEVIN,
+  EDIT_HOST.OPENCODE,
+];
+
+/** Copilot CLI's refusal, which it requires a reason for. */
+export function copilotDenial(reason: string): string {
+  return JSON.stringify({ permissionDecision: 'deny', permissionDecisionReason: reason });
+}
+
+/** A write already read into the names Claude Code uses, or every file its patch names. */
+function canonicalEdits(hook: HookFields): EditIntent[] | null {
+  if (hook['tool_name'] === CODEX_PATCH_TOOL) return patchEditsOf(hook);
+  if (!usesTool(hook, EDIT_TOOLS)) return null;
+  const fields = fieldsOf(hook['tool_input']);
+  const session = sessionOf(hook);
+  const path = fields === null ? undefined : firstText(fields, ['file_path']);
+  if (fields === null || session === '' || path === undefined) return null;
+  return [intentOf(path, session, cwdOf(hook), changeIn(fields, CONTENT_KEYS))];
 }
 
 /**

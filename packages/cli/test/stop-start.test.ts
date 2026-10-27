@@ -245,6 +245,7 @@ const SET_UP = {
   daemon: 'keeping' as const,
   agents: 1,
   hooked: ['Claude Code'],
+  unhooked: [],
   mcpServers: 0,
   mcpWrapped: 0,
   rules: 3,

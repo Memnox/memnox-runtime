@@ -9,6 +9,7 @@ import {
   validatePolicyDocument,
 } from '../policy/index';
 import { writeAtomic } from '../store/atomic-file';
+import { setDataPatterns } from '../domain/sensitive-data';
 
 /**
  * Reading and writing rule files. New files are TOML, and YAML is still read so a file
@@ -39,6 +40,8 @@ export async function loadPoliciesFromFile(filePath: string): Promise<Policy[]> 
   const document = withFileNamed(filePath, () =>
     validatePolicyDocument(parsePolicySource(raw, filePath)),
   );
+  // Every seam in this process classifies with them, as it rules with these policies.
+  setDataPatterns(filePath, document.classifications ?? []);
   if (document.project === undefined) return document.policies;
   // Rules inherit their file's project so the engine can keep one repo's rules
   // from deciding another project's actions.
@@ -160,6 +163,10 @@ export async function writePolicyDocumentFile(
     version: POLICY_DOCUMENT_VERSION,
     ...(document.project === undefined ? {} : { project: document.project }),
     policies: document.policies,
+    // A team's own patterns survive every save, or an edit to one rule would drop them.
+    ...(document.classifications === undefined
+      ? {}
+      : { classifications: document.classifications }),
   };
   // Written in the format the file already is, so a save never changes somebody's format.
   const serialized =

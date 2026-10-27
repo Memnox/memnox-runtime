@@ -1,4 +1,5 @@
 import type { DiscoveryReport } from './discover';
+import { launchPinOf, type LaunchPin } from './launch-pin';
 import { nameSegments, type McpServerLaunch, type McpTool } from './surface';
 import {
   FINDING_SEVERITY,
@@ -30,6 +31,11 @@ export interface ServerReview {
    * count of zero tools on an unprobed server means unknown, not harmless.
    */
   unprobed: boolean;
+  /**
+   * The package it fetches each time it starts, when it fetches one. Unpinned, the tools
+   * counted above are only what the last publish held.
+   */
+  fetched?: LaunchPin;
 }
 
 /** Whole words, singular and plural, so `postgres_query` never reads as `post` or `fs`. */
@@ -85,6 +91,7 @@ function reviewOne(
   tools: readonly McpTool[],
   declaredIn: string,
 ): ServerReview {
+  const fetched = launchPinOf(launch);
   const counted = {
     server: launch.name,
     declaredIn,
@@ -97,6 +104,7 @@ function reviewOne(
     filesystem: mentions(tools, FILESYSTEM_WORDS),
     network: mentions(tools, NETWORK_WORDS),
     unprobed: tools.length === 0,
+    ...(fetched === null ? {} : { fetched }),
   };
   return { ...counted, risk: riskOf(counted) };
 }

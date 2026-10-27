@@ -6,7 +6,9 @@ import {
   CloudLeases,
   upcomingRegion,
   WHOLE_FILE,
+  type LeaseHolder,
   type WrittenRegion,
+  Clashes,
 } from '@memnox/core';
 
 import {
@@ -15,6 +17,7 @@ import {
   EDIT_HOST,
   EDIT_MOMENT,
   type AgentEdits,
+  type EditHost,
 } from './agent-edits';
 import {
   afterEdit,
@@ -22,6 +25,7 @@ import {
   EDIT_HOOK_EVENT,
   EDIT_HOOK_WAIT_MS,
   EDIT_TOOLS,
+  SHORT_EDIT_WAIT_MS,
   editAsk,
   editOf,
   type EditRefusal,
@@ -32,6 +36,7 @@ import type { EditIntent } from './hook-payload';
 import { buildLeases } from './seam-runtime';
 import type { SessionEvent } from './session-events';
 import { DEFAULT_AGENT_NAME } from './tool-hook.constants';
+import { recordUnconfirmed } from './unconfirmed-write';
 
 /**
  * The edit hook's claims: every file a write touches, narrowed to the lines it changes,
@@ -48,16 +53,27 @@ export interface EditHookContext {
   pid: number;
   cwd: string;
   now: () => Date;
+  /** What the agent says started it, such as `claude-vscode` for an editor's panel; absent where it says nothing. */
+  entrypoint?: string;
+}
+
+/** The hosts whose hook timeout leaves room for the long wait; see `EDIT_HOOK_WAIT_MS`. */
+const LONG_WAIT_HOSTS: readonly string[] = [EDIT_HOST.PRE_TOOL_USE, EDIT_HOST.GEMINI];
+
+/** How long this host's writes may wait on a holder, in all, before one is refused. */
+export function editWaitFor(host: string): number {
+  return LONG_WAIT_HOSTS.includes(host) ? EDIT_HOOK_WAIT_MS : SHORT_EDIT_WAIT_MS;
 }
 
 /**
- * The refusal to give for this write, in the
- * host's own words, or null where it may go ahead.
+ * The refusal to give for this write, in the host's own words, or null where it may go
+ * ahead. `unconfirmed` collects what to tell the agent when it goes ahead unchecked.
  */
 export async function claimAll(
   found: AgentEdits,
   personThere: boolean,
   context: EditHookContext,
+  unconfirmed: string[] = [],
 ): Promise<string | null> {
   // Only Claude Code shows its person a prompt a
   // hook asks for; the others are refused flat.
@@ -69,42 +85,98 @@ export async function claimAll(
   // The boundary before any lease, so nothing is held for a write that has to ask first.
   const contained = before ? await containedEdit(found, asking, context) : null;
   if (contained !== null) return contained;
+  // One window for every file in the payload, so a patch of ten files cannot wait ten times.
+  const deadline = context.now().getTime() + editWaitFor(found.host);
   for (const edit of found.edits) {
     // A Cursor write naming no change would claim the
     // whole file; `afterFileEdit` claims its lines.
     if (found.host === EDIT_HOST.CURSOR && before && edit.change === undefined) continue;
-    const refused = await claimOne(edit, !before, context);
+    // An edit already on disk cannot be refused, so waiting on it would only slow the agent.
+    const waitMs = before ? Math.max(0, deadline - context.now().getTime()) : 0;
+    const refused = await claimOne(edit, context, {
+      written: !before,
+      waitMs,
+      unconfirmed,
+    });
     // An edit already written cannot be refused, but
     // its lines are still held against other machines.
     if (refused === null || !before) continue;
-    if (asking && refused.leaseId !== undefined) {
-      await writeTakeover(
-        context.home,
-        { sessionId: edit.sessionId, file: fileOf(edit, context) },
-        refused.leaseId,
-      );
-      return editAsk(refused.asked ?? refused.reason);
-    }
-    return agentDenial(found.host, refused.reason);
+    return refusalFor(found.host, refused, asking ? { edit, context } : null);
   }
   return null;
+}
+
+/** The refusal in the host's words, or the question to its person where one can be asked. */
+async function refusalFor(
+  host: EditHost,
+  refused: EditRefusal,
+  asking: { edit: EditIntent; context: EditHookContext } | null,
+): Promise<string> {
+  if (asking === null || refused.leaseId === undefined)
+    return agentDenial(host, refused.reason);
+  const { edit, context } = asking;
+  await writeTakeover(
+    context.home,
+    { sessionId: edit.sessionId, file: fileOf(edit, context) },
+    refused.leaseId,
+  );
+  return editAsk(refused.asked ?? refused.reason);
+}
+
+/** How one write is claimed: whether it is already on disk, how long it may wait, and where unchecked goes. */
+interface ClaimOptions {
+  written: boolean;
+  waitMs: number;
+  unconfirmed?: string[];
 }
 
 /** Takes the lease for one write, narrowed to the lines it changes. */
 async function claimOne(
   edit: EditIntent,
-  written: boolean,
   context: EditHookContext,
+  options: ClaimOptions,
 ): Promise<EditRefusal | null> {
+  const { written, waitMs, unconfirmed = [] } = options;
   const leases = buildLeases(edit.cwd ?? context.cwd, {
     sessionId: edit.sessionId,
-    waitMs: EDIT_HOOK_WAIT_MS,
+    waitMs,
     agent: context.agent,
     // Read from the edit itself: two agents in one file only meet where their edits do.
     region: () => (written ? regionWritten(edit, context) : regionOfEdit(edit, context)),
   });
   if (leases === undefined) return null;
-  return claimEdit(edit, leases);
+  const unchecked: string[] = [];
+  const refused = await claimEdit(edit, leases, (said) => unchecked.push(said));
+  for (const said of unchecked) {
+    unconfirmed.push(said);
+    await recordUnconfirmed(context.home, {
+      ...leases.holder,
+      path: fileOf(edit, context),
+      said,
+      at: context.now().toISOString(),
+    });
+  }
+  if (refused !== null) await noteClash(leases.holder, edit, refused, context);
+  return refused;
+}
+
+/** Kept for the voice to tell the person; never in the way of the refusal itself. */
+async function noteClash(
+  holder: LeaseHolder,
+  edit: EditIntent,
+  refused: EditRefusal,
+  context: EditHookContext,
+): Promise<void> {
+  await new Clashes(context.home)
+    .note({
+      at: context.now().toISOString(),
+      sessionId: holder.sessionId,
+      agent: holder.agent,
+      what: fileOf(edit, context),
+      said: refused.asked ?? refused.reason,
+      ...(refused.leaseId === undefined ? {} : { leaseId: refused.leaseId }),
+    })
+    .catch(() => undefined);
 }
 
 /**
@@ -136,7 +208,7 @@ export async function takeOverIfAllowed(
   };
   const why = `the person at ${agent} on ${hostname()} chose to take these lines over`;
   await new CloudLeases(home).free(leaseId, holder, why).catch(() => undefined);
-  await claimOne(intent, true, context);
+  await claimOne(intent, context, { written: true, waitMs: 0 });
 }
 
 function fileOf(edit: EditIntent, context: EditHookContext): string {

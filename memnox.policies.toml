@@ -102,8 +102,8 @@ description = "Any change in an environment named like production"
 
 [policies.match]
 actions = [ "*", "!filesystem.*", "!file.*", "!fs.*", "!shell.*", "!process.*", "!git.*", "!editor.*", "!test.*", "!build.*", "!package.*" ]
-classes = [ "write", "destructive", "communication" ]
 environments = [ "prod*", "production", "live" ]
+classes = [ "write", "destructive", "communication" ]
 
 [policies.decision]
 effect = "ask"
@@ -112,3 +112,25 @@ reason = "you chose to be asked about this: reading production is how an inciden
 [policies.decision.alternative]
 action = "*"
 note = "Ask somebody, or change this rule if it is wrong for your work."
+
+[[policies]]
+name = "voice-ask-git-push"
+description = "prevent the push to get up"
+
+[policies.match]
+actions = [ "git.push" ]
+
+[policies.decision]
+effect = "ask"
+reason = "prevent pushing without permission"
+
+[[policies]]
+name = "voice-deny-git-push"
+description = "set a rule in memnox runtime to prevent Codex from pushing"
+
+[policies.match]
+actions = [ "git.push" ]
+
+[policies.decision]
+effect = "deny"
+reason = "prevent pushing to production"

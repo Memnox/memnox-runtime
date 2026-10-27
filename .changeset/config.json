@@ -7,7 +7,16 @@
       "@memnox/core",
       "@memnox/proxy",
       "@memnox/interceptors",
+      "@memnox/guard",
       "memnox"
+    ],
+    [
+      "@memnox/noise",
+      "@memnox/noise-darwin-arm64",
+      "@memnox/noise-darwin-x64",
+      "@memnox/noise-linux-x64-gnu",
+      "@memnox/noise-linux-arm64-gnu",
+      "@memnox/noise-win32-x64-msvc"
     ]
   ],
   "linked": [],

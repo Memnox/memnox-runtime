@@ -119,6 +119,10 @@ function agentRowOf(
       label,
       // Kinds only, never the file that proved one, so the console can say what it can do.
       surfaces: [...new Set(agent.surfaces.map((surface) => surface.kind))].sort(),
+      // The product's own setting, read as a fact: an agent that never asks is bounded by its account.
+      ...(agent.approval === undefined ? {} : { approval: agent.approval }),
+      // Where and who signed, never the path, because a path carries the user's name.
+      ...(agent.host === undefined ? {} : { host: { ...agent.host } }),
       // An instant rather than a flag, because how long ago decides whether to ask again.
       ...(declinedAt === undefined ? {} : { declinedAt: Date.parse(declinedAt) }),
     },

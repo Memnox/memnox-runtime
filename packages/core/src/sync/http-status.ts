@@ -4,6 +4,8 @@ export const HTTP = {
   CREATED: 201,
   ACCEPTED: 202,
   NO_CONTENT: 204,
+  /** The first status past success, so a range check names its end. */
+  MULTIPLE_CHOICES: 300,
   /** The bundle is unchanged, which is what a conditional GET asks for. */
   NOT_MODIFIED: 304,
   BAD_REQUEST: 400,
@@ -17,6 +19,8 @@ export const HTTP = {
   METHOD_NOT_ALLOWED: 405,
   /** Somebody else holds it, which is how the shared register refuses a lease. */
   CONFLICT: 409,
+  /** Read and understood as a request, and still not something it could make sense of. */
+  UNPROCESSABLE_ENTITY: 422,
   NOT_IMPLEMENTED: 501,
   BAD_GATEWAY: 502,
 } as const;

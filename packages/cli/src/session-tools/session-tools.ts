@@ -14,14 +14,27 @@ import {
 import { rewindTool, type RewindSeams } from './rewind-tool';
 import { briefTool, memoryTool } from './memory-tools';
 import { fingerprintTool } from './fingerprint-tool';
+import { workTool } from './work-tools';
+
+/** One argument a tool takes: a string, or a list of small objects, such as a walk through's pages. */
+export type ToolProperty =
+  | { type: 'string'; description: string }
+  | {
+      type: 'array';
+      description: string;
+      items: {
+        type: 'object';
+        properties: Record<string, { type: 'string'; description: string }>;
+      };
+    };
 
 /** A tool as `tools/list` describes it; the annotations are how a host decides to ask. */
-interface ToolDefinition {
+export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: {
     type: 'object';
-    properties: Record<string, { type: 'string'; description: string }>;
+    properties: Record<string, ToolProperty>;
   };
   annotations: { readOnlyHint: boolean; destructiveHint: boolean; openWorldHint: false };
 }
@@ -45,7 +58,7 @@ export const NEVER_OFFERED: readonly string[] = [
   'enrol',
 ];
 
-function readTool(
+export function readTool(
   name: string,
   description: string,
   properties: ToolDefinition['inputSchema']['properties'] = {},
@@ -58,7 +71,7 @@ function readTool(
   };
 }
 
-const SESSION_ARG = {
+export const SESSION_ARG = {
   type: 'string',
   description: "a session id; this agent's own latest when left out",
 } as const;
@@ -115,6 +128,16 @@ export const SESSION_TOOLS: readonly ToolDefinition[] = [
       repository: {
         type: 'string',
         description: 'the repository, where the workspace knows it by name',
+      },
+    },
+  ),
+  readTool(
+    'work',
+    'The workspace brief your instruction named: the ticket, what people said about it, and the settled decisions it must keep to. Read it before you change anything when your task names one.',
+    {
+      brief: {
+        type: 'string',
+        description: 'the brief id your task or instruction named, such as wrk_1a2b3c',
       },
     },
   ),
@@ -175,6 +198,8 @@ export async function callTool(
       return memoryTool(deps, args);
     case 'brief':
       return briefTool(deps, args);
+    case 'work':
+      return workTool(deps, args);
     case 'fingerprint':
       return fingerprintTool(deps, args);
     case 'rewind':

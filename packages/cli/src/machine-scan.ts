@@ -3,14 +3,20 @@ import { join } from 'node:path';
 import {
   discover,
   NodeMachineReader,
+  NodeHostInspector,
   NodeMcpLister,
   NodeSnapshotStore,
+  NodeToolListCache,
+  CachedMcpLister,
+  RecordingMcpLister,
   snapshotOf,
   type DiscoveryReport,
   type EnvironmentSnapshot,
+  type HostInspector,
   type MachineReader,
   type McpLister,
   type SnapshotStore,
+  type ToolListCache,
   loadPolicySet,
   matchesPattern,
   MEMNOX_HOME,
@@ -35,6 +41,12 @@ export interface ScanSeams {
   now: () => string;
   /** Rule files the runtime would read, so "no rule covers this" is checkable offline. */
   policyFiles: () => Promise<string[]>;
+  /** The environment an agent would start with, which is where PATH finds its binary. */
+  env?: NodeJS.ProcessEnv;
+  /** Asks who signed each agent's binary. Absent, the signer reads as unknown. */
+  inspector?: HostInspector;
+  /** What each server answered last, so a scan that starts nothing can still count its tools. */
+  toolLists?: ToolListCache;
 }
 
 export function defaultScanSeams(cwd: string = process.cwd()): ScanSeams {
@@ -46,12 +58,17 @@ export function defaultScanSeams(cwd: string = process.cwd()): ScanSeams {
     projectDirs: [cwd],
     now: () => new Date().toISOString(),
     policyFiles: () => readPolicyRegistry(policyRegistryPath(home)),
+    env: process.env,
+    inspector: new NodeHostInspector(),
+    toolLists: new NodeToolListCache(home),
   };
 }
 
 interface Scan {
   report: DiscoveryReport;
   snapshot: EnvironmentSnapshot;
+  /** Servers whose tools are unknown, since nothing has ever asked them; empty after a probe. */
+  unasked: string[];
 }
 
 /**
@@ -63,15 +80,29 @@ export async function scanMachine(
   options: { probe: boolean; save?: boolean } = { probe: true },
 ): Promise<Scan> {
   const now = seams.now();
+  const lister = await listerFor(seams, options.probe);
   const report = await discover(seams.reader, {
     now,
     projectDirs: seams.projectDirs,
-    // Starting somebody else's server is the one thing here that runs code.
-    ...(options.probe ? { lister: seams.lister() } : {}),
+    ...(seams.env === undefined ? {} : { env: seams.env }),
+    ...(seams.inspector === undefined ? {} : { inspector: seams.inspector }),
+    ...(lister === null ? {} : { lister }),
   });
+  if (lister instanceof RecordingMcpLister) await seams.toolLists?.merge(lister.heard);
   const snapshot = snapshotOf(report, now);
   if (options.save !== false) await seams.snapshots.save(snapshot);
-  return { report, snapshot };
+  const unasked = lister instanceof CachedMcpLister ? [...new Set(lister.missed)] : [];
+  return { report, snapshot, unasked };
+}
+
+/** Starting somebody else's server is the one thing here that runs code, so without a probe only what was kept answers. */
+async function listerFor(seams: ScanSeams, probe: boolean): Promise<McpLister | null> {
+  if (probe) return new RecordingMcpLister(seams.lister());
+  if (seams.toolLists === undefined) return null;
+  return new CachedMcpLister(
+    await seams.toolLists.read(),
+    await seams.snapshots.latest(),
+  );
 }
 
 interface RuleCoverage {

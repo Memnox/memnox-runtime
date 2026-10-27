@@ -18,3 +18,6 @@ memnox-keyring*.json
 
 # Written by the release workflow when it resolves the publish order.
 publish-order.txt
+
+# SwiftPM cache left by scripts/sync-relay.sh in memnox-macos.
+.build/
