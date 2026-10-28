@@ -25,6 +25,7 @@ import {
 } from '../verbs/index';
 import type { ToolClass } from '../discovery/classify';
 import { ACTION } from '../constants/action.constants';
+import { npmPublishIn } from './npm-workalike';
 
 export interface ResolvedAction {
   action: string;
@@ -73,6 +74,7 @@ export function resolveCommand(
   options: ResolveOptions & CommandIo = {},
 ): ResolvedAction {
   const resolved = resolveSqlStatement(binary, args, env, options) ??
+    resolveNpmWorkalike(binary, args, env) ??
     resolveFromVerbTable(binary, args, env) ??
     resolveReader(binary, args, env) ??
     resolveWriter(binary, args, env) ??
@@ -83,6 +85,18 @@ export function resolveCommand(
     };
   const carried = bodyClassification(binary, args);
   return carried === undefined ? resolved : { ...resolved, dataClassification: carried };
+}
+
+/** npm's workalikes publish to the same registry, so one rule covers all four. */
+function resolveNpmWorkalike(
+  binary: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): ResolvedAction | null {
+  const publishing = npmPublishIn(binary, args);
+  if (publishing === null) return null;
+  const ruled = resolveFromVerbTable('npm', publishing.words, env);
+  return ruled === null ? null : { ...ruled, because: publishing.because };
 }
 
 /** So `psql -c "DROP TABLE users"` is ruled on as a drop rather than as opening psql. */
