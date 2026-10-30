@@ -25,6 +25,7 @@ import {
 } from '../src/sync/connection-work';
 import { voicePrompt } from '../src/operator/voice-prompts';
 import { PERSONAL_TOOLS } from '../src/session-tools/personal-catalogue';
+import { MACHINE } from '../src/this-machine';
 
 const NOTION_PAGE = 'https://connect.composio.dev/link/notion';
 
@@ -167,7 +168,9 @@ describe('connections-sign-out, answering the refreshed list', () => {
   it('has nothing to undo before anything was connected, and registers nothing for it', async () => {
     const home = await mkdtemp(join(tmpdir(), 'memnox-disconnect-'));
     const nobody = await disconnect(home, 'notion');
-    expect(nobody.ok ? '' : nobody.said).toBe('Nothing is connected on this Mac yet.');
+    expect(nobody.ok ? '' : nobody.said).toBe(
+      `Nothing is connected on this ${MACHINE} yet.`,
+    );
   });
 });
 

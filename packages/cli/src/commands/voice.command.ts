@@ -12,6 +12,7 @@ import type { CliContext } from '../cli-context';
 import { confirmOnTerminal, type Confirm } from '../confirm';
 import { forgetHeardWord, readHeardWords } from '../operator/heard-words';
 import { keepAddress, keepOwner, readAddress, readOwner } from '../operator/owner';
+import { MACHINE } from '../this-machine';
 
 interface VoiceDeps {
   home: () => string;
@@ -138,7 +139,7 @@ async function runKey(context: CliContext, deps: VoiceDeps): Promise<void> {
     flow.close(
       'No confirmation key is registered, so nothing can be allowed by voice yet.',
     );
-    flow.hint('Open the Memnox app on this Mac and it registers its own.');
+    flow.hint(`Open the Memnox app on this ${MACHINE} and it registers its own.`);
     return;
   }
   flow.rows('Confirmation key', [

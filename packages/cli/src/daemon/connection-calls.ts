@@ -15,6 +15,7 @@ import {
   toolkitTitle,
 } from '../sync/connection-work';
 import { connectionsOf } from '../sync/personal-work';
+import { MACHINE } from '../this-machine';
 
 /**
  * The person's own tools from the Mac, Windows, Linux or a paired phone: which are connected, connecting
@@ -106,7 +107,7 @@ async function signIn(
   if (await isLocal(seams, home, toolkit))
     return refused(
       request,
-      `${toolkitTitle(toolkit)} is already on this Mac, so there is nothing to connect.`,
+      `${toolkitTitle(toolkit)} is already on this ${MACHINE}, so there is nothing to connect.`,
     );
   // A second press on a tool that already works is a slip unless they asked for another account.
   if (request.again !== true && (await connectedAlready(home, toolkit, seams.list))) {
@@ -130,7 +131,7 @@ async function signOut(
   if (await isLocal(seams, home, toolkit)) {
     return refused(
       request,
-      `${toolkitTitle(toolkit)} is on this Mac itself rather than connected, so it is removed from the agent or signed out of where it runs.`,
+      `${toolkitTitle(toolkit)} is on this ${MACHINE} itself rather than connected, so it is removed from the agent or signed out of where it runs.`,
     );
   }
   const answer = await seams.signOut(home, request.toolkit ?? '', { list: seams.list });

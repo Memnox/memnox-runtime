@@ -16,6 +16,7 @@ import {
   signOutOf,
   type PersonalAnswer,
 } from './personal-work';
+import { MACHINE } from '../this-machine';
 
 /**
  * Connecting and disconnecting the person's own tools from a screen, in words for the person rather than
@@ -63,7 +64,7 @@ export async function disconnect(
   const slug = toolkitSlug(toolkit);
   if (slug === null) return { ok: false, said: 'Name the tool to disconnect.' };
   if ((await existingCaller(home)) === null)
-    return { ok: false, said: 'Nothing is connected on this Mac yet.' };
+    return { ok: false, said: `Nothing is connected on this ${MACHINE} yet.` };
   const undone = await (seams.signOut ?? signOutOf)(home, slug);
   if (!undone.ok)
     return couldNot(undone, `${toolkitTitle(slug)} could not be disconnected.`);

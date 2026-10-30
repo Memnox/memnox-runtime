@@ -44,6 +44,7 @@ import type { SessionToolDeps } from '../src/session-tools/read-tools';
 import { sendInstructionTool } from '../src/session-tools/instruct-tools';
 import type { RewindSeams } from '../src/session-tools/rewind-tool';
 import { serveSession } from '../src/session-tools/session-server';
+import { MACHINE } from '../src/this-machine';
 
 /**
  * The voice's brain reads everything and writes only proposals. These are the tests that
@@ -325,7 +326,7 @@ describe('a rule the person asked for', () => {
       effect: 'deny',
     })) as { rule: { file: string }; places: string[] };
     expect(answer.rule.file).toBe(machinePolicyPath(deps.home));
-    expect(answer.places[0]).toBe('This Mac');
+    expect(answer.places[0]).toBe(`This ${MACHINE}`);
   });
 });
 

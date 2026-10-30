@@ -19,6 +19,7 @@ import { socketDial } from '../remote/daemon-dial';
 import type { PersonalAnswer, PersonalRun } from '../sync/personal-work';
 import { LOCAL_SLUG, type LocalCli, type LocalServer } from './local-catalogue';
 import type { McpPool } from './mcp-client';
+import { MACHINE } from '../this-machine';
 
 /**
  * One call to a tool on this Mac, through the daemon's pauses, budgets, limits and rules as an agent's
@@ -177,7 +178,7 @@ async function planCli(
   const cli = (await deps.clis()).find((each) => each.name === name);
   const table = verbTableFor(name);
   if (cli === undefined || table === null)
-    return { said: `${name} is not signed in on this Mac.` };
+    return { said: `${name} is not signed in on this ${MACHINE}.` };
   const argv = Array.isArray(args['args'])
     ? args['args'].filter((each) => typeof each === 'string')
     : [];
@@ -214,14 +215,14 @@ async function planMcp(
   const toolName = at === -1 ? '' : rest.slice(at + 1);
   const server = (await deps.servers()).find((each) => each.name === serverName);
   if (server === undefined || toolName === '')
-    return { said: `No MCP server called ${serverName} is set up on this Mac.` };
+    return { said: `No MCP server called ${serverName} is set up on this ${MACHINE}.` };
   const session = deps.pool.session(server.name, server.launch);
   let declared;
   try {
     declared = (await session.tools()).find((each) => each.name === toolName);
   } catch {
     // Said rather than thrown: the voice tells the person in a sentence.
-    return { said: `${serverName} would not start on this Mac just now.` };
+    return { said: `${serverName} would not start on this ${MACHINE} just now.` };
   }
   if (declared === undefined)
     return { said: `${serverName} has no tool called ${toolName}.` };

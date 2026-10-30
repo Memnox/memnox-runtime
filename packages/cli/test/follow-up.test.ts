@@ -18,6 +18,7 @@ import {
 import type { RemotePrincipal } from '../src/daemon/confirm';
 import { followUpAnswer, type FollowUpDeps } from '../src/daemon/follow-up';
 import { personKey, type PersonKey } from './phone-harness';
+import { MACHINE } from '../src/this-machine';
 
 /**
  * Words typed on a phone into one session: they reach it as they are, and only under that phone's
@@ -143,7 +144,7 @@ describe('a follow up typed on a phone', () => {
       p.deps,
       p.principal,
     );
-    expect(answer.reason).toContain('not on this Mac');
+    expect(answer.reason).toContain(`not on this ${MACHINE}`);
     expect(p.sent).toEqual([]);
   });
 

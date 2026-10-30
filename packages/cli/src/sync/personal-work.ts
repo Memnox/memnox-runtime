@@ -19,6 +19,7 @@ import {
   spaceBaseUrl,
   type PersonalCaller,
 } from './device-space';
+import { MACHINE } from '../this-machine';
 
 /**
  * The person's own tools through their own sign ins, so the voice reads and replies as them, never a
@@ -81,8 +82,7 @@ export interface PersonalRun {
 }
 
 /** Only when this Mac could not set itself up to act for them, since acting for themselves needs no Memnox account. */
-const NOT_SIGNED_IN =
-  'Memnox Cloud could not be reached to set this Mac up to act in their own tools just now. Say so in a sentence and offer to try again; they need no Memnox account for their own tools, so never ask them to sign in to Memnox for this.';
+const NOT_SIGNED_IN = `Memnox Cloud could not be reached to set this ${MACHINE} up to act in their own tools just now. Say so in a sentence and offer to try again; they need no Memnox account for their own tools, so never ask them to sign in to Memnox for this.`;
 const NOT_REACHABLE =
   'The workspace could not be asked just now. Say so in a sentence; never say there is nothing there.';
 
@@ -354,8 +354,7 @@ interface PersonGrant {
 const GRANT_ACTIVE = 'active';
 
 /** Said by the Mac's menu bar as it stands, so these are words for the person rather than for the voice. */
-export const CONNECTIONS_NOT_SIGNED_IN =
-  'This Mac could not reach Memnox Cloud to connect your apps just now. Try again in a moment; you need no Memnox account for your own apps.';
+export const CONNECTIONS_NOT_SIGNED_IN = `This ${MACHINE} could not reach Memnox Cloud to connect your apps just now. Try again in a moment; you need no Memnox account for your own apps.`;
 const CONNECTIONS_NOT_REACHABLE =
   'Memnox Cloud could not be reached just now, so your connected apps cannot be shown.';
 

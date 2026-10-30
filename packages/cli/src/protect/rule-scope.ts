@@ -10,6 +10,7 @@ import {
 } from '@memnox/core';
 import { machinePolicyPath } from './machine-rules';
 import { WRITTEN_POLICY_FILE } from './merge-rules';
+import { MACHINE } from '../this-machine';
 
 /**
  * Where a rule a person asked for is put in force. A rule file's place on disk does not limit
@@ -27,7 +28,7 @@ export function machineScope(suggested: boolean): RuleScope {
   return {
     id: MACHINE_SCOPE_ID,
     kind: RULE_SCOPE.MACHINE,
-    label: 'This Mac',
+    label: `This ${MACHINE}`,
     ...(suggested ? { suggested } : {}),
   };
 }
@@ -37,7 +38,7 @@ export function machineScope(suggested: boolean): RuleScope {
  * stays clean; the rules carry the folder in their match, which is what holds them there.
  */
 export function machineScopeIn(folder: string): RuleScope {
-  return { ...machineScope(true), label: `This Mac, in ${basename(folder)} only` };
+  return { ...machineScope(true), label: `This ${MACHINE}, in ${basename(folder)} only` };
 }
 
 /** The workspace, for a machine that is enrolled in one; nothing is written here, it is offered on the next sync. */

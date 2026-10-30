@@ -10,6 +10,7 @@ import {
   type DrivenBy,
 } from '@memnox/core';
 import { refused } from './pairings';
+import { MACHINE } from '../this-machine';
 
 /**
  * A phone driving the Mac: one Face ID over a time at most fifteen minutes ahead, after which that
@@ -28,7 +29,7 @@ export function driveRefusal(
   now: string,
 ): string | null {
   if (!holds(device, REMOTE_CAPABILITY.MAC)) {
-    return `${device.name} may not act on this Mac. Allow it from the Mac with Touch ID first.`;
+    return `${device.name} may not act on this ${MACHINE}. Allow it from the Mac with Touch ID first.`;
   }
   const until = Date.parse(request.until);
   const from = Date.parse(now);

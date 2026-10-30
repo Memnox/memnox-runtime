@@ -53,6 +53,7 @@ import {
   voiceArguments,
   type CommandRun,
 } from '../session-tools/voice-commands';
+import { MACHINE } from '../this-machine';
 
 /**
  * A person's answer arriving from the Mac app or a paired phone. Refusing never needs proof; a yes
@@ -365,7 +366,7 @@ async function offerToTeam(
   if ((await readAccount(home)) === null) {
     return {
       ok: false,
-      error: 'this Mac is not connected to a team, so there is nobody to offer it to',
+      error: `this ${MACHINE} is not connected to a team, so there is nobody to offer it to`,
     };
   }
   await recordLocalDecisions(home, decided);

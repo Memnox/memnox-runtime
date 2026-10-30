@@ -18,6 +18,7 @@ import {
   requestPersonCode,
   signOutPerson,
 } from '../sync/person';
+import { MACHINE } from '../this-machine';
 
 interface SignInDeps {
   home: () => string;
@@ -82,7 +83,7 @@ async function runSignIn(
     flow.close(`Signed in as ${person.name}.`);
     if (claimed?.connections !== undefined && claimed.connections > 0)
       flow.hint(
-        `${claimed.connections} app${claimed.connections === 1 ? '' : 's'} this Mac had connected moved into your account`,
+        `${claimed.connections} app${claimed.connections === 1 ? '' : 's'} this ${MACHINE} had connected moved into your account`,
       );
     flow.hint(
       'memnox inbox   lists what is waiting on you, here and from your workspace',

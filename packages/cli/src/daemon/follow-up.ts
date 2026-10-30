@@ -17,6 +17,7 @@ import { sendInstructionTool } from '../session-tools/instruct-tools';
 import type { RemotePrincipal } from './confirm';
 import type { OriginRouter } from './origin-routing';
 import type { SessionViews } from './session-view';
+import { MACHINE } from '../this-machine';
 
 /**
  * The person's own words typed into one session from a phone's composer or the Mac: sent as they
@@ -95,7 +96,7 @@ export async function followUpAnswer(
   }
   const agent = await deps.agentOf(sessionId);
   if (agent === null)
-    return refused(request, 'That session is not on this Mac any more.');
+    return refused(request, `That session is not on this ${MACHINE} any more.`);
   const instruction = await new SpokenInstructions(deps.home).propose({
     sessionId,
     agent,
