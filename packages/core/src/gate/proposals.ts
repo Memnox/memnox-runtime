@@ -52,6 +52,8 @@ export const PROPOSAL_KIND = {
   PROJECT: 'project',
   /** A backup put back over this machine's setup, from a copy staged and checked by its digest. */
   BACKUP_RESTORE: 'backup-restore',
+  /** This machine listening on the local network, which widens who can reach it, so only the Mac signs it. */
+  LAN: 'lan',
 } as const;
 
 export type ProposedChange =
@@ -112,7 +114,8 @@ export type ProposedChange =
       files: string[];
       ledger: boolean;
       createdAt: string;
-    };
+    }
+  | { kind: typeof PROPOSAL_KIND.LAN; on: true };
 
 export interface Proposal {
   id: string;

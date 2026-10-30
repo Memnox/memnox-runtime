@@ -53,6 +53,21 @@ export async function readAutopilot(home: string): Promise<boolean> {
   }
 }
 
+/** Whether to listen on the local network, read without creating the file: off wherever it is unsaid. */
+export async function readLanSetting(home: string): Promise<boolean> {
+  try {
+    return parseConfig(await readFile(configPathFor(home), 'utf8')).lan === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Turns the local network on or off, keeping every other setting as it is. */
+export async function saveLanSetting(home: string, on: boolean): Promise<void> {
+  const { lan: _was, ...rest } = await loadOrCreateConfig(home);
+  await saveConfig(home, on ? { ...rest, lan: true } : rest);
+}
+
 export async function saveConfig(home: string, config: MemnoxConfig): Promise<void> {
   const path = configPathFor(home);
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });

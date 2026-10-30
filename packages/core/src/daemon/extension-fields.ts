@@ -12,6 +12,7 @@ import type { HeldActionEventFields, HeldActionRequestFields } from './held-acti
 import type { ProjectsRequestFields, ProjectsResponseFields } from './projects';
 import type { MemoryRequestFields, MemoryResponseFields } from './memory';
 import type { BackupRequestFields, BackupResponseFields } from './backup';
+import type { LanRequestFields, LanResponseFields } from './lan';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -92,7 +93,8 @@ export interface ExtensionRequestFields
     HeldActionRequestFields,
     ProjectsRequestFields,
     BackupRequestFields,
-    MemoryRequestFields {}
+    MemoryRequestFields,
+    LanRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -110,7 +112,8 @@ export interface ExtensionResponseFields
     SkillsResponseFields,
     ProjectsResponseFields,
     BackupResponseFields,
-    MemoryResponseFields {}
+    MemoryResponseFields,
+    LanResponseFields {}
 
 export interface ExtensionEventFields
   extends

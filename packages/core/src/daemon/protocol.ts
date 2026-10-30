@@ -24,6 +24,7 @@ import { SKILLS_METHOD } from './skills-hub';
 import { PROJECTS_METHOD } from './projects';
 import { BACKUP_METHOD } from './backup';
 import { MEMORY_METHOD } from './memory';
+import { LAN_METHOD } from './lan';
 import { REMOTE_METHOD } from './remote';
 import { SPEECH_METHOD } from './speech';
 import { SPOKEN_RULE_METHOD } from './spoken-rule';
@@ -124,6 +125,7 @@ export const DAEMON_METHOD = {
   ...PROJECTS_METHOD,
   ...BACKUP_METHOD,
   ...MEMORY_METHOD,
+  ...LAN_METHOD,
 } as const;
 
 export type DaemonMethod = (typeof DAEMON_METHOD)[keyof typeof DAEMON_METHOD];

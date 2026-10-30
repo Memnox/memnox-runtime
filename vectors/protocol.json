@@ -229,7 +229,9 @@
       "memory-edit",
       "memory-search",
       "memory-facts",
-      "memory-forget"
+      "memory-forget",
+      "lan-status",
+      "lan-set"
     ],
     "events": [
       "held",

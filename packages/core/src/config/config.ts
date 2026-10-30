@@ -56,6 +56,11 @@ export interface MemnoxConfig {
    * Off until a person turns it on, because it widens what an agent may do unasked.
    */
   autopilot: boolean;
+  /**
+   * Listen for paired phones on the local network. Absent means off, and it is no `config set` key,
+   * since it widens who reaches this machine and so is turned on only by a proposal the Mac signs.
+   */
+  lan?: true;
 }
 
 export const UPLOAD_PATHS = { FULL: 'full', HASHED: 'hashed' } as const;
@@ -126,6 +131,7 @@ export function parseConfig(raw: string): MemnoxConfig {
     if (key === 'failOpen') config.failOpen = value === 'true';
     if (key === 'telemetry') config.telemetry = value === 'true';
     if (key === 'autopilot') config.autopilot = value === 'true';
+    if (key === 'lan' && value === 'true') config.lan = true;
     if (key === 'approvedAgents') config.approvedAgents = splitList(value);
     if (key === 'noticeUnusual') config.noticeUnusual = value !== 'false';
     if (key === 'uploadPaths' && isUploadPaths(value)) config.uploadPaths = value;
@@ -200,6 +206,10 @@ function renderRouting(config: MemnoxConfig): string[] {
     '# refusal. Only what "memnox next --hand-over" would offer, never production, and',
     '# any refusal takes it back. "memnox autopilot" lists what it granted.',
     `autopilot = ${config.autopilot}`,
+    '',
+    '# Listen for your paired phones on the local network as well as through Memnox Cloud.',
+    '# Turned on from the Mac, signed with Touch ID, since it widens who can reach this machine.',
+    `lan = ${config.lan === true}`,
     '',
   ];
 }

@@ -24,6 +24,7 @@ export * from './daemon/held-action';
 export * from './daemon/projects';
 export * from './daemon/memory';
 export * from './daemon/backup';
+export * from './daemon/lan';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,
