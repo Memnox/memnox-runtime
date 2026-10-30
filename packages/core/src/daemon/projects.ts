@@ -51,8 +51,40 @@ export interface ProjectMissionView {
   startedAt: string;
 }
 
+/** Where a project's setup comes from; absent is this machine's own. */
+export const PROJECT_SCOPE = {
+  /** Shared by the organization in Memnox Cloud and laid over the clone, read only here. */
+  ORGANIZATION: 'organization',
+} as const;
+
+export type ProjectScope = (typeof PROJECT_SCOPE)[keyof typeof PROJECT_SCOPE];
+
+/** What the organization hands a shared project, its names looked up in the same bundle. */
+export interface ProjectOrganizationView {
+  /** The cloud's id, which the project's memory is kept under. */
+  id: string;
+  name: string;
+  /** `host/owner/name`, which this clone's `origin` reduces to. */
+  repository: string;
+  description?: string;
+  servers: string[];
+  skills: string[];
+  rulePack?: string;
+  /** Rules the organization publishes under the rule pack. */
+  rules: number;
+  memory: string;
+  /** Each name the bundle did not carry, said in a sentence, and left out. */
+  skipped: string[];
+  /** The line a local edit is refused with, for a screen to show before anybody tries. */
+  editedIn: string;
+}
+
 export interface ProjectView {
   id: string;
+  /** `organization` where Memnox Cloud shares this repository with the person; absent is their own. */
+  scope?: ProjectScope;
+  /** On an organization project: what it hands, read only. */
+  organization?: ProjectOrganizationView;
   name: string;
   path: string;
   /** Has a committed `.memnox/project.toml`; otherwise what is shown is found rather than declared. */
