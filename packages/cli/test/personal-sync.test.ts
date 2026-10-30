@@ -466,15 +466,19 @@ describe('personal sync between two machines of one person', () => {
     await writeHub(laptop.deps.home, withServer(emptyHub(), LINEAR));
     await writeHub(desktop.deps.home, withServer(emptyHub(), { ...LINEAR, args: ['d'] }));
     cloud.registerTogether(2);
-    const [first, second] = await Promise.all([
+    const answers = await Promise.all([
       laptop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW }),
       desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW }),
     ]);
-    expect(first.personalSync?.state).toBe(PERSONAL_SYNC_STATE.READY);
-    expect(second.personalSync?.state).toBe(PERSONAL_SYNC_STATE.WAITING_FOR_KEY);
-    expect(second.personalSync?.keyId).toBeUndefined();
-    const keyIds = new Set([...cloud.items.values()].map((item) => item.keyId));
-    expect([...keyIds]).toEqual([first.personalSync?.keyId]);
+    // Whichever registered first makes the key; the other waits, holding none of its own.
+    const states = answers.map((answer) => answer.personalSync?.state).sort();
+    expect(states).toEqual(
+      [PERSONAL_SYNC_STATE.READY, PERSONAL_SYNC_STATE.WAITING_FOR_KEY].sort(),
+    );
+    const keyIds = answers.flatMap((answer) => answer.personalSync?.keyId ?? []);
+    expect(keyIds).toHaveLength(1);
+    const sealed = new Set([...cloud.items.values()].map((item) => item.keyId));
+    expect([...sealed]).toEqual(keyIds);
   });
 
   it('lets go of a key made here before sealing anything, once an earlier machine comes into view', async () => {
