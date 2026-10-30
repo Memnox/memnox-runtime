@@ -1,7 +1,7 @@
 import { DEVICE_KIND } from '../gate/devices';
 import { REMOTE_CAPABILITY } from '../gate/capabilities';
 import { HOLD_ANSWER } from '../gate/hold';
-import { PROPOSAL_ANSWER } from '../gate/proposals';
+import { PROPOSAL_ANSWER, PROPOSAL_KIND } from '../gate/proposals';
 import { actionConfirmationMessage, confirmationMessage } from '../gate/confirm-key';
 import { actionDigestOf, canonicalAction } from '../gate/action-digest';
 import { ASK_ENDS, DAEMON_EVENT, DAEMON_METHOD, encode } from './protocol';
@@ -13,6 +13,7 @@ import {
   grantMessage,
   pairMessage,
 } from './remote';
+import { PROPOSING_METHODS } from './proposing';
 
 /** One signed message: what went in, and the exact text a key must sign for it. */
 export interface MessageVector {
@@ -156,6 +157,8 @@ function valueVectors(): Record<string, string[]> {
     askEnds: [...ASK_ENDS],
     holdAnswers: Object.values(HOLD_ANSWER),
     proposalAnswers: Object.values(PROPOSAL_ANSWER),
+    proposalKinds: Object.values(PROPOSAL_KIND),
+    proposingMethods: [...PROPOSING_METHODS],
     followUpOutcomes: Object.values(FOLLOW_UP_OUTCOME),
     capabilities: Object.values(REMOTE_CAPABILITY),
     deviceKinds: Object.values(DEVICE_KIND),

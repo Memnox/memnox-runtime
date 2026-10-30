@@ -28,6 +28,7 @@ export * from './daemon/lan';
 export * from './daemon/personal-sync';
 export * from './daemon/profiles';
 export * from './daemon/community-index';
+export * from './daemon/proposing';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,
