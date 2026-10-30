@@ -62,9 +62,14 @@ export function skillDirFor(home: string, place: SkillPlace): string {
   return join(home, MEMNOX_HOME, SKILLS_DIR, place.name, place.version);
 }
 
+/** The folder every kept version of a personal skill sits in. */
+export function personalSkillDirFor(home: string, name: string): string {
+  return join(home, MEMNOX_HOME, SKILLS_DIR, name);
+}
+
 /** Every version of a personal skill kept here, oldest first. */
 export async function personalVersions(home: string, name: string): Promise<string[]> {
-  const listed = await readdir(join(home, MEMNOX_HOME, SKILLS_DIR, name)).catch(
+  const listed = await readdir(personalSkillDirFor(home, name)).catch(
     // No folder yet is a skill with no versions kept.
     (): string[] => [],
   );

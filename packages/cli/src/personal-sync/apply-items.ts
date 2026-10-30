@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import {
   agentsOf,
   canonicalJson,
@@ -9,21 +10,27 @@ import {
   MEMORY_SCOPE,
   MEMORY_STATUS,
   parseManifest,
+  personalSkillDirFor,
   PROPOSAL_KIND,
   Proposals,
   readHub,
+  readSkillsHub,
   sentenceOfRule,
   skillDirFor,
+  skillNamed,
   skillProblems,
   SKILL_SCOPE,
   SqliteMemoryStore,
   SYNC_KIND,
   validatePolicyDocument,
   withServer,
+  withSkill,
   withoutServer,
   writeCanonicalSkill,
   writeHub,
+  writeSkillsHub,
   type HubServer,
+  type HubSkill,
   type MemoryKind,
   type NewMemoryItem,
   type Policy,
@@ -32,6 +39,7 @@ import {
 } from '@memnox/core';
 import { syncHub } from '../mcp/hub-writer';
 import { machinePolicyPath, writeMachineRules } from '../protect/machine-rules';
+import { removeSkill } from '../skills/skills-changes';
 import { removeRule } from '../studio/rule-changes';
 import { memoryNameOf, type MemoryBody, type SkillBody } from './local-items';
 
@@ -100,7 +108,26 @@ export async function removeSyncItem(
     return { here: true };
   }
   if (item.kind === SYNC_KIND.MEMORY) return forgetFact(place.home, item.name);
+  if (item.kind === SYNC_KIND.SKILLS) return removeSkillHere(place, item.name);
   return { here: false };
+}
+
+/** A personal skill deleted elsewhere, taken out of the hub and every agent here, or the folder sync wrote. */
+async function removeSkillHere(place: Place, name: string): Promise<Applied> {
+  const skill = skillNamed(await readSkillsHub(place.home), name);
+  // Only a personal skill travels, so a project's of the same name stays where it is.
+  if (skill !== undefined && skill.scope !== SKILL_SCOPE.PERSONAL) return { here: true };
+  if (skill === undefined) {
+    await rm(personalSkillDirFor(place.home, name), { recursive: true, force: true });
+    return { here: true };
+  }
+  const removed = await removeSkill(place.home, name, new Date(place.at));
+  if ('refused' in removed)
+    return {
+      here: false,
+      said: `${name} was deleted on your other machine and could not be taken away here: ${removed.refused}`,
+    };
+  return { here: true };
 }
 
 async function applyServer(place: Place, item: SyncItem): Promise<Applied> {
@@ -165,10 +192,38 @@ async function applySkill(place: Place, item: SyncItem): Promise<Applied> {
   });
   // A version already kept here is the hub's own copy, which nothing from elsewhere rewrites.
   if (!existsSync(dir)) await writeCanonicalSkill(dir, skill);
+  await holdInHub(place, item.name, body.version);
   return {
     here: false,
     said: `${item.name} ${body.version} came from your other machine and waits in the Skills Hub to be accepted here.`,
   };
+}
+
+/**
+ * The hub naming the version that arrived as current, beside what was accepted here, so the Skills
+ * Hub shows it held until the person accepts it, as a version put from a screen is.
+ */
+async function holdInHub(place: Place, name: string, version: string): Promise<void> {
+  const hub = await readSkillsHub(place.home);
+  const held = skillNamed(hub, name);
+  if (
+    held !== undefined &&
+    (held.scope !== SKILL_SCOPE.PERSONAL || held.current === version)
+  )
+    return;
+  const skill: HubSkill = held ?? {
+    name,
+    scope: SKILL_SCOPE.PERSONAL,
+    current: version,
+    enabled: true,
+    accepted: [],
+    assignments: [],
+    updatedAt: place.at,
+  };
+  await writeSkillsHub(
+    place.home,
+    withSkill(hub, { ...skill, current: version, updatedAt: place.at }),
+  );
 }
 
 async function applyRule(place: Place, item: SyncItem): Promise<Applied> {

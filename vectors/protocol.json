@@ -213,6 +213,7 @@
       "skill-sync",
       "skill-rollback",
       "skill-accept",
+      "skill-remove",
       "projects",
       "project-open",
       "project-put",

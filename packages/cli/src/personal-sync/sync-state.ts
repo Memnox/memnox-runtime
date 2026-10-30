@@ -26,6 +26,8 @@ export interface SyncedEntry {
   here: boolean;
   /** Why it does not stand here yet, while it waits: in the Skills Hub, or on a signature. */
   said?: string;
+  /** Deleted on another machine and not yet gone here, so this copy is never sent back to undo that. */
+  deleted?: boolean;
 }
 
 export interface PersonalSyncFile {

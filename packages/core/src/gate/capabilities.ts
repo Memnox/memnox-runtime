@@ -94,6 +94,8 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.SKILL_DISABLE]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.SKILL_ENABLE]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.SKILL_SYNC]: REMOTE_CAPABILITY.ASK,
+  // Taking a skill away only narrows what agents hold, as disabling it does.
+  [DAEMON_METHOD.SKILL_REMOVE]: REMOTE_CAPABILITY.ASK,
   // Opens a terminal on the Mac, which is something only the Mac does.
   [DAEMON_METHOD.AGENT_LAUNCH]: REMOTE_CAPABILITY.MAC,
   [DAEMON_METHOD.PROJECTS]: REMOTE_CAPABILITY.SEE,

@@ -156,7 +156,10 @@ async function received(
     if (known === undefined) return false;
     const removed = await removeSyncItem(place, known);
     if (removed.said !== undefined) state.skipped.push(removed.said);
-    delete state.entries[at];
+    if (removed.here) delete state.entries[at];
+    // Still here, waiting on a signature: a tombstone, so the next push does not bring it back.
+    else
+      state.entries[at] = { ...known, version: item.version, here: false, deleted: true };
     return true;
   }
   const opened = openedItem(key, item);
@@ -250,12 +253,14 @@ function changedHere(
     const known = state.entries[entryKey(item.kind, id)];
     const digest = syncDigestOf(item);
     if (known !== undefined && known.digest === digest) {
+      // The very copy another machine deleted, waiting here to go: sending it would undo the deletion.
+      if (known.deleted === true) return [];
       known.here = true;
       delete known.said;
       return [];
     }
     // A change from elsewhere still waiting on a signature here: this machine's older copy must not win.
-    if (known !== undefined && !known.here) return [];
+    if (known !== undefined && !known.here && known.deleted !== true) return [];
     const ciphertext = sealSyncItem(key, {
       kind: item.kind,
       id,
@@ -288,6 +293,9 @@ function goneHere(
     local.map((item) => entryKey(item.kind, syncItemIdOf(key, item.kind, item.name))),
   );
   const keyId = syncKeyIdOf(key);
+  // A tombstone is done once its copy is gone here too.
+  for (const [at, entry] of Object.entries(state.entries))
+    if (entry.deleted === true && !present.has(at)) delete state.entries[at];
   return Object.entries(state.entries).flatMap(([at, entry]) => {
     if (!entry.here || present.has(at)) return [];
     const id = at.slice(entry.kind.length + 1);

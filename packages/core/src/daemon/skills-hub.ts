@@ -24,6 +24,8 @@ export const SKILLS_METHOD = {
   SKILL_ROLLBACK: 'skill-rollback',
   /** Accepts a held skill's folder as it is now; signed where it reaches further. */
   SKILL_ACCEPT: 'skill-accept',
+  /** Takes a skill out of the hub and every agent at once, its kept versions with it, since that only narrows. */
+  SKILL_REMOVE: 'skill-remove',
 } as const;
 
 /** What one agent keeps of a skill once it is written in that agent's format. */

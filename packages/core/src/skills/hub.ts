@@ -92,6 +92,11 @@ export function withSkill(hub: SkillsHub, skill: HubSkill): SkillsHub {
   };
 }
 
+/** The hub without the skill of this name, which takes it out of every agent at its next sync. */
+export function withoutSkill(hub: SkillsHub, name: string): SkillsHub {
+  return { ...hub, skills: hub.skills.filter((each) => each.name !== name) };
+}
+
 /** The skill with one assignment on or off; on twice is the same as once. */
 export function withSkillAssignment(
   skill: HubSkill,

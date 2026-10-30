@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,7 +15,10 @@ import {
   PROPOSAL_KIND,
   Proposals,
   readHub,
+  readSkillsHub,
+  SKILL_SCOPE,
   SqliteMemoryStore,
+  writePolicyDocumentFile,
   SYNC_KEEP,
   withServer,
   writeAccount,
@@ -29,9 +33,10 @@ import {
   applyPersonalSyncProposal,
   personalSyncAnswer,
 } from '../src/daemon/personal-sync-answer';
+import { skillsHubAnswer } from '../src/daemon/skills-hub-answer';
 import { isVoiceMethod } from '../src/daemon/voice-methods';
 import type { SyncDeps } from '../src/personal-sync/sync-run';
-import { writeMachineRules } from '../src/protect/machine-rules';
+import { machinePolicyPath, writeMachineRules } from '../src/protect/machine-rules';
 import { editableRules } from '../src/studio/rules-in-force';
 import type { CloudResponse } from '../src/sync/client';
 import type { CloudSend } from '../src/sync/personal-sync-cloud';
@@ -492,6 +497,77 @@ describe('personal sync between two machines of one person', () => {
     expect(waiting.personalSync?.state).toBe(PERSONAL_SYNC_STATE.WAITING_FOR_KEY);
     expect(cloud.keys.get('m-laptop')?.envelope).toBeUndefined();
     expect(cloud.items.size).toBe(0);
+  });
+
+  it('takes a skill deleted on one machine out of the other, and never sends it back', async () => {
+    const cloud = new FakeCloud();
+    const laptop = await machine(cloud, 'm-laptop');
+    const skills = (
+      home: string,
+      request: Partial<DaemonRequest>,
+    ): Promise<DaemonResponse> =>
+      skillsHubAnswer(
+        home,
+        { id: 2, method: DAEMON_METHOD.SKILLS_HUB, ...request } as DaemonRequest,
+        NOW,
+      );
+    const put = await skills(laptop.deps.home, {
+      method: DAEMON_METHOD.SKILL_PUT,
+      skillScope: SKILL_SCOPE.PERSONAL,
+      skillDraft: {
+        name: 'review',
+        version: '1.0.0',
+        description: 'Review a change before it is pushed',
+        instructions: '# Review\n\nRead the diff, then say what is risky.\n',
+      },
+    });
+    expect(put.ok).toBe(true);
+    const { desktop } = await paired(cloud, laptop);
+    await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    const held = await readSkillsHub(desktop.deps.home);
+    expect(held.skills.map((skill) => skill.name)).toEqual(['review']);
+    const accepted = await skills(desktop.deps.home, {
+      method: DAEMON_METHOD.SKILL_ACCEPT,
+      skillName: 'review',
+    });
+    expect(accepted.ok).toBe(true);
+    await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+
+    const removed = await skills(laptop.deps.home, {
+      method: DAEMON_METHOD.SKILL_REMOVE,
+      skillName: 'review',
+    });
+    expect(removed.ok).toBe(true);
+    await laptop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    const [tombstone] = [...cloud.items.values()];
+    expect(tombstone?.deleted).toBe(true);
+
+    await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    expect((await readSkillsHub(desktop.deps.home)).skills).toEqual([]);
+    expect(existsSync(join(desktop.deps.home, '.memnox', 'skills', 'review'))).toBe(
+      false,
+    );
+    await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    await laptop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    expect([...cloud.items.values()].map((item) => item.deleted)).toEqual([true]);
+    expect((await readSkillsHub(laptop.deps.home)).skills).toEqual([]);
+  });
+
+  it('keeps a deletion waiting on a signature here as a tombstone, so the copy here is not sent back', async () => {
+    const cloud = new FakeCloud();
+    const laptop = await machine(cloud, 'm-laptop');
+    await writeMachineRules(laptop.deps.home, [rule('no-force-push', 'deny')]);
+    const { desktop } = await paired(cloud, laptop);
+    await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    await writePolicyDocumentFile(machinePolicyPath(laptop.deps.home), {
+      version: 1,
+      policies: [],
+    });
+    await laptop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    const waits = await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    expect(waits.personalSync?.skipped.join(' ')).toContain('waits on your signature');
+    await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    expect([...cloud.items.values()].map((item) => item.deleted)).toEqual([true]);
   });
 
   it('says plainly when the plan does not carry personal sync', async () => {

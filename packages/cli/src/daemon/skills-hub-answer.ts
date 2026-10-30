@@ -19,6 +19,7 @@ import {
   acceptSkill,
   assignSkill,
   putSkill,
+  removeSkill,
   rollbackSkill,
   setSkillEnabled,
   type SkillsChanged,
@@ -102,6 +103,8 @@ async function namedAnswer(
       return changedAnswer(await setSkillEnabled(home, name, true, now));
     case SKILLS_METHOD.SKILL_ACCEPT:
       return changedAnswer(await acceptSkill(home, name, now));
+    case SKILLS_METHOD.SKILL_REMOVE:
+      return changedAnswer(await removeSkill(home, name, now));
     case SKILLS_METHOD.SKILL_ROLLBACK:
       if (request.skillVersion === undefined)
         return refused('Name the version to hand out again.');

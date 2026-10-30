@@ -1,6 +1,8 @@
+import { rm } from 'node:fs/promises';
 import {
   folderDigest,
   minutesToMs,
+  personalSkillDirFor,
   PROPOSAL_KIND,
   Proposals,
   readSkillsHub,
@@ -15,6 +17,7 @@ import {
   withAccepted,
   withSkill,
   withSkillAssignment,
+  withoutSkill,
   writeCanonicalSkill,
   writeSkillsHub,
   type AcceptedSkillVersion,
@@ -227,6 +230,22 @@ export async function assignSkill(
       now,
     ),
   };
+}
+
+/** Removing takes a skill out of the hub and every agent at once, and a personal one's kept versions with it. */
+export async function removeSkill(
+  home: string,
+  name: string,
+  now: Date,
+): Promise<SkillsChanged> {
+  const hub = await readSkillsHub(home);
+  const skill = skillNamed(hub, name);
+  if (skill === undefined) return { refused: `The hub has no skill named ${name}.` };
+  const synced = await syncSkills(home, withoutSkill(hub, name), now);
+  // A project skill's folder is in the repository, which is the person's to change, not the hub's.
+  if (skill.scope === SKILL_SCOPE.PERSONAL)
+    await rm(personalSkillDirFor(home, name), { recursive: true, force: true });
+  return { synced };
 }
 
 /** Disabling takes a skill out of every agent at once; enabling hands back what was signed and accepted. */
