@@ -10,6 +10,7 @@ import {
   MAC_READS,
   NOTICE_KIND,
   PHONE_OWN_DISPLAYS,
+  phoneHears,
   PROPOSAL_KIND,
   Proposals,
   REMOTE_CAPABILITY,
@@ -18,6 +19,7 @@ import {
   type DaemonResponse,
   type DeviceRecord,
   type DisplayKind,
+  type RemoteCapability,
 } from '@memnox/core';
 import { displayName, readNames } from '../agents/names';
 import { doneText, macRationale, NOT_ALLOWED_ON_MAC, OPEN_THE_MAC } from './done-lines';
@@ -83,6 +85,21 @@ export function heardRemotely(event: DaemonEvent): boolean {
     event.phoneTurn === undefined &&
     event.voiceOn === undefined
   );
+}
+
+/** What one subscriber asked for and, on a phone, what it holds. */
+export interface Listener {
+  activity: boolean;
+  /** Undefined on the Mac's own socket, which hears everything it asked for. */
+  holds?: readonly RemoteCapability[];
+}
+
+/** Whether a subscriber is sent an event: ACTIVITY only once asked for, and a phone only what it may see. */
+export function listenerHears(event: DaemonEvent, listener: Listener): boolean {
+  // Asked for, because an app built before ACTIVITY speaks a kind it does not know, every second.
+  if (event.kind === DAEMON_EVENT.ACTIVITY && !listener.activity) return false;
+  if (listener.holds === undefined) return true;
+  return heardRemotely(event) && phoneHears(event.kind, listener.holds);
 }
 
 /** A show naming a session, which the phone that asked for it may open on its own screen. */

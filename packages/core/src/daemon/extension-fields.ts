@@ -72,6 +72,11 @@ interface QuestionEventFields {
   answers?: Record<string, string>;
 }
 
+interface SubscribeRequestFields {
+  /** On SUBSCRIBE: send ACTIVITY too; asked for, since an app built before it would say every row aloud. */
+  subscribeActivity?: boolean;
+}
+
 interface AccountRequestFields {
   /** On PERSON_SIGN_IN: the Mac app's own waiting device code, so one approval signs both in. */
   companionOf?: string;
@@ -96,6 +101,7 @@ export interface ExtensionRequestFields
     TeamRequestFields,
     WorkRequestFields,
     AccountRequestFields,
+    SubscribeRequestFields,
     QuestionRequestFields,
     ConnectionsRequestFields,
     InterceptRequestFields,

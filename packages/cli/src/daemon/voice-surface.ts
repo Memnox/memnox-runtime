@@ -11,8 +11,6 @@ import {
   type DaemonRequest,
   clearVoiceListening,
   type DaemonResponse,
-  phoneHears,
-  type RemoteCapability,
 } from '@memnox/core';
 import type { Brain } from '../operator/brain';
 import { howToAddress, keepOwner } from '../operator/owner';
@@ -48,11 +46,12 @@ import { streamTurn } from './stream-turn';
 import { VoiceAsk } from './voice-ask';
 import { momentContext } from './ask-context';
 import {
-  heardRemotely,
+  listenerHears,
   markNeedsMac,
   noteTold,
   OriginRouter,
   sendWaiting,
+  type Listener,
   type RouterDeps,
 } from './origin-routing';
 import { filesListAnswer } from './folder-listing';
@@ -106,8 +105,8 @@ export class VoiceSurface {
   private readonly heard = new HeardByBroadcast();
   /** Subscribers that are paired phones, by device, which never hear the Mac's own shows. */
   private readonly phones = new Map<Peer, string>();
-  /** What each of those holds, so an event a phone may not see is never sent to it. */
-  private readonly phoneHolds = new Map<Peer, readonly RemoteCapability[]>();
+  /** What each subscriber asked for and a phone holds, so nobody is sent an event they would mishandle or may not see. */
+  private readonly listeners = new Map<Peer, Listener>();
   private readonly router: OriginRouter;
   /** Which phone speaks right now, so the Mac stays silent while it does; the endpoint tells it of drives and phones gone. */
   readonly hold: VoiceHold;
@@ -185,7 +184,7 @@ export class VoiceSurface {
       return;
     }
     if (request.method === DAEMON_METHOD.SUBSCRIBE)
-      return this.subscribe(socket, request.id, principal);
+      return this.subscribe(socket, request, principal);
     if (request.method === DAEMON_METHOD.ASK) return this.ask(socket, request, principal);
     if (request.method === DAEMON_METHOD.CANCEL) {
       const outcome = this.turns?.cancel() === true ? 'cancelled' : 'nothing to cancel';
@@ -205,9 +204,8 @@ export class VoiceSurface {
   broadcast(event: DaemonEvent): void {
     const stamped = this.hold.stamp(event);
     for (const socket of this.subscribers.keys()) {
-      const holds = this.phoneHolds.get(socket);
-      if (holds !== undefined && !(heardRemotely(event) && phoneHears(event.kind, holds)))
-        continue;
+      const listener = this.listeners.get(socket);
+      if (listener === undefined || !listenerHears(event, listener)) continue;
       write(socket, { id: 0, ok: true, event: stamped });
       // A row of activity is never on the waiting feed, so it would only push news out of the window.
       if (event.kind !== DAEMON_EVENT.ACTIVITY) this.heard.note(socket, event.subject);
@@ -218,7 +216,7 @@ export class VoiceSurface {
     const deviceId = this.phones.get(socket);
     if (deviceId !== undefined) this.hold.unsubscribed(deviceId);
     this.phones.delete(socket);
-    this.phoneHolds.delete(socket);
+    this.listeners.delete(socket);
     if (!this.subscribers.delete(socket) || this.subscribers.size > 0) return;
     void clearVoiceListening(this.deps.home).catch(() => undefined);
   }
@@ -231,6 +229,7 @@ export class VoiceSurface {
     this.hold.close();
     for (const socket of this.subscribers.keys()) socket.destroy();
     this.subscribers.clear();
+    this.listeners.clear();
     void clearVoiceListening(this.deps.home).catch(() => undefined);
     this.turns?.close();
   }
@@ -432,15 +431,19 @@ export class VoiceSurface {
   /** Everything already waiting first, then each new thing as it appears. */
   private async subscribe(
     socket: Peer,
-    id: number,
+    request: DaemonRequest,
     principal?: RemotePrincipal,
   ): Promise<void> {
+    const { id } = request;
     const told = new Set<string>();
     this.subscribers.set(socket, told);
+    this.listeners.set(socket, {
+      activity: request.subscribeActivity === true,
+      ...(principal === undefined ? {} : { holds: principal.device.capabilities }),
+    });
     // A live stream means its app is open, so the phone holds the voice until the stream ends.
     if (principal !== undefined && !this.phones.has(socket)) {
       this.phones.set(socket, principal.device.id);
-      this.phoneHolds.set(socket, principal.device.capabilities);
       this.hold.subscribed(principal.device);
     } else if (principal !== undefined) this.hold.renewed(principal.device.id);
     write(socket, { id, ok: true });
