@@ -18,7 +18,7 @@ import { insecureRelayUrl } from '../src/remote/relay-link';
 const ROOT = join(__dirname, '..', 'src');
 
 /**
- * Every file allowed to name a socket, and why. Five entries, each deliberate.
+ * Every file allowed to name a socket, and why. Seven entries, each deliberate.
  *
  * `node:net` is in the pattern rather than excluded from it, because the same
  * import opens a unix socket and a TCP one — so the daemon is named here and
@@ -33,6 +33,10 @@ const ALLOWED: Record<string, string> = {
     'a unix socket a session holds its credentials behind, pinned below',
   'daemon/kokoro-speech.ts':
     "the Mac app's own Kokoro server on 127.0.0.1, pinned below, so nothing leaves the machine",
+  'remote/lan-link.ts':
+    'a listener for paired phones on private addresses only, opened only once the person signs it on, pinned below',
+  'remote/mdns.ts':
+    'the Bonjour announcement beside that listener, a random name and nothing more, on the local network only',
 };
 
 /** Anything that opens a socket or resolves a name. */
@@ -68,6 +72,14 @@ describe('nothing reaches the network but the sync client', () => {
 
     expect(daemon).toContain('createServer');
     expect(daemon).not.toMatch(/listen\(\s*\d/);
+  });
+
+  // The local listener binds the addresses it is handed, which are private ones only, never every interface.
+  it('keeps the local network listener off the wildcard address', () => {
+    const link = readFileSync(join(ROOT, 'remote', 'lan-link.ts'), 'utf8');
+
+    expect(link).toContain('privateAddresses(networkInterfaces())');
+    expect(link).not.toMatch(/0\.0\.0\.0|['"]::['"]/);
   });
 
   // The relay reads a bearer token from a header, so the link refuses anything but TLS off this machine.

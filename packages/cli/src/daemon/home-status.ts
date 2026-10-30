@@ -9,6 +9,7 @@ import { isSkillsMethod, skillsHubAnswer } from './skills-hub-answer';
 import { isProjectsMethod, projectsAnswer } from './projects-answer';
 import { backupAnswer, isBackupMethod } from './backup-answer';
 import { isMemoryMethod, memoryAnswer } from './memory-answer';
+import { isLanMethod, lanAnswer } from './lan-answer';
 import type { SessionViews } from './session-view';
 
 /**
@@ -25,6 +26,7 @@ export function isScreenMethod(method: string): boolean {
     isProjectsMethod(method) ||
     isBackupMethod(method) ||
     isMemoryMethod(method) ||
+    isLanMethod(method) ||
     isStudioMethod(method)
   );
 }
@@ -48,6 +50,7 @@ export function answerHome(
   if (isBackupMethod(request.method)) return backupAnswer(home, request, new Date());
   if (isMemoryMethod(request.method))
     return memoryAnswer(home, request, { now: new Date() });
+  if (isLanMethod(request.method)) return lanAnswer(home, request, new Date());
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);
   return homeAnswer(home, request, {
     views,

@@ -32,8 +32,9 @@ import type { HeartbeatBeats } from '../sync/beat';
 import { cloudRelay, type RelayCloud } from '../sync/relay';
 import { defaultBaseUrl } from '../sync/cloud-url';
 import { ensureDeviceSpace, relayMachine, spaceBaseUrl } from '../sync/device-space';
-import { DriveGrants, driveRefusal } from './drive';
+import { DriveGrants } from './drive';
 import { loadNoise, type Noise } from './noise';
+import { LocalNetwork, type LanSeams } from './local-network';
 import { PairingBook, refused } from './pairings';
 import { keepVoice, readVoice, runtimeNoiseKey } from './remote-files';
 import { RelayLink, relayUrl, type OpenRelay } from './relay-link';
@@ -42,8 +43,8 @@ import type { VoiceHold } from './voice-hold';
 import { PhoneWakes } from './wake';
 
 /**
- * Where the phone's tunnel ends: the relay link, the pairings, each paired phone's session, and
- * the capability check every remote request passes before the voice surface sees it.
+ * Where the phone's tunnel ends: the relay link, the local network when the person turned it on,
+ * the pairings, each paired phone's session, and the capability check every remote request passes.
  */
 
 /** Often enough that a phone is woken while its person can still answer. */
@@ -80,6 +81,7 @@ export interface RemoteDeps {
   speaks?: () => Promise<boolean>;
   /** Where a beat from the control plane goes, so the sync loop beats at once rather than polling. */
   beats?: HeartbeatBeats;
+  lan?: LanSeams;
 }
 
 const REMOTE_METHODS: readonly string[] = Object.values(REMOTE_METHOD);
@@ -93,6 +95,7 @@ export class RemoteEndpoint {
   readonly pairings: PairingBook;
   readonly drives: DriveGrants;
   private link: RelayLink | null = null;
+  private readonly local: LocalNetwork;
   private readonly sessions = new Map<string, RemoteSession>();
   /** When each mailbox last carried a frame from its device. */
   private readonly heardAt = new Map<string, string>();
@@ -108,24 +111,40 @@ export class RemoteEndpoint {
       noise: () => this.noise(),
       // Pairing is the one need that registers this Mac's personal space, so a phone pairs with no account.
       account: () => this.account(true),
+      signedIn: () => this.account(),
+      lan: () => this.local.invite(),
       cloud: this.cloud(),
       relayUrl: relayUrl(),
       machineName: () => hostname().replace(/\.local$/, ''),
       connect: () => void this.connect(),
-      send: (mailbox, payload) => this.link?.send(mailbox, payload) ?? false,
+      send: (mailbox, payload) =>
+        this.local.route(mailbox, payload) ?? this.link?.send(mailbox, payload) ?? false,
       speaks: () => this.speaks(),
       log: deps.log,
     });
+    this.local = new LocalNetwork({
+      home: deps.home,
+      log: deps.log,
+      ...(deps.lan === undefined ? {} : { seams: deps.lan }),
+      pairingFor: (mailbox) => this.pairings.forMailbox(mailbox),
+      session: (key, send) => this.sessionAt(key, send),
+      existing: (key) => this.sessions.get(key),
+      heard: (key) => void this.heardAt.set(key, this.deps.now()),
+      forget: (key, why) => this.forget(key, why),
+      listening: () => this.watchWaiting(),
+    });
   }
 
-  /** On only once sync is enrolled and a device is paired, so nothing changes for a Mac with no phone. */
+  /** The relay once sync is enrolled and a device is paired, the local network once turned on, else nothing. */
   async start(): Promise<void> {
+    await this.local.start();
     if ((await this.paired()).length > 0) await this.connect();
   }
 
   close(): void {
     for (const session of this.sessions.values()) session.end('the daemon stopped');
     this.sessions.clear();
+    this.local.close();
     this.link?.stop();
     this.link = null;
     if (this.wakeTimer !== null) clearInterval(this.wakeTimer);
@@ -158,7 +177,8 @@ export class RemoteEndpoint {
     const pairing = this.pairings.forMailbox(mailbox);
     if (pairing !== null) return pairing.receive(payload);
     this.heardAt.set(mailbox, this.deps.now());
-    void this.sessionFor(mailbox).then((session) => session.receive(payload));
+    const send = (reply: Buffer): void => void this.link?.send(mailbox, reply);
+    void this.sessionAt(mailbox, send).then((session) => session.receive(payload));
   }
 
   /** A remote request, allowed only by what the device its handshake proved may do. */
@@ -191,7 +211,7 @@ export class RemoteEndpoint {
       });
     }
     if (request.method === DAEMON_METHOD.DRIVE)
-      return write(session, this.drive(device, request));
+      return write(session, this.drives.answer(device, request));
     if (request.method === DAEMON_METHOD.VOICE_RELEASE) {
       this.deps.voice()?.hold.released(device.id);
       return write(session, { id: request.id, ok: true });
@@ -306,25 +326,6 @@ export class RemoteEndpoint {
     return { id: request.id, ok: true, voice: await readVoice(home) };
   }
 
-  private drive(device: DeviceRecord, request: DaemonRequest): DaemonResponse {
-    if (request.until === undefined) {
-      this.drives.stop(device.id);
-      return { id: request.id, ok: true, outcome: REMOTE_OUTCOME.STOPPED };
-    }
-    const until = request.until;
-    const why = driveRefusal(
-      device,
-      {
-        until,
-        ...(request.signature === undefined ? {} : { signature: request.signature }),
-      },
-      this.deps.now(),
-    );
-    if (why !== null) return refused(request, why);
-    this.drives.start(device, until);
-    return { id: request.id, ok: true, outcome: REMOTE_OUTCOME.DRIVING, until };
-  }
-
   /** The Mac island shows who drives it for the whole grant; the same notice with no until is the one stop signal. */
   private drivenChanged(drivenBy: DrivenBy): void {
     const { name, until } = drivenBy;
@@ -361,17 +362,29 @@ export class RemoteEndpoint {
   }
 
   private relayDown(): void {
-    for (const session of this.sessions.values()) session.end('the relay dropped');
+    for (const [key, session] of this.sessions) {
+      // A phone on the local network is still here.
+      if (!this.local.carries(key)) session.end('the relay dropped');
+    }
   }
 
-  private async sessionFor(mailbox: string): Promise<RemoteSession> {
-    const found = this.sessions.get(mailbox);
+  private forget(key: string, why: string): void {
+    this.sessions.get(key)?.end(why);
+    this.sessions.delete(key);
+    this.heardAt.delete(key);
+  }
+
+  private async sessionAt(
+    key: string,
+    send: (payload: Buffer) => void,
+  ): Promise<RemoteSession> {
+    const found = this.sessions.get(key);
     if (found !== undefined) return found;
     const session = new RemoteSession({
-      mailbox,
+      mailbox: key,
       noise: this.noise(),
       key: await runtimeNoiseKey(this.deps.home, this.noise()),
-      send: (payload) => void this.link?.send(mailbox, payload),
+      send,
       deviceFor: (noiseStatic) => new Devices(this.deps.home).byNoiseStatic(noiseStatic),
       dispatch: (each, request) => this.dispatch(each, request),
       opened: (each) => this.deps.log(`${each.device?.name ?? 'a phone'} connected`),
@@ -379,7 +392,7 @@ export class RemoteEndpoint {
       log: this.deps.log,
       ...(this.deps.rekeyEvery === undefined ? {} : { rekeyEvery: this.deps.rekeyEvery }),
     });
-    this.sessions.set(mailbox, session);
+    this.sessions.set(key, session);
     return session;
   }
 
@@ -387,6 +400,7 @@ export class RemoteEndpoint {
   private sessionClosed(session: RemoteSession): void {
     if (session.device !== null) this.drives.stop(session.device.id);
     this.deps.voice()?.drop(session);
+    this.local.closed(session.mailbox);
   }
 
   private sessionOf(deviceId: string): RemoteSession | null {

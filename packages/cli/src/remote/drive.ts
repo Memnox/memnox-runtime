@@ -2,10 +2,14 @@ import {
   driveMessage,
   holds,
   REMOTE_CAPABILITY,
+  REMOTE_OUTCOME,
   verifiesSigned,
+  type DaemonRequest,
+  type DaemonResponse,
   type DeviceRecord,
   type DrivenBy,
 } from '@memnox/core';
+import { refused } from './pairings';
 
 /**
  * A phone driving the Mac: one Face ID over a time at most fifteen minutes ahead, after which that
@@ -70,6 +74,21 @@ export class DriveGrants {
     const live = { deviceId: device.id, name: device.name, until };
     this.changed(live);
     return live;
+  }
+
+  /** A phone's drive request: no until stops it, else a signed until starts or renews it. */
+  answer(device: DeviceRecord, request: DaemonRequest): DaemonResponse {
+    if (request.until === undefined) {
+      this.stop(device.id);
+      return { id: request.id, ok: true, outcome: REMOTE_OUTCOME.STOPPED };
+    }
+    const until = request.until;
+    const signed =
+      request.signature === undefined ? {} : { signature: request.signature };
+    const why = driveRefusal(device, { until, ...signed }, this.now());
+    if (why !== null) return refused(request, why);
+    this.start(device, until);
+    return { id: request.id, ok: true, outcome: REMOTE_OUTCOME.DRIVING, until };
   }
 
   /** False when that device was not driving. */

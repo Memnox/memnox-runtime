@@ -116,6 +116,11 @@ export function memoryCloud(): RelayCloud & { calls: string[] } {
   };
 }
 
+/** Whatever carries a phone's messages to the runtime: the relay, or a local connection. */
+export interface PhoneLine {
+  deliver(mailbox: string, payload: Buffer): void;
+}
+
 /** A phone: its Secure Enclave key, its Noise key, and the session it holds once a handshake ends. */
 export class Phone {
   readonly key = personKey();
@@ -124,7 +129,10 @@ export class Phone {
   hash: Buffer | null = null;
   private handshake: NoiseHandshake | null = null;
 
-  constructor(private readonly relay: MemoryRelay) {}
+  constructor(
+    private readonly relay: PhoneLine,
+    private readonly mailbox: string = MAILBOX,
+  ) {}
 
   /** Message one of a pairing, with the QR's secret. */
   startPairing(secret: Buffer): void {
@@ -132,7 +140,7 @@ export class Phone {
       psk: secret,
     });
     this.relay.deliver(
-      MAILBOX,
+      this.mailbox,
       frame(FRAME.HANDSHAKE, this.handshake.writeMessage(Buffer.alloc(0))),
     );
   }
@@ -152,7 +160,7 @@ export class Phone {
       Buffer.from(JSON.stringify({ name, signingPoint: this.key.point, kind })),
     );
     const runtimeStatic = handshake.remoteStatic();
-    this.relay.deliver(MAILBOX, frame(FRAME.HANDSHAKE, third));
+    this.relay.deliver(this.mailbox, frame(FRAME.HANDSHAKE, third));
     this.hash = handshake.handshakeHash();
     this.channel = new SecureChannel(handshake.intoTransport());
     const proof = this.key.signs(`memnox-device:v1:${this.hash.toString('base64')}`);
@@ -166,7 +174,7 @@ export class Phone {
       publicKey: runtimeStatic,
     });
     this.relay.deliver(
-      MAILBOX,
+      this.mailbox,
       frame(FRAME.HANDSHAKE, this.handshake.writeMessage(Buffer.alloc(0))),
     );
   }
@@ -181,7 +189,7 @@ export class Phone {
   send(line: unknown): void {
     if (this.channel === null) throw new Error('no session');
     for (const each of this.channel.seal(JSON.stringify(line)))
-      this.relay.deliver(MAILBOX, each);
+      this.relay.deliver(this.mailbox, each);
   }
 
   /** Every line the runtime sent this phone through its session, decrypted in order. */

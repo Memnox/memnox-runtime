@@ -20,13 +20,20 @@ import { write, type Peer } from '../daemon/socket-write';
 import type { OpenedMailbox, RelayCloud } from '../sync/relay';
 import { FRAME, frame, type SecureChannel } from './framing';
 import type { Noise } from './noise';
-import { pairingLink, PairingResponder, type PhoneHello } from './pairing';
+import {
+  pairingLink,
+  PairingResponder,
+  qrPlace,
+  type LanInvite,
+  type Meeting,
+  type PhoneHello,
+} from './pairing';
+import { MAILBOX_BYTES } from './framing';
 import { readVoice, runtimeNoiseKey, type NoiseKeypair } from './remote-files';
 
 /**
- * The pairings this machine has open: a mailbox from the cloud, a QR, a handshake, and the person's
- * yes. Where a Mac key is kept, `pair-accept` must carry its signature; on a machine with none, such
- * as a server reached over SSH, it must carry the six digits only the device's screen shows.
+ * The pairings this machine has open: a cloud mailbox or a local one, a QR, a handshake, and the
+ * person's yes, signed by the Mac's key where one is kept and else the six digits only the device shows.
  */
 
 /** How long the QR is good for when the cloud names no expiry, as long as its pairing token. */
@@ -39,12 +46,17 @@ const ANSWERED_TTL_MS = 5 * 60_000;
 const NOT_ENROLLED =
   'Memnox Cloud, which carries the device to this machine, could not be reached just now. Try again in a moment.';
 
+const NO_MAILBOX =
+  'Memnox Cloud could not open a mailbox for the device. Try again in a moment.';
+
 /** Wrong digits a pairing takes before it closes, so the code cannot be guessed. */
 const DIGIT_TRIES = 3;
 
 interface Pairing {
   id: string;
   mailbox: string;
+  /** The cloud opened the mailbox, so the relay carries it and mints the device its token. */
+  relay: boolean;
   expiresAt: string;
   state: PairingState;
   responder: PairingResponder;
@@ -60,7 +72,12 @@ interface PairingDeps {
   home: string;
   now: () => string;
   noise: () => Noise;
+  /** The account, or a personal space registered for the relay on first need. */
   account: () => Promise<Account | null>;
+  /** The account only where one is already held, so a pairing on the local network registers nothing. */
+  signedIn: () => Promise<Account | null>;
+  /** Where the local network listens now, or null while it is off. */
+  lan: () => Promise<LanInvite | null>;
   cloud: RelayCloud;
   relayUrl: string;
   machineName: () => string;
@@ -86,30 +103,20 @@ export class PairingBook {
   }
 
   async begin(request: DaemonRequest): Promise<DaemonResponse> {
-    const home = this.deps.home;
-    const account = await this.deps.account();
-    if (account === null || account.revokedAt !== undefined)
-      return refused(request, NOT_ENROLLED);
-    const approver = await approverOn(home);
+    const place = await this.meetingPlace();
+    if (typeof place === 'string') return refused(request, place);
+    const approver = await approverOn(this.deps.home);
     const noise = this.deps.noise();
-    const key = await runtimeNoiseKey(home, noise);
-    const opened = await this.deps.cloud.openMailbox(account);
-    if (opened === null) {
-      return refused(
-        request,
-        'Memnox Cloud could not open a mailbox for the device. Try again in a moment.',
-      );
-    }
-    this.deps.connect();
+    const key = await runtimeNoiseKey(this.deps.home, noise);
+    if (place.relay !== null) this.deps.connect();
     const machine = request.name?.trim() || this.deps.machineName();
-    const pairing = this.open({ noise, key, opened, machine, approver });
+    const opened = place.relay?.opened ?? this.localMailbox();
+    const relay = place.relay !== null;
+    const pairing = this.open({ noise, key, opened, relay, machine, approver });
     const qr = pairingLink({
-      v: 1,
-      machineId: account.machineId,
+      ...qrPlace(place, this.deps.relayUrl),
       machine,
-      relayUrl: this.deps.relayUrl,
       mailbox: opened.mailbox,
-      pairingToken: opened.pairingToken,
       runtimeNoiseStatic: key.publicKey.toString('base64'),
       secret: pairing.secret.toString('base64'),
       expiresAt: pairing.expiresAt,
@@ -122,15 +129,39 @@ export class PairingBook {
     };
   }
 
-  /** A pairing kept open on the cloud's mailbox, with a fresh secret good for one handshake. */
+  /** The relay's mailbox where the person may use it, the local network where it is on, or why neither. */
+  private async meetingPlace(): Promise<Meeting | string> {
+    const lan = await this.deps.lan();
+    // With the local network on, the relay rides along only for a person already signed in.
+    const account = lan === null ? await this.deps.account() : await this.deps.signedIn();
+    const relaying = account !== null && account.revokedAt === undefined ? account : null;
+    if (relaying === null && lan === null) return NOT_ENROLLED;
+    const opened = relaying === null ? null : await this.deps.cloud.openMailbox(relaying);
+    if (opened === null && lan === null) return NO_MAILBOX;
+    const relay =
+      relaying === null || opened === null ? null : { account: relaying, opened };
+    return { lan, relay };
+  }
+
+  /** A mailbox id made here, which only the QR and the local network ever carry. */
+  private localMailbox(): OpenedMailbox {
+    return {
+      mailbox: randomBytes(MAILBOX_BYTES).toString('base64url'),
+      pairingToken: '',
+      expiresAt: new Date(Date.parse(this.deps.now()) + PAIRING_TTL_MS).toISOString(),
+    };
+  }
+
+  /** A pairing kept open on its mailbox, with a fresh secret good for one handshake. */
   private open(input: {
     noise: Noise;
     key: NoiseKeypair;
     opened: OpenedMailbox;
+    relay: boolean;
     machine: string;
     approver: PairApprover;
   }): { id: string; secret: Buffer; expiresAt: string } {
-    const { noise, key, opened, machine, approver } = input;
+    const { noise, key, opened, relay, machine, approver } = input;
     const id = `pair_${randomBytes(9).toString('base64url')}`;
     const secret = randomBytes(32);
     const expiresAt = expiryOf(opened.expiresAt, this.deps.now());
@@ -148,6 +179,7 @@ export class PairingBook {
     this.keep({
       id,
       mailbox,
+      relay,
       expiresAt,
       state,
       responder,
@@ -182,31 +214,36 @@ export class PairingBook {
     const approver = await approverOn(this.deps.home);
     const no = await this.refusal(request, pairing, approver);
     if (no !== null) return no;
-    const account = await this.deps.account();
-    const token =
-      account === null
-        ? null
-        : await this.deps.cloud.mintPhoneToken(account, pairing.mailbox);
-    if (token === null) {
+    const token = pairing.relay ? await this.mint(pairing.mailbox) : null;
+    if (pairing.relay && token === null) {
       return refused(
         request,
         'Memnox Cloud could not give the device its token. Try again in a moment.',
       );
     }
     const device = deviceRecord(phone, {
-      mailbox: pairing.mailbox,
-      relayTokenId: token.tokenId,
+      ...(token === null
+        ? {}
+        : { mailbox: pairing.mailbox, relayTokenId: token.tokenId }),
       at: this.deps.now(),
       approvedBy: approver,
     });
     await new Devices(this.deps.home).add(device);
     await this.welcome(pairing, channel, {
       deviceId: device.id,
-      relayToken: token.token,
+      ...(token === null ? {} : { relayToken: token.token }),
     });
     this.settle(pairing, PAIRING_STATE.PAIRED);
     const wire = deviceWire(device);
     return { id: request.id, ok: true, outcome: REMOTE_OUTCOME.PAIRED, device: wire };
+  }
+
+  /** The device's relay token, minted by the cloud for the mailbox it paired on. */
+  private async mint(
+    mailbox: string,
+  ): Promise<{ tokenId: string; token: string } | null> {
+    const account = await this.deps.account();
+    return account === null ? null : this.deps.cloud.mintPhoneToken(account, mailbox);
   }
 
   /**
@@ -248,11 +285,11 @@ export class PairingBook {
     return { ...refused(request, closed), triesLeft: 0 };
   }
 
-  /** The device's one line once it is written: its id, its relay token and the voice picked here. */
+  /** The device's one line once it is written: its id, its relay token where it has one, and the voice picked here. */
   private async welcome(
     pairing: Pairing,
     channel: SecureChannel,
-    paired: { deviceId: string; relayToken: string },
+    paired: { deviceId: string; relayToken?: string },
   ): Promise<void> {
     const voice = await readVoice(this.deps.home);
     const speaks = await this.deps.speaks();
@@ -268,7 +305,7 @@ export class PairingBook {
       }
       this.deps.send(pairing.mailbox, frame(FRAME.CLOSE));
       this.settle(pairing, PAIRING_STATE.DECLINED);
-      await this.closeMailbox(pairing.mailbox);
+      await this.closeMailbox(pairing);
     }
     return { id: request.id, ok: true, outcome: REMOTE_OUTCOME.DECLINED };
   }
@@ -307,7 +344,7 @@ export class PairingBook {
     pairing.timer = setTimeout(() => {
       if (!isLive(pairing.state)) return;
       this.settle(pairing, PAIRING_STATE.EXPIRED);
-      void this.closeMailbox(pairing.mailbox);
+      void this.closeMailbox(pairing);
     }, wait);
     // An open QR is never a reason to keep a daemon alive that was asked to stop.
     pairing.timer.unref();
@@ -361,10 +398,12 @@ export class PairingBook {
     );
   }
 
-  private async closeMailbox(mailbox: string): Promise<void> {
-    const account = await this.deps.account();
+  /** A mailbox made here was never the cloud's, so only the relay's is closed there. */
+  private async closeMailbox(pairing: Pairing): Promise<void> {
+    if (!pairing.relay) return;
+    const account = await this.deps.signedIn();
     if (account !== null)
-      await this.deps.cloud.closeMailbox(account, mailbox).catch(() => false);
+      await this.deps.cloud.closeMailbox(account, pairing.mailbox).catch(() => false);
   }
 }
 
@@ -406,7 +445,12 @@ function expiryOf(given: string, now: string): string {
 
 function deviceRecord(
   phone: PhoneHello,
-  where: { mailbox: string; relayTokenId: string; at: string; approvedBy: PairApprover },
+  where: {
+    mailbox?: string;
+    relayTokenId?: string;
+    at: string;
+    approvedBy: PairApprover;
+  },
 ): DeviceRecord {
   return {
     id: `dev_${randomBytes(9).toString('base64url')}`,
@@ -416,8 +460,8 @@ function deviceRecord(
     noiseStatic: phone.noiseStatic,
     capabilities: [...PHONE_DEFAULT_CAPABILITIES],
     pairedAt: where.at,
-    mailbox: where.mailbox,
-    relayTokenId: where.relayTokenId,
+    ...(where.mailbox === undefined ? {} : { mailbox: where.mailbox }),
+    ...(where.relayTokenId === undefined ? {} : { relayTokenId: where.relayTokenId }),
     approvedBy: where.approvedBy,
   };
 }

@@ -32,6 +32,7 @@ import { applyHubProposal } from './mcp-hub-confirm';
 import { applySkillsProposal } from './skills-hub-confirm';
 import { applyProjectProposal } from './projects-confirm';
 import { applyBackupProposal } from './backup-confirm';
+import { applyLanProposal } from './lan-answer';
 import { applyStudioProposal } from './studio-confirm';
 import {
   FROM_NOW_ON,
@@ -337,7 +338,8 @@ async function apply(
     (await applyPersonal(home, proposal)) ??
     (await applyStudioProposal(home, change, new Date(at))) ??
     (await applyProjectProposal(home, change, new Date(at))) ??
-    (await applyBackupProposal(home, change, new Date(at))) ?? {
+    (await applyBackupProposal(home, change, new Date(at))) ??
+    (await applyLanProposal(home, change)) ?? {
       ok: false,
       error: `${proposal.id} is nothing to apply`,
     }
