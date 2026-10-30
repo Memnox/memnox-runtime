@@ -299,6 +299,8 @@ export const DAEMON_EVENT = {
   SHOW: 'show',
   /** Something worth saying unasked: a session finished, committed or pushed. */
   NOTICE: 'notice',
+  /** Rows the ledger gained that a screen's activity view shows, names only, a burst at most once a second. */
+  ACTIVITY: 'activity',
 } as const;
 
 export type DaemonEventKind = (typeof DAEMON_EVENT)[keyof typeof DAEMON_EVENT];

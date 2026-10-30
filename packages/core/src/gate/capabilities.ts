@@ -1,5 +1,10 @@
 import { DISPLAY, DISPLAY_VIA, type DisplayKind } from '../daemon/display';
-import { DAEMON_METHOD, type DaemonEvent } from '../daemon/protocol';
+import {
+  DAEMON_EVENT,
+  DAEMON_METHOD,
+  type DaemonEvent,
+  type DaemonEventKind,
+} from '../daemon/protocol';
 import { START_ID_PREFIX } from '../coordination/session-starts';
 import { PROPOSAL_KIND, type ProposedChange } from './proposals';
 import { REMOTE_CAPABILITY, type RemoteCapability } from './remote-capability';
@@ -134,6 +139,20 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.INDEX_INSTALL]: REMOTE_CAPABILITY.ASK,
   // index-source-set is left out on purpose: which index this machine trusts is decided at the machine.
 };
+
+/** Events a phone hears only while it holds more than subscribing takes; a kind missing here needs SEE alone. */
+const REMOTE_EVENTS: Partial<Record<DaemonEventKind, RemoteCapability>> = {
+  // Names only, as the activity method a phone reads under SEE.
+  [DAEMON_EVENT.ACTIVITY]: REMOTE_CAPABILITY.SEE,
+};
+
+/** Whether a paired device holding these capabilities is sent an event of this kind. */
+export function phoneHears(
+  kind: DaemonEventKind,
+  holds: readonly RemoteCapability[],
+): boolean {
+  return holds.includes(REMOTE_EVENTS[kind] ?? REMOTE_CAPABILITY.SEE);
+}
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
 export const PHONE_OWN_DISPLAYS: readonly DisplayKind[] = [DISPLAY.LINK];

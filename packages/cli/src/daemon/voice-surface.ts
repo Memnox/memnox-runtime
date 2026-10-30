@@ -11,6 +11,8 @@ import {
   type DaemonRequest,
   clearVoiceListening,
   type DaemonResponse,
+  phoneHears,
+  type RemoteCapability,
 } from '@memnox/core';
 import type { Brain } from '../operator/brain';
 import { howToAddress, keepOwner } from '../operator/owner';
@@ -40,6 +42,7 @@ import { answerConnectionCall, isConnectionsMethod } from './connection-calls';
 import { answerPerson, isPersonMethod, type PersonSignIns } from './person-calls';
 export { isVoiceMethod } from './voice-methods';
 import { NoticeWatcher } from './notice-watch';
+import { LiveFeeds } from './live-feeds';
 import { RecentExchanges } from './recall';
 import { streamTurn } from './stream-turn';
 import { VoiceAsk } from './voice-ask';
@@ -64,7 +67,7 @@ import { answerPolish, isPolishMethod } from './polish-calls';
 import { answerRule, isRuleMethod } from './rule-calls';
 import { write, type Peer } from './socket-write';
 import { askingIn, WaitingFeed } from './waiting-feed';
-import { BRAIN_IDLE_MS, FEED_INTERVAL_MS, NOTICE_INTERVAL_MS } from './voice.constants';
+import { BRAIN_IDLE_MS, FEED_INTERVAL_MS } from './voice.constants';
 import {
   locateAnswer,
   macSpansAnswer,
@@ -103,13 +106,15 @@ export class VoiceSurface {
   private readonly heard = new HeardByBroadcast();
   /** Subscribers that are paired phones, by device, which never hear the Mac's own shows. */
   private readonly phones = new Map<Peer, string>();
+  /** What each of those holds, so an event a phone may not see is never sent to it. */
+  private readonly phoneHolds = new Map<Peer, readonly RemoteCapability[]>();
   private readonly router: OriginRouter;
   /** Which phone speaks right now, so the Mac stays silent while it does; the endpoint tells it of drives and phones gone. */
   readonly hold: VoiceHold;
   private readonly feed: WaitingFeed;
   private feedTimer: ReturnType<typeof setInterval> | null = null;
-  private noticeTimer: ReturnType<typeof setInterval> | null = null;
   private readonly notices: NoticeWatcher;
+  private readonly live = new LiveFeeds();
   private readonly turns: BrainTurns | null;
   private readonly views: SessionViews;
   private readonly exchanges: RecentExchanges;
@@ -200,9 +205,12 @@ export class VoiceSurface {
   broadcast(event: DaemonEvent): void {
     const stamped = this.hold.stamp(event);
     for (const socket of this.subscribers.keys()) {
-      if (this.phones.has(socket) && !heardRemotely(event)) continue;
+      const holds = this.phoneHolds.get(socket);
+      if (holds !== undefined && !(heardRemotely(event) && phoneHears(event.kind, holds)))
+        continue;
       write(socket, { id: 0, ok: true, event: stamped });
-      this.heard.note(socket, event.subject);
+      // A row of activity is never on the waiting feed, so it would only push news out of the window.
+      if (event.kind !== DAEMON_EVENT.ACTIVITY) this.heard.note(socket, event.subject);
     }
   }
 
@@ -210,6 +218,7 @@ export class VoiceSurface {
     const deviceId = this.phones.get(socket);
     if (deviceId !== undefined) this.hold.unsubscribed(deviceId);
     this.phones.delete(socket);
+    this.phoneHolds.delete(socket);
     if (!this.subscribers.delete(socket) || this.subscribers.size > 0) return;
     void clearVoiceListening(this.deps.home).catch(() => undefined);
   }
@@ -217,8 +226,7 @@ export class VoiceSurface {
   close(): void {
     if (this.feedTimer !== null) clearInterval(this.feedTimer);
     this.feedTimer = null;
-    if (this.noticeTimer !== null) clearInterval(this.noticeTimer);
-    this.noticeTimer = null;
+    this.live.close();
     this.notices.close();
     this.hold.close();
     for (const socket of this.subscribers.keys()) socket.destroy();
@@ -432,6 +440,7 @@ export class VoiceSurface {
     // A live stream means its app is open, so the phone holds the voice until the stream ends.
     if (principal !== undefined && !this.phones.has(socket)) {
       this.phones.set(socket, principal.device.id);
+      this.phoneHolds.set(socket, principal.device.capabilities);
       this.hold.subscribed(principal.device);
     } else if (principal !== undefined) this.hold.renewed(principal.device.id);
     write(socket, { id, ok: true });
@@ -442,7 +451,12 @@ export class VoiceSurface {
     waiting.forEach((event) => noteTold(told, event));
     for (const event of await this.feed.told.firstHeard(waiting, principal !== undefined))
       write(socket, { id, ok: true, event: this.hold.stamp(markNeedsMac(event)) });
-    this.watchNotices();
+    this.live.start({
+      ...this.deps,
+      notices: this.notices,
+      tell: (event) => this.broadcast(event),
+      listening: () => this.subscribers.size > 0,
+    });
     this.startFeed();
   }
 
@@ -455,22 +469,6 @@ export class VoiceSurface {
     );
     // A subscriber is not a reason to keep a daemon alive that was asked to stop.
     this.feedTimer.unref();
-  }
-
-  /** Reads the ledger for news every few seconds while somebody is listening. */
-  private watchNotices(): void {
-    if (this.noticeTimer !== null) return;
-    this.notices.followCollisions((event) => this.broadcast(event), this.deps.now);
-    this.noticeTimer = setInterval(() => {
-      if (this.subscribers.size === 0) return;
-      this.notices
-        .look(this.deps.now())
-        .then((events) => events.forEach((event) => this.broadcast(event)))
-        .catch((err: unknown) =>
-          this.deps.log(`could not look for news: ${String(err)}`),
-        );
-    }, this.deps.noticeIntervalMs ?? NOTICE_INTERVAL_MS);
-    this.noticeTimer.unref();
   }
 
   private async pushWaiting(): Promise<void> {

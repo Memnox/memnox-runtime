@@ -1,13 +1,16 @@
 import {
   ACTIVITY_KIND,
   ANSWERED_HOW,
+  MOST_LIVE_ACTIVITY_ROWS,
   type ActivityFilter,
   type ActivityKind,
   type ActivityRow,
   type AnsweredHow,
   type DecisionStep,
   type DecisionTrace,
+  type LiveActivityRow,
 } from '../daemon/activity';
+import { DAEMON_EVENT, type DaemonEvent } from '../daemon/protocol';
 import { EVENT_SURFACE, EXECUTION, type MemnoxEvent } from '../event/event';
 
 /**
@@ -119,5 +122,37 @@ export function decisionTraceOf(event: MemnoxEvent): DecisionTrace {
     ...(event.authorizedBy === undefined ? {} : { approvedBy: event.authorizedBy }),
     ...(event.argsDigest === undefined ? {} : { argsDigest: event.argsDigest }),
     ...(event.outputDigest === undefined ? {} : { outputDigest: event.outputDigest }),
+  };
+}
+
+export function liveActivityOf(event: MemnoxEvent): LiveActivityRow {
+  return {
+    id: event.id,
+    at: event.at,
+    agent: event.agent,
+    operation: event.operation,
+    effect: event.effect,
+    ...(event.target === undefined ? {} : { target: event.target }),
+  };
+}
+
+/** A burst as one event: its newest rows carried, the rest counted, so a burst is bounded whatever its size. */
+export function activityEventOf(
+  fresh: readonly MemnoxEvent[],
+  at: string,
+): DaemonEvent | null {
+  const newest = fresh.slice(-MOST_LIVE_ACTIVITY_ROWS);
+  const last = newest[newest.length - 1];
+  if (last === undefined) return null;
+  const missed = fresh.length - newest.length;
+  return {
+    kind: DAEMON_EVENT.ACTIVITY,
+    subject: last.id,
+    agent: last.agent,
+    summary:
+      fresh.length === 1 ? `${last.agent} ${last.operation}` : `${fresh.length} actions`,
+    at,
+    activityRows: newest.map(liveActivityOf),
+    ...(missed === 0 ? {} : { activityMissed: missed }),
   };
 }

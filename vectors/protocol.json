@@ -253,7 +253,8 @@
       "paused",
       "settled",
       "show",
-      "notice"
+      "notice",
+      "activity"
     ],
     "askEnds": [
       "done",

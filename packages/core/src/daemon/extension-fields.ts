@@ -5,7 +5,11 @@ import type { HomeResponseFields } from './home';
 import type { InterceptRequestFields, InterceptResponseFields } from './intercept';
 import type { McpHubRequestFields, McpHubResponseFields } from './mcp-hub';
 import type { PolicyRequestFields, PolicyResponseFields } from './policies';
-import type { ActivityRequestFields, ActivityResponseFields } from './activity';
+import type {
+  ActivityEventFields,
+  ActivityRequestFields,
+  ActivityResponseFields,
+} from './activity';
 import type { AgentsRequestFields, AgentsResponseFields } from './agents-view';
 import type { SkillsRequestFields, SkillsResponseFields } from './skills-hub';
 import type { HeldActionEventFields, HeldActionRequestFields } from './held-action';
@@ -139,4 +143,5 @@ export interface ExtensionEventFields
     WorkEventFields,
     QuestionEventFields,
     HeldActionEventFields,
-    ProposalEventFields {}
+    ProposalEventFields,
+    ActivityEventFields {}

@@ -120,6 +120,28 @@ export interface DecisionView {
   trace: DecisionTrace;
 }
 
+/** One row as it is written, for a live timeline: names only, never arguments, output or contents. */
+export interface LiveActivityRow {
+  id: string;
+  at: string;
+  /** The agent's kind, such as claude-code. */
+  agent: string;
+  operation: string;
+  effect: DecisionEffect;
+  /** The target by name: a path, a host, a server; never what was sent to it. */
+  target?: string;
+}
+
+/** The most rows one ACTIVITY event carries; the rest of a burst is counted, and a screen pages for it. */
+export const MOST_LIVE_ACTIVITY_ROWS = 20;
+
+export interface ActivityEventFields {
+  /** On ACTIVITY: the rows written since the last one, oldest first. */
+  activityRows?: LiveActivityRow[];
+  /** On ACTIVITY: rows of the same burst this event does not carry, at least this many. */
+  activityMissed?: number;
+}
+
 export interface ActivityRequestFields {
   /** On ACTIVITY and ACTIVITY_EXPORT. */
   activityFilter?: ActivityFilter;
