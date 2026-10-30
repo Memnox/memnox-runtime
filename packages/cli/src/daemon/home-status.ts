@@ -8,6 +8,7 @@ import { isPolicyMethod, policiesAnswer } from './policies-answer';
 import { isSkillsMethod, skillsHubAnswer } from './skills-hub-answer';
 import { isProjectsMethod, projectsAnswer } from './projects-answer';
 import { backupAnswer, isBackupMethod } from './backup-answer';
+import { isMemoryMethod, memoryAnswer } from './memory-answer';
 import type { SessionViews } from './session-view';
 
 /**
@@ -23,6 +24,7 @@ export function isScreenMethod(method: string): boolean {
     isSkillsMethod(method) ||
     isProjectsMethod(method) ||
     isBackupMethod(method) ||
+    isMemoryMethod(method) ||
     isStudioMethod(method)
   );
 }
@@ -44,6 +46,8 @@ export function answerHome(
   if (isSkillsMethod(request.method)) return skillsHubAnswer(home, request, new Date());
   if (isProjectsMethod(request.method)) return projectsAnswer(home, request, new Date());
   if (isBackupMethod(request.method)) return backupAnswer(home, request, new Date());
+  if (isMemoryMethod(request.method))
+    return memoryAnswer(home, request, { now: new Date() });
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);
   return homeAnswer(home, request, {
     views,

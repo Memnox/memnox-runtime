@@ -245,6 +245,13 @@ export class SqliteMemoryStore {
     return rows.map((row) => this.withEvidence(row));
   }
 
+  count(filter: ItemFilter = {}): number {
+    const { clause, params } = whereOf(filter);
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM items${clause}`).get(params);
+    // Cast is safe: COUNT(*) answers one row with one number.
+    return (row as { n: number }).n;
+  }
+
   /** Items whose words match, best first, by the keyword index. */
   search(query: string, filter: ItemFilter = {}): MemoryItem[] {
     const match = matchExpression(query);

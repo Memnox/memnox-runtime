@@ -31,6 +31,12 @@ import { baselineRules, machinePolicyPath } from '../protect/machine-rules';
  * workspace published, the baseline, grants and allowances that end on their own, and freezes.
  */
 
+/** A rule a person added here, by hand or by confirming what was learned, is theirs to remove. */
+const EDITABLE_SOURCES: readonly RuleSource[] = [
+  RULE_SOURCE.PERSON,
+  RULE_SOURCE.EXTRACTED,
+];
+
 /** A file's rules, or why it would not load. */
 type FileRead = { file: string; rules: Policy[] } | { problem: PolicyLoadProblem };
 
@@ -99,7 +105,7 @@ function isEditable(
   file: string,
   defaults: ReadonlySet<string>,
 ): boolean {
-  return sourceOf(home, rule, file, defaults) === RULE_SOURCE.PERSON;
+  return EDITABLE_SOURCES.includes(sourceOf(home, rule, file, defaults));
 }
 
 function sourceOf(
@@ -111,7 +117,8 @@ function sourceOf(
   if (rule.workspace === true || file === orgPolicyPathFor(home))
     return RULE_SOURCE.WORKSPACE;
   if (defaults.has(rule.name)) return RULE_SOURCE.DEFAULT;
-  return file === machinePolicyPath(home) ? RULE_SOURCE.PERSON : RULE_SOURCE.FILE;
+  if (file !== machinePolicyPath(home)) return RULE_SOURCE.FILE;
+  return rule.learnedFrom === undefined ? RULE_SOURCE.PERSON : RULE_SOURCE.EXTRACTED;
 }
 
 function fileRuleView(
@@ -127,7 +134,8 @@ function fileRuleView(
     file,
     ...(rule.decidedBy === undefined ? {} : { decidedBy: rule.decidedBy }),
     ...(rule.decidedAt === undefined ? {} : { decidedAt: rule.decidedAt }),
-    editable: source === RULE_SOURCE.PERSON,
+    ...(rule.learnedFrom === undefined ? {} : { evidenceRefs: [...rule.learnedFrom] }),
+    editable: EDITABLE_SOURCES.includes(source),
   };
 }
 

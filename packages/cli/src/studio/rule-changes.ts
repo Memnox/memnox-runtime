@@ -50,6 +50,26 @@ export async function proposeRuleDraft(
   return { proposed, read: { ...draft, summary, scopes } };
 }
 
+/** A rule learned from the person's notes, proposed for this machine only and holding once signed. */
+export async function proposeLearnedRule(
+  home: string,
+  rule: Policy,
+  at: string,
+): Promise<Changed<{ proposed: string }>> {
+  const problems = ruleDraftProblems({
+    effect: rule.decision.effect,
+    action: rule.match.actions[0] ?? '',
+    reason: rule.decision.reason ?? '',
+  });
+  if (problems.length > 0)
+    return { refused: `The rule would not load: ${problems.join('; ')}` };
+  // Never offered to the team: it was read from one person's own notes.
+  const summary = sentenceOfRule(rule);
+  return {
+    proposed: await proposeRules(home, [rule], { summary, at, offerTeam: false }),
+  };
+}
+
 /** An allow taken away at once; a deny or an ask taken away only once the person signs it. */
 export async function removeRule(
   home: string,
