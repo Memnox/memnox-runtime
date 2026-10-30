@@ -22,6 +22,7 @@ import {
   recordConfigChanges,
   type ConfigRecord,
 } from '../keeper/config-events';
+import { orgHubSkills } from './org-skill-hub';
 import { readKeptSkill, type KeptSkill } from './skill-standing';
 
 /**
@@ -50,7 +51,10 @@ interface Wanted {
   translation: Translation;
 }
 
-/** Every enabled, accepted skill written where it is assigned; a held one stays as last written. */
+/**
+ * Every enabled, accepted skill written where it is assigned, and every organization skill that
+ * matched its digest; a held one stays as last written.
+ */
 export async function syncSkills(
   home: string,
   hub: SkillsHub,
@@ -66,6 +70,9 @@ export async function syncSkills(
       continue;
     }
     wanted.push(...wantedOf(home, skill, read, skipped));
+  }
+  for (const org of await orgHubSkills(home, hub)) {
+    wanted.push(...wantedOf(home, org.skill, org.read, skipped));
   }
   const removed = await removeStale(hub.written, [...wanted, ...kept]);
   const placed = await placeWanted(hub.written, wanted, skipped);

@@ -30,6 +30,7 @@ import { registerPolicyFile } from '../policy-registry';
 import { loadablePatterns } from './bundle-patterns';
 import { callCloud } from './client';
 import { keepOrgMcpServers } from './org-mcp';
+import { keepOrgSkills } from './org-skills';
 
 /**
  * The rules this workspace publishes, pulled and put where the gate already looks. The
@@ -93,6 +94,8 @@ export interface Bundle {
   classifications?: DataPattern[];
   /** The organization's MCP servers, read by the hub as a scope nobody here edits; checked field by field. */
   mcpServers?: unknown[];
+  /** The organization's skills, read by the Skills Hub as a scope nobody here edits; each checked against its digest. */
+  skills?: unknown[];
 }
 
 export const PULL_OUTCOME = {
@@ -206,6 +209,7 @@ export async function applyBundle(
   await registerPolicyFile(home, path);
   await keepConditions(home, bundle, now(), machineId);
   await keepOrgMcpServers(home, bundle.mcpServers);
+  await keepOrgSkills(home, bundle.skills, new Date(now()));
 
   return {
     outcome: PULL_OUTCOME.APPLIED,

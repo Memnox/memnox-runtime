@@ -1,4 +1,7 @@
 import {
+  isOrgSkill,
+  orgSkillOwned,
+  readOrgSkills,
   readSkillsHub,
   SKILL_INSTRUCTIONS,
   SKILL_SCOPE,
@@ -69,7 +72,20 @@ async function answerOf(
       return { ok: true };
   }
   if (name === undefined || name === '') return refused('Name the skill.');
+  if (await onlyOrganizations(home, name)) return refused(orgSkillOwned(name));
   return namedAnswer(home, { request, name, now });
+}
+
+/** A name only the organization holds, which this machine reads and never changes. */
+async function onlyOrganizations(home: string, name: string): Promise<boolean> {
+  if (skillNamed(await readSkillsHub(home), name) !== undefined) return false;
+  return organizationHolds(home, name);
+}
+
+/** Whether the organization published a skill by this name, kept or refused at the pull. */
+async function organizationHolds(home: string, name: string): Promise<boolean> {
+  const org = await readOrgSkills(home);
+  return isOrgSkill(org.skills, name) || org.refused.some((each) => each.name === name);
 }
 
 /** The changes that name one skill already in the hub. */
@@ -125,7 +141,8 @@ async function assign(
 /** Where a project skill lives must be named; a personal one lives under the Memnox home. */
 function placeOf(request: DaemonRequest): { scope: SkillScope; project?: string } | null {
   const scope = request.skillScope ?? SKILL_SCOPE.PERSONAL;
-  if (!SCOPES.includes(scope)) return null;
+  // The organization's scope is written only by the bundle pull, never from a screen.
+  if (!SCOPES.includes(scope) || scope === SKILL_SCOPE.ORGANIZATION) return null;
   if (scope === SKILL_SCOPE.PERSONAL) return { scope };
   return request.skillProject === undefined
     ? null
@@ -146,6 +163,8 @@ async function importOne(
   const name = skillNameOf(found.name);
   if (skillNamed(await readSkillsHub(home), name) !== undefined)
     return refused(`The hub already has a skill named ${name}.`);
+  if (await organizationHolds(home, name))
+    return refused(`The organization already provides a skill named ${name}.`);
   const skill = await canonicalOf(found, name);
   if ('refused' in skill) return refused(skill.refused);
   return changedAnswer(await putSkill(home, { skill, ...place }, now));
@@ -159,6 +178,8 @@ async function put(home: string, request: DaemonRequest, now: Date): Promise<Ans
     return refused(
       'Send the skill as a name, a version, a description and its instructions.',
     );
+  if (await onlyOrganizations(home, skill.manifest.name))
+    return refused(orgSkillOwned(skill.manifest.name));
   return changedAnswer(await putSkill(home, { skill, ...place }, now));
 }
 

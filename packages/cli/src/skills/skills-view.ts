@@ -4,6 +4,7 @@ import {
   compareVersions,
   describeGrant,
   personalVersions,
+  readOrgSkills,
   readSkillsHub,
   SKILL_FORMATS,
   SKILL_SCOPE,
@@ -11,12 +12,14 @@ import {
   type DiscoveredSkill,
   type FoundSkillView,
   type HubSkill,
+  type RefusedOrgSkill,
   type SkillCompatibility,
   type SkillsHub,
   type SkillsHubView,
   type SkillVersionView,
   type SkillView,
 } from '@memnox/core';
+import { orgHubSkills } from './org-skill-hub';
 import { foundDefinitions } from './skill-import';
 import { readKeptSkill, type KeptSkill } from './skill-standing';
 
@@ -31,6 +34,7 @@ export async function readSkillsView(home: string): Promise<SkillsHubView> {
   const hub = await readSkillsHub(home);
   const skills: SkillView[] = [];
   for (const skill of hub.skills) skills.push(await skillView(home, skill));
+  skills.push(...(await orgViews(home, hub)));
   return {
     skills: skills.sort((a, b) => a.name.localeCompare(b.name)),
     found: foundViews(hub, await foundDefinitions(home)),
@@ -43,7 +47,43 @@ export async function readSkillsView(home: string): Promise<SkillsHubView> {
 }
 
 async function skillView(home: string, skill: HubSkill): Promise<SkillView> {
-  const read = await readKeptSkill(home, skill);
+  return viewOf(skill, await readKeptSkill(home, skill), await versionsOf(home, skill));
+}
+
+/**
+ * The organization's skills, each its one version, and the ones refused at the pull with why, so a
+ * person sees what Memnox Cloud sent and nothing of a skill that did not match its digest is written.
+ */
+async function orgViews(home: string, hub: SkillsHub): Promise<SkillView[]> {
+  const handed = (await orgHubSkills(home, hub)).map(({ org, skill, read }) =>
+    viewOf(skill, read, [{ version: org.version, current: true, digest: org.digest }]),
+  );
+  const local = new Set(hub.skills.map((skill) => skill.name));
+  const refused = (await readOrgSkills(home)).refused
+    .filter((each) => !local.has(each.name))
+    .map((each) => refusedView(each));
+  return [...handed, ...refused];
+}
+
+function refusedView(refused: RefusedOrgSkill): SkillView {
+  const skill: HubSkill = {
+    name: refused.name,
+    scope: SKILL_SCOPE.ORGANIZATION,
+    current: refused.version,
+    enabled: false,
+    accepted: [],
+    assignments: [],
+    updatedAt: '',
+  };
+  const problems = [`Not written into any agent, because ${refused.reason}.`];
+  return viewOf(skill, { digest: '', problems, reaches: [] }, []);
+}
+
+function viewOf(
+  skill: HubSkill,
+  read: KeptSkill,
+  versions: SkillVersionView[],
+): SkillView {
   const manifest = read.skill === undefined ? undefined : read.skill.manifest;
   return {
     name: skill.name,
@@ -63,7 +103,7 @@ async function skillView(home: string, skill: HubSkill): Promise<SkillView> {
     agents: [...new Set(skill.assignments.map((each) => each.agent))],
     assignments: skill.assignments.map((each) => ({ ...each })),
     compatibility: read.skill === undefined ? [] : compatibilityOf(read.skill, skill),
-    versions: await versionsOf(home, skill),
+    versions,
     updatedAt: skill.updatedAt,
     ...contentOf(read),
     ...(read.problems === undefined ? {} : { problems: read.problems }),
