@@ -101,6 +101,7 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.PROJECT_OPEN]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.PROJECT_PUT]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.PROJECT_APPLY]: REMOTE_CAPABILITY.ASK,
+  // backup-create and backup-restore are left out on purpose: a backup is the whole setup, so it never leaves by the relay.
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
@@ -174,6 +175,8 @@ export function proposalCapability(change: ProposedChange): RemoteCapability | n
   if (change.kind === PROPOSAL_KIND.MCP_HUB) return REMOTE_CAPABILITY.RULES;
   // A skill's tools and needs widen what an agent does exactly as a server does.
   if (change.kind === PROPOSAL_KIND.SKILLS_HUB) return REMOTE_CAPABILITY.RULES;
+  // A restore rewrites every rule and hub at once, so only the Mac, with Touch ID, puts one back.
+  if (change.kind === PROPOSAL_KIND.BACKUP_RESTORE) return null;
   // A project's servers, skills and rule file reach as far as each of them does on its own.
   if (change.kind === PROPOSAL_KIND.PROJECT) return REMOTE_CAPABILITY.RULES;
   // Taking a deny or an ask away widens what agents may do, exactly as adding an allow does.

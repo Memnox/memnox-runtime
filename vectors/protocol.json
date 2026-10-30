@@ -216,7 +216,9 @@
       "projects",
       "project-open",
       "project-put",
-      "project-apply"
+      "project-apply",
+      "backup-create",
+      "backup-restore"
     ],
     "events": [
       "held",

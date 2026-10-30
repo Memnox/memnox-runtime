@@ -50,6 +50,8 @@ export const PROPOSAL_KIND = {
   SKILLS_HUB: 'skills-hub',
   /** A project's servers, skills and rule file handed to the agents opened in it, once the person signs. */
   PROJECT: 'project',
+  /** A backup put back over this machine's setup, from a copy staged and checked by its digest. */
+  BACKUP_RESTORE: 'backup-restore',
 } as const;
 
 export type ProposedChange =
@@ -102,7 +104,15 @@ export type ProposedChange =
   | { kind: typeof PROPOSAL_KIND.RULE_REMOVE; file: string; rule: string }
   | { kind: typeof PROPOSAL_KIND.AGENT_RESUME; agent: string }
   | { kind: typeof PROPOSAL_KIND.SKILLS_HUB; skills: SkillsChange }
-  | { kind: typeof PROPOSAL_KIND.PROJECT; project: ProjectChange };
+  | { kind: typeof PROPOSAL_KIND.PROJECT; project: ProjectChange }
+  | {
+      kind: typeof PROPOSAL_KIND.BACKUP_RESTORE;
+      /** The staged copy's SHA-256, which names its file and is checked again before anything is written. */
+      staged: string;
+      files: string[];
+      ledger: boolean;
+      createdAt: string;
+    };
 
 export interface Proposal {
   id: string;
