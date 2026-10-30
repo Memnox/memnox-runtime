@@ -72,6 +72,8 @@ export async function syncNow(deps: SyncDeps): Promise<PersonalSyncFile> {
   };
   const pulled = await pull(deps, keyed.key, run, tally);
   const pushed = pulled === null ? await push(deps, keyed.key, run, tally) : pulled;
+  // Something went out under the key, so it stays the person's key whoever registered first.
+  if (pushed === null && tally.sent > 0) delete run.keyMadeHere;
   const done =
     pushed === null
       ? {

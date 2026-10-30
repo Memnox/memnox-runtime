@@ -27,6 +27,11 @@ export async function keepSyncKey(secrets: SecretStore, key: Buffer): Promise<vo
   await secrets.set(SYNC_KEY_SECRET, key.toString('base64'));
 }
 
+/** Lets go of a key made here that another machine's key replaces, before anything was sealed under it. */
+export async function dropSyncKey(secrets: SecretStore): Promise<void> {
+  await secrets.remove(SYNC_KEY_SECRET);
+}
+
 /** This machine's exchange key pair, made and kept the first time it is asked for. */
 export async function exchangeKeys(secrets: SecretStore): Promise<ExchangeKeyPair> {
   const kept = await secrets.get(EXCHANGE_SECRET);

@@ -33,6 +33,8 @@ export interface PersonalSyncFile {
   lastSyncedAt?: string;
   /** The exchange public key Memnox Cloud holds for this machine, so it is registered once. */
   registeredKey?: string;
+  /** This machine made the key it holds and nothing went out under it yet, so it gives way to an earlier machine. */
+  keyMadeHere?: boolean;
   /** Where sync stood after the last run, and why, for a screen read with no network. */
   state?: PersonalSyncState;
   said?: string;
@@ -56,6 +58,7 @@ export async function readSyncState(home: string): Promise<PersonalSyncFile> {
     cursor: typeof read?.cursor === 'number' ? read.cursor : 0,
     ...(read?.lastSyncedAt === undefined ? {} : { lastSyncedAt: read.lastSyncedAt }),
     ...(read?.registeredKey === undefined ? {} : { registeredKey: read.registeredKey }),
+    ...(read?.keyMadeHere === true ? { keyMadeHere: true } : {}),
     ...(read?.state === undefined ? {} : { state: read.state }),
     ...(read?.said === undefined ? {} : { said: read.said }),
     entries: read?.entries ?? {},

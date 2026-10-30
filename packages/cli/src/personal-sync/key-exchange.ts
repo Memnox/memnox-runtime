@@ -20,9 +20,9 @@ import {
   type CloudMachineKey,
   type SyncAnswer,
 } from '../sync/personal-sync-cloud';
-import { exchangeKeys, keepSyncKey, readSyncKey } from './sync-key';
+import { dropSyncKey, exchangeKeys, keepSyncKey, readSyncKey } from './sync-key';
 import type { SyncDeps } from './sync-run';
-import type { PersonalSyncFile } from './sync-state';
+import { readSyncState, writeSyncState, type PersonalSyncFile } from './sync-state';
 
 /**
  * How the sync key reaches each of the person's machines. The first makes it; every other registers
@@ -46,8 +46,9 @@ export async function syncKeyFor(
 ): Promise<{ key: Buffer } | { state: PersonalSyncState; said: string }> {
   const registered = await registerHere(deps, state);
   if (registered !== null) return stoodAs(registered);
-  const held = await readSyncKey(deps.secrets);
-  if (held !== undefined) return { key: held };
+  const held = await heldKey(deps, state);
+  if ('said' in held) return stoodAs(held);
+  if (held.key !== undefined) return { key: held.key };
   const arrived = await arrivedFingerprint(deps);
   if (!arrived.ok) return stoodAs(arrived);
   if (arrived.value !== undefined)
@@ -64,7 +65,56 @@ export async function syncKeyFor(
     };
   const key = newSyncKey();
   await keepSyncKey(deps.secrets, key);
+  state.keyMadeHere = true;
   return { key };
+}
+
+/**
+ * The key this machine holds, unless it made that key and another of the person's machines
+ * registered earlier: then this one lets it go before anything is sealed under it and waits for
+ * the earlier machine's, so two machines starting at once settle on one key.
+ */
+async function heldKey(
+  deps: KeyDeps,
+  state: PersonalSyncFile,
+): Promise<{ key?: Buffer } | Stood> {
+  const held = await readSyncKey(deps.secrets);
+  if (held === undefined || state.keyMadeHere !== true) return { key: held };
+  const first = await registeredFirst(deps);
+  if (!first.ok) return first;
+  if (first.value) return { key: held };
+  await dropSyncKey(deps.secrets);
+  delete state.keyMadeHere;
+  return {};
+}
+
+/** Oldest registration first, by machine id between two at the same instant, so every machine orders alike. */
+function byRegistration(one: CloudMachineKey, two: CloudMachineKey): number {
+  if (one.updatedAt !== two.updatedAt) return one.updatedAt < two.updatedAt ? -1 : 1;
+  if (one.machineId === two.machineId) return 0;
+  return one.machineId < two.machineId ? -1 : 1;
+}
+
+/**
+ * Whether this machine registered before every other of the person's machines no key was sealed
+ * to. Each machine registers before it asks, so two asking at once read the same order.
+ */
+async function registeredFirst(deps: KeyDeps): Promise<SyncAnswer<boolean>> {
+  const listed = await callSync<{ machines?: CloudMachineKey[] }>(
+    deps.home,
+    { method: 'GET', path: '/keys' },
+    deps.send,
+  );
+  if (!listed.ok) return listed;
+  const account = await readAccount(deps.home);
+  const [first] = (listed.value.machines ?? [])
+    .filter((machine) => machine.envelope === undefined)
+    .sort(byRegistration);
+  return {
+    ok: true,
+    value:
+      first !== undefined && account !== null && first.machineId === account.machineId,
+  };
 }
 
 function stoodAs(stood: Stood): { state: PersonalSyncState; said: string } {
@@ -88,18 +138,16 @@ async function registerHere(
   return null;
 }
 
-/** First where no other of the person's machines registered a key and nothing was ever synced. */
+/** First where nothing was ever synced and this machine registered before the others still waiting. */
 async function isFirstMachine(deps: KeyDeps): Promise<SyncAnswer<boolean>> {
-  const account = await readAccount(deps.home);
-  const summary = await callSync<{
-    newestSeq?: number;
-    machines?: { machineId: string; registered: boolean }[];
-  }>(deps.home, { method: 'GET', path: '/summary' }, deps.send);
-  if (!summary.ok) return summary;
-  const others = (summary.value.machines ?? []).filter(
-    (machine) => machine.registered && machine.machineId !== account?.machineId,
+  const summary = await callSync<{ newestSeq?: number }>(
+    deps.home,
+    { method: 'GET', path: '/summary' },
+    deps.send,
   );
-  return { ok: true, value: (summary.value.newestSeq ?? 0) === 0 && others.length === 0 };
+  if (!summary.ok) return summary;
+  if ((summary.value.newestSeq ?? 0) !== 0) return { ok: true, value: false };
+  return registeredFirst(deps);
 }
 
 /** The fingerprint of a key sealed to this machine and waiting, or undefined where none waits. */
@@ -157,6 +205,8 @@ export async function proposeOffer(
   deps: KeyDeps,
   input: { machineId: string; fingerprint: string },
 ): Promise<{ proposed: string } | { refused: string }> {
+  const yielded = await givesWay(deps);
+  if (yielded !== null) return { refused: yielded };
   if ((await readSyncKey(deps.secrets)) === undefined)
     return { refused: 'This machine holds no sync key to offer.' };
   const listed = await callSync<{ machines?: CloudMachineKey[] }>(
@@ -243,6 +293,8 @@ export async function carryOutKeyMove(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const mine = await exchangeKeys(deps.secrets);
   if (change.seal !== undefined) {
+    const yielded = await givesWay(deps);
+    if (yielded !== null) return { ok: false, error: yielded };
     const key = await readSyncKey(deps.secrets);
     if (key === undefined) return { ok: false, error: 'this machine holds no sync key' };
     if (
@@ -263,7 +315,9 @@ export async function carryOutKeyMove(
       { method: 'PUT', path, body: sealed },
       deps.send,
     );
-    return put.ok ? { ok: true } : { ok: false, error: put.said };
+    if (!put.ok) return { ok: false, error: put.said };
+    await keyWentOut(deps.home);
+    return { ok: true };
   }
   if (change.open === undefined) return { ok: false, error: 'the proposal moves no key' };
   const sender = envelopeSender(change.open.envelope);
@@ -277,4 +331,24 @@ export async function carryOutKeyMove(
     return { ok: false, error: 'the key was not sealed to this machine' };
   await keepSyncKey(deps.secrets, key);
   return { ok: true };
+}
+
+/** Why a key made here may not go out, where an earlier machine's key replaced it; null where it may. */
+async function givesWay(deps: KeyDeps): Promise<string | null> {
+  const state = await readSyncState(deps.home);
+  if (state.keyMadeHere !== true) return null;
+  const held = await heldKey(deps, state);
+  await writeSyncState(deps.home, state);
+  if ('said' in held) return held.said;
+  return held.key === undefined
+    ? 'Another of your machines registered first, so its key is the one to share, and this machine let its own go and waits for it.'
+    : null;
+}
+
+/** Something was sealed under the key made here, so it stays the person's key from now on. */
+export async function keyWentOut(home: string): Promise<void> {
+  const state = await readSyncState(home);
+  if (state.keyMadeHere !== true) return;
+  delete state.keyMadeHere;
+  await writeSyncState(home, state);
 }

@@ -79,15 +79,47 @@ class FakeCloud {
   readonly items = new Map<string, Kept>();
   readonly keys = new Map<
     string,
-    { publicKey: string; envelope?: string; keyId?: string }
+    { publicKey: string; envelope?: string; keyId?: string; updatedAt: string }
   >();
   readonly conflicts: (Kept & { conflictId: string })[] = [];
+  /** Machines the others do not see in a listing yet, as a replica a moment behind would not. */
+  readonly unseen = new Set<string>();
   seq = 0;
   onPlan = true;
+  private clock = 0;
+  private together: { count: number; release: () => void; done: Promise<void> } | null =
+    null;
+
+  /** Holds every registration until this many machines registered, so they all register before any reads. */
+  registerTogether(count: number): void {
+    let release = (): void => undefined;
+    const done = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.together = { count, release, done };
+  }
 
   sendAs(machineId: string): CloudSend {
     // Cast is safe: the fake answers every route with the body type its caller asked for.
-    return (async (request) => this.answer(machineId, request)) as CloudSend;
+    return (async (request) => {
+      const answered = this.answer(machineId, request);
+      const together = this.together;
+      if (
+        together !== null &&
+        request.path.endsWith('/keys/mine') &&
+        request.method === 'PUT'
+      ) {
+        if (this.keys.size >= together.count) together.release();
+        await together.done;
+      }
+      return answered;
+    }) as CloudSend;
+  }
+
+  /** Each change to a key row a moment after the last, as the cloud stamps them. */
+  private tick(): string {
+    this.clock += 1;
+    return new Date(NOW.getTime() + this.clock * 1000).toISOString();
   }
 
   private answer(
@@ -105,11 +137,12 @@ class FakeCloud {
     if (route.startsWith('/items?since=')) return this.page(Number(route.split('=')[1]));
     if (route === '/items') return this.upload(machine, request.body);
     if (route === '/summary') return this.summary();
-    if (route === '/keys') return { status: 200, body: { machines: this.machineRows() } };
+    if (route === '/keys')
+      return { status: 200, body: { machines: this.machineRows(machine) } };
     if (route === '/keys/mine' && method === 'PUT') {
       // Cast is safe: the client sends exactly this shape.
       const { publicKey } = request.body as { publicKey: string };
-      this.keys.set(machine, { publicKey });
+      this.keys.set(machine, { publicKey, updatedAt: this.tick() });
       return { status: 200, body: { machineId: machine, publicKey } };
     }
     if (route === '/keys/mine') {
@@ -124,6 +157,7 @@ class FakeCloud {
       if (row === undefined) return { status: 404 };
       // Cast is safe: the client sends exactly this shape.
       Object.assign(row, request.body as { envelope: string; keyId: string });
+      row.updatedAt = this.tick();
       return { status: 204 };
     }
     if (route === '/conflicts')
@@ -138,12 +172,10 @@ class FakeCloud {
     return { status: 404 };
   }
 
-  private machineRows(): unknown[] {
-    return [...this.keys.entries()].map(([machineId, row]) => ({
-      machineId,
-      ...row,
-      updatedAt: NOW.toISOString(),
-    }));
+  private machineRows(asking: string): unknown[] {
+    return [...this.keys.entries()]
+      .filter(([machineId]) => machineId === asking || !this.unseen.has(machineId))
+      .map(([machineId, row]) => ({ machineId, ...row }));
   }
 
   private conflictRows(): unknown[] {
@@ -420,6 +452,46 @@ describe('personal sync between two machines of one person', () => {
     });
     expect(kept.ok).toBe(true);
     expect(cloud.conflicts).toHaveLength(0);
+  });
+
+  it('settles two machines registering at once on the key of the one that registered first', async () => {
+    const cloud = new FakeCloud();
+    const laptop = await machine(cloud, 'm-laptop');
+    const desktop = await machine(cloud, 'm-desktop');
+    await writeHub(laptop.deps.home, withServer(emptyHub(), LINEAR));
+    await writeHub(desktop.deps.home, withServer(emptyHub(), { ...LINEAR, args: ['d'] }));
+    cloud.registerTogether(2);
+    const [first, second] = await Promise.all([
+      laptop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW }),
+      desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW }),
+    ]);
+    expect(first.personalSync?.state).toBe(PERSONAL_SYNC_STATE.READY);
+    expect(second.personalSync?.state).toBe(PERSONAL_SYNC_STATE.WAITING_FOR_KEY);
+    expect(second.personalSync?.keyId).toBeUndefined();
+    const keyIds = new Set([...cloud.items.values()].map((item) => item.keyId));
+    expect([...keyIds]).toEqual([first.personalSync?.keyId]);
+  });
+
+  it('lets go of a key made here before sealing anything, once an earlier machine comes into view', async () => {
+    const cloud = new FakeCloud();
+    const laptop = await machine(cloud, 'm-laptop');
+    cloud.unseen.add('m-laptop');
+    await laptop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    const desktop = await machine(cloud, 'm-desktop');
+    const made = await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    expect(made.personalSync?.state).toBe(PERSONAL_SYNC_STATE.READY);
+    cloud.unseen.clear();
+    const offer = await desktop.ask({
+      method: DAEMON_METHOD.PERSONAL_SYNC_KEY_OFFER,
+      syncMachineId: 'm-laptop',
+      syncFingerprint: '00000 00000 00000 00000 00000 00000',
+    });
+    expect(offer.ok).toBe(false);
+    expect(offer.reason).toContain('registered first');
+    const waiting = await desktop.ask({ method: DAEMON_METHOD.PERSONAL_SYNC_NOW });
+    expect(waiting.personalSync?.state).toBe(PERSONAL_SYNC_STATE.WAITING_FOR_KEY);
+    expect(cloud.keys.get('m-laptop')?.envelope).toBeUndefined();
+    expect(cloud.items.size).toBe(0);
   });
 
   it('says plainly when the plan does not carry personal sync', async () => {
