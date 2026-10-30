@@ -5,6 +5,7 @@ import {
   describeEnvironment,
   describeEgress,
   inspectEgress,
+  projectIdAt,
   type ActionRequest,
   type Alternative,
   type DecisionEffect,
@@ -57,6 +58,14 @@ export class HookAuthorizer {
   private readonly projects = new Map<string, Promise<string | undefined>>();
 
   constructor(private readonly deps: HookAuthorizerDeps) {}
+
+  /** A hook's: its gate, and the project of the folder each call names, read from this home. */
+  static forHome(home: string, gate: LocalGate | null): HookAuthorizer {
+    return new HookAuthorizer({
+      ...(gate === null ? {} : { gate }),
+      projectAt: (cwd) => projectIdAt(home, cwd),
+    });
+  }
 
   async authorize(given: ActionRequest): Promise<HookVerdict> {
     // Asked per call, so a stop or a start reaches a long-lived proxy at its next request.
