@@ -6,15 +6,10 @@ import { homedir } from 'node:os';
 
 import type { Command } from 'commander';
 
-import {
-  describeAllowance,
-  EarnedAllowances,
-  inForceAt,
-  readAutopilot,
-  type Allowance,
-} from '@memnox/core';
+import { describeAllowance, type Allowance } from '@memnox/core';
 
 import type { CliContext } from '../cli-context';
+import { revokeGrant, standingGrants } from '../studio/autopilot-grants';
 
 interface AutopilotOptions {
   list?: boolean;
@@ -40,10 +35,9 @@ async function runAutopilot(
   options: AutopilotOptions,
 ): Promise<void> {
   context.flow.open('memnox autopilot');
-  const store = new EarnedAllowances(home);
   const now = new Date().toISOString();
   if (options.revoke !== undefined) {
-    const revoked = await store.revoke(options.revoke, now);
+    const revoked = await revokeGrant(home, options.revoke, now);
     context.flow.close(
       revoked === null
         ? `No grant ${options.revoke}.`
@@ -51,9 +45,7 @@ async function runAutopilot(
     );
     return;
   }
-  const on = await readAutopilot(home);
-  const grants = await store.all();
-  const standing = grants.filter((each) => inForceAt(each, now));
+  const { on, grants: standing } = await standingGrants(home, now);
   for (const grant of standing) context.flow.rows(grant.id, rowsOf(grant));
   context.flow.close(
     on

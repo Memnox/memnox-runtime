@@ -90,14 +90,18 @@ export function ruleDraftOf(proposal: Proposal): RuleDraft | undefined {
     return undefined;
   const [rule] = change.rules;
   if (rule === undefined) return undefined;
-  const branches = rule.match.branches;
-  const targets = rule.match.targets;
+  const { branches, targets, agents, workingDirectories, classes } = rule.match;
   return {
     summary: proposal.rationale,
     effect: rule.decision.effect,
     action: rule.match.actions?.[0] ?? '',
     ...(branches === undefined ? {} : { branches: [...branches] }),
     ...(targets === undefined ? {} : { targets: [...targets] }),
+    ...(agents === undefined ? {} : { agents: [...agents] }),
+    ...(workingDirectories === undefined
+      ? {}
+      : { workingDirectories: [...workingDirectories] }),
+    ...(classes === undefined ? {} : { classes: [...classes] }),
     reason: rule.decision.reason ?? proposal.rationale,
     scopes: [...change.scopes],
   };
