@@ -3,10 +3,14 @@
  * instructions, the files beside them, and a manifest saying what it needs and what it is.
  */
 
-/** Whose a skill is: the person's, under the Memnox home, or a repository's, committed with it. */
+/**
+ * Whose a skill is: the person's, under the Memnox home, a repository's, committed with it, or the
+ * organization's, pulled with the bundle and never changed on this machine.
+ */
 export const SKILL_SCOPE = {
   PERSONAL: 'personal',
   PROJECT: 'project',
+  ORGANIZATION: 'organization',
 } as const;
 
 export type SkillScope = (typeof SKILL_SCOPE)[keyof typeof SKILL_SCOPE];
