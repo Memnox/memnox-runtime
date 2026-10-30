@@ -68,6 +68,8 @@ export interface HttpAttempt {
 export interface EgressCaller {
   sessionId?: string;
   agent?: string;
+  /** The session's proxy key; without the one issued to `sessionId` its folder and project are not used. */
+  key?: string;
 }
 
 /** One ruling, as the ledger and the destination record take it. */
@@ -235,8 +237,10 @@ export class EgressSeam {
   ): Promise<EgressOutcome> {
     const ruled = this.deps.ruled;
     if (ruled === undefined) return outcome;
+    // The key proves the session to this seam and goes no further, so no record ever holds one.
+    const { key: _key, ...named } = caller;
     await ruled({
-      caller,
+      caller: named,
       action: request.action,
       target: request.target ?? '',
       effect: outcome.allowed ? DECISION_EFFECT.ALLOW : DECISION_EFFECT.DENY,

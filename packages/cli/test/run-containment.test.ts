@@ -12,6 +12,7 @@ import {
 } from '@memnox/core';
 import {
   RELAY_STATE,
+  EgressKeys,
   EgressSeam,
   type EgressProxy,
   type EgressProxyOptions,
@@ -121,14 +122,17 @@ describe('pointing the agent at the egress proxy', () => {
   });
 
   it('relays to the daemon’s proxy when one is running, with the session as its credentials', async () => {
+    const dir = await home();
     const { started, out } = await runWith({
-      home: await home(),
+      home: dir,
       args: ['--', 'claude'],
       daemonPort: 8888,
     });
-    expect(started[0]?.env['HTTPS_PROXY']).toBe(
-      'http://ses_run:claude-code@127.0.0.1:7777',
-    );
+    const url = started[0]?.env['HTTPS_PROXY'] ?? '';
+    expect(url).toMatch(/^http:\/\/ses_run:claude-code\.[0-9a-f]{64}@127\.0\.0\.1:7777$/);
+    // The key is the session's only while it runs, so a finished run vouches for nobody.
+    const key = new URL(url).password.split('.').pop() ?? '';
+    expect(await new EgressKeys(dir).vouches({ sessionId: 'ses_run', key })).toBe(false);
     expect(out.notes.join('\n')).toContain(
       'through the daemon egress proxy on port 7777',
     );
@@ -148,7 +152,9 @@ describe('pointing the agent at the egress proxy', () => {
       home: await home(),
       args: ['--', 'codex'],
     });
-    expect(started[0]?.env['HTTP_PROXY']).toBe('http://ses_run:codex-cli@127.0.0.1:5555');
+    expect(started[0]?.env['HTTP_PROXY']).toMatch(
+      /^http:\/\/ses_run:codex-cli\.[0-9a-f]{64}@127\.0\.0\.1:5555$/,
+    );
     expect(proxy.closed()).toBe(true);
   });
 

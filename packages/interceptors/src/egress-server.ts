@@ -32,6 +32,7 @@ import {
   type EgressSeam,
   type HttpAttempt,
 } from './egress-seam';
+import { isEgressKey } from './egress-key';
 import { EGRESS_MAX_BODY_BYTES } from './tool-hook.constants';
 
 /** Loopback only: a proxy reachable from the network is a hole, not a seam. */
@@ -49,6 +50,9 @@ const HTTPS_PORT = '443';
 const TUNNEL_OK = 'HTTP/1.1 200 Connection Established\r\n\r\n';
 
 const PROXY_AUTHORIZATION = 'proxy-authorization';
+
+/** Between the agent and the session's key in the password; unreserved, so no client re-encodes it. */
+const KEY_SEPARATOR = '.';
 
 export interface EgressProxyOptions {
   seam: EgressSeam;
@@ -88,10 +92,13 @@ export async function startEgressProxy(
   };
 }
 
-/** The proxy URL a client is given: the caller rides as its credentials, never as a secret. */
+/** The proxy URL a client is given: the caller rides as its credentials, with the session's key beside the agent. */
 export function proxyUrlFor(port: number, caller: EgressCaller = {}): string {
   const user = caller.sessionId === undefined ? '' : encodeURIComponent(caller.sessionId);
-  const pass = caller.agent === undefined ? '' : `:${encodeURIComponent(caller.agent)}`;
+  const agent = caller.agent === undefined ? '' : encodeURIComponent(caller.agent);
+  const keyed =
+    caller.key === undefined ? agent : `${agent}${KEY_SEPARATOR}${caller.key}`;
+  const pass = keyed === '' ? '' : `:${keyed}`;
   const auth = user === '' && pass === '' ? '' : `${user}${pass}@`;
   return `http://${auth}${EGRESS_LOOPBACK}:${port}`;
 }
@@ -116,10 +123,19 @@ export function callerOf(headers: IncomingMessage['headers']): EgressCaller {
   const colon = decoded.indexOf(':');
   const user = unescaped(colon === -1 ? decoded : decoded.slice(0, colon));
   const pass = unescaped(colon === -1 ? '' : decoded.slice(colon + 1));
+  const { agent, key } = agentAndKey(pass ?? '');
   return {
     ...(user === null || user === '' ? {} : { sessionId: user }),
-    ...(pass === null || pass === '' ? {} : { agent: pass }),
+    ...(agent === '' ? {} : { agent }),
+    ...(key === undefined ? {} : { key }),
   };
+}
+
+/** The key is the last segment, and only when shaped like one, so a dotted agent name stays whole. */
+function agentAndKey(pass: string): { agent: string; key?: string } {
+  const at = pass.lastIndexOf(KEY_SEPARATOR);
+  const key = at === -1 ? '' : pass.slice(at + 1);
+  return isEgressKey(key) ? { agent: pass.slice(0, at), key } : { agent: pass };
 }
 
 /** The ledger row for one ruling: the host only, since a path or a query can carry a secret. */

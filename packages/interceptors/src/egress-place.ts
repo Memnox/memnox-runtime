@@ -1,5 +1,6 @@
 import { projectLookup, SessionHosts, type ProjectLookup } from '@memnox/core';
 
+import { EgressKeys } from './egress-key';
 import type { EgressCaller } from './egress-seam';
 
 /**
@@ -17,17 +18,20 @@ export interface EgressPlace {
 export type EgressPlaceOf = (caller: EgressCaller) => Promise<EgressPlace>;
 
 /**
- * The place a session's host record names, read from this home. Anything unknown, missing or
- * unreadable is no place, so only the machine's rules decide, never fewer.
+ * The place a session's host record names, for a caller holding that session's key. A session
+ * id anybody can type, so without the key, or with anything unknown or unreadable, there is no place.
  */
 export function egressPlaces(
   home: string,
   projectAt: ProjectLookup = projectLookup(home),
 ): EgressPlaceOf {
   const hosts = new SessionHosts(home);
+  const keys = new EgressKeys(home);
   return async (caller) => {
     const sessionId = caller.sessionId;
     if (sessionId === undefined || sessionId === '') return {};
+    // Fails closed: a claimed session is never a way into another project's exceptions.
+    if (!(await keys.vouches(caller))) return {};
     // An unreadable record is no place, the same as a session that never noted one.
     const host = await hosts.read(sessionId).catch(() => null);
     const cwd = host === null ? undefined : host.cwd;
