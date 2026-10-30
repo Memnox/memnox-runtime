@@ -20,6 +20,7 @@ import {
   validatePolicyDocument,
   wikiLinksOf,
   type ExtractPassage,
+  type MemorySource,
   type MemorySourceRecord,
 } from '../src/index';
 
@@ -129,47 +130,135 @@ describe('remote sources', () => {
     addedAt: '2026-10-30T09:00:00.000Z',
   };
 
-  it('reads Supermemory with the key from the OS store and refuses without one', async () => {
-    const asked: string[] = [];
-    const fetched = async (
-      url: string | URL | Request,
-      init?: RequestInit,
-    ): Promise<Response> => {
-      asked.push(
-        `${String(url)} ${String(new Headers(init?.headers).get('authorization'))}`,
-      );
-      return new Response(
-        JSON.stringify({
-          memories: [
-            {
-              id: 'm1',
-              title: 'Deploys',
-              content: 'Never deploy on Fridays.',
-              updatedAt: 'u1',
-              url: 'https://sm.example/m1',
-            },
-          ],
-        }),
-      );
+  // Shaped as https://supermemory.ai/docs/api-reference/documents/list-documents answers.
+  function listed(page: number, totalPages: number, id: string): unknown {
+    return {
+      memories: [
+        {
+          id,
+          connectionId: null,
+          createdAt: '2026-10-29T09:00:00.000Z',
+          customId: null,
+          filepath: null,
+          metadata: null,
+          status: 'done',
+          summary: 'About deploys.',
+          title: 'Deploys',
+          type: 'text',
+          updatedAt: '2026-10-30T09:00:00.000Z',
+          url: `https://sm.example/${id}`,
+        },
+      ],
+      pagination: { currentPage: page, limit: 100, totalItems: totalPages, totalPages },
     };
+  }
+
+  // Shaped as https://supermemory.ai/docs/api-reference/documents/get-document answers.
+  function document(id: string, content: string | null): unknown {
+    return {
+      id,
+      content,
+      summary: 'About deploys.',
+      title: 'Deploys',
+      status: 'done',
+      type: 'text',
+      updatedAt: '2026-10-30T09:00:00.000Z',
+      url: `https://sm.example/${id}`,
+    };
+  }
+
+  interface Asked {
+    line: string;
+    body?: unknown;
+  }
+
+  function supermemory(
+    answer: (url: string, init: RequestInit | undefined) => Response,
+    held = true,
+  ): { source: MemorySource; asked: Asked[] } {
+    const asked: Asked[] = [];
     const source = memorySourceFor(record, {
-      secret: async (name) => (name === 'supermemory' ? ['k', 'ey'].join('') : undefined),
-      fetch: fetched,
+      secret: async (name) =>
+        held && name === 'supermemory' ? ['k', 'ey'].join('') : undefined,
+      fetch: async (url, init) => {
+        const auth = String(new Headers(init?.headers).get('authorization'));
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+        asked.push({
+          line: `${init?.method} ${String(url)} ${auth}`,
+          ...(body === undefined ? {} : { body }),
+        });
+        return answer(String(url), init);
+      },
     });
     if (source === null) throw new Error('supermemory reads');
-    const [ref] = await source.list();
-    if (ref === undefined) throw new Error('one document');
-    const read = await source.read(ref);
-    expect(read?.passages[0]).toMatchObject({
-      heading: 'Deploys',
-      url: 'https://sm.example/m1',
+    return { source, asked };
+  }
+
+  it('lists every page newest first with the key from the OS store, and reads one whole', async () => {
+    const { source, asked } = supermemory((url, init) => {
+      if (url.endsWith('/v3/documents/list')) {
+        const page = Number(JSON.parse(String(init?.body))['page']);
+        return Response.json(listed(page, 2, `m${page}`));
+      }
+      return Response.json(document('m1', '# Fridays\nNever deploy on Fridays.'));
     });
-    expect(asked).toEqual(['https://api.example/v3/documents/list Bearer key']);
-    const keyless = memorySourceFor(record, {
-      secret: async () => undefined,
-      fetch: fetched,
+    const refs = await source.list();
+    expect(refs).toEqual([
+      { document: 'm1', stamp: '2026-10-30T09:00:00.000Z done' },
+      { document: 'm2', stamp: '2026-10-30T09:00:00.000Z done' },
+    ]);
+    const [first] = refs;
+    if (first === undefined) throw new Error('one document');
+    const read = await source.read(first);
+    expect(read?.passages.map((each) => each.text).join('\n')).toContain('Never deploy');
+    expect(read?.passages[0]).toMatchObject({ url: 'https://sm.example/m1' });
+    expect(asked).toEqual([
+      {
+        line: 'POST https://api.example/v3/documents/list Bearer key',
+        body: { limit: 100, page: 1, sort: 'updatedAt', order: 'desc' },
+      },
+      {
+        line: 'POST https://api.example/v3/documents/list Bearer key',
+        body: { limit: 100, page: 2, sort: 'updatedAt', order: 'desc' },
+      },
+      { line: 'GET https://api.example/v3/documents/m1 Bearer key' },
+    ]);
+  });
+
+  it('stops paging at its own bound however many pages Supermemory reports', async () => {
+    const { source, asked } = supermemory((_url, init) => {
+      const page = Number(JSON.parse(String(init?.body))['page']);
+      return Response.json(listed(page, 1_000, `m${page}`));
     });
-    await expect(keyless?.list()).rejects.toThrow('not held');
+    expect(await source.list()).toHaveLength(5);
+    expect(asked).toHaveLength(5);
+  });
+
+  it('reads a document gone since the list as gone, and one with no text yet as nothing', async () => {
+    const gone = supermemory(() =>
+      Response.json({ error: 'Document not found' }, { status: 404 }),
+    );
+    expect(await gone.source.read({ document: 'm1', stamp: 's' })).toBeNull();
+    const pending = supermemory(() =>
+      Response.json({ ...(document('m1', null) as object), summary: null }),
+    );
+    expect(await pending.source.read({ document: 'm1', stamp: 's' })).toBeNull();
+  });
+
+  it('fails closed with a sentence on a refused key, a rate limit, a strange shape and no key', async () => {
+    const refused = supermemory(() =>
+      Response.json({ error: 'Unauthorized' }, { status: 401 }),
+    );
+    await expect(refused.source.list()).rejects.toThrow('refused the key');
+    const limited = supermemory(() =>
+      Response.json({ error: 'Too many requests' }, { status: 429 }),
+    );
+    await expect(limited.source.list()).rejects.toThrow('read it again later');
+    const strange = supermemory(() => Response.json({ documents: [] }));
+    await expect(strange.source.list()).rejects.toThrow('nothing was read');
+    const keyless = supermemory(() => Response.json(listed(1, 1, 'm1')), false);
+    await expect(keyless.source.list()).rejects.toThrow('not held');
+    expect(keyless.asked).toEqual([]);
   });
 
   it('reads an MCP memory graph entity by entity, and plain text as one item', () => {

@@ -21,6 +21,8 @@ export const HTTP = {
   CONFLICT: 409,
   /** Read and understood as a request, and still not something it could make sense of. */
   UNPROCESSABLE_ENTITY: 422,
+  /** A third party API is limiting how often this key may ask. */
+  TOO_MANY_REQUESTS: 429,
   NOT_IMPLEMENTED: 501,
   BAD_GATEWAY: 502,
 } as const;
