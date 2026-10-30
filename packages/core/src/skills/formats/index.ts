@@ -6,6 +6,7 @@ import { CURSOR_FORMAT } from './cursor';
 import { GEMINI_CLI_FORMAT } from './gemini-cli';
 import { OPENCODE_FORMAT } from './opencode';
 import type { SkillFormat } from './translation';
+import { WINDSURF_FORMAT } from './windsurf';
 
 export * from './translation';
 
@@ -17,6 +18,7 @@ export const SKILL_FORMATS: readonly SkillFormat[] = [
   GEMINI_CLI_FORMAT,
   OPENCODE_FORMAT,
   COPILOT_FORMAT,
+  WINDSURF_FORMAT,
 ];
 
 export function skillFormatFor(agent: string): SkillFormat | null {

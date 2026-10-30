@@ -8,6 +8,7 @@ import {
   isInsideFolder,
   manifestToml,
   needsOf,
+  OURS_MARKER,
   parseManifest,
   personalVersions,
   readCanonicalSkill,
@@ -23,6 +24,7 @@ import {
   type CanonicalSkill,
   type HubSkill,
 } from '../src/index';
+import { MOST_WORKFLOW_CHARACTERS } from '../src/skills/formats/windsurf';
 
 /** A skill kept once, digested over every file, written into each agent's own format, and held when it changes. */
 
@@ -141,7 +143,39 @@ describe('a skill in each agent format', () => {
       'gemini-cli': 3,
       opencode: 2,
       'copilot-cli': 1,
+      windsurf: 3,
     });
+  });
+
+  it('is a Windsurf workflow in the repository or the global folder, cut to what Windsurf reads', () => {
+    const repo = skillFormatFor('windsurf')?.translate(DEPLOY, {
+      project: true,
+      hasSkillsFolder: false,
+    });
+    const home = skillFormatFor('windsurf')?.translate(DEPLOY, {
+      project: false,
+      hasSkillsFolder: false,
+    });
+    if (repo === undefined || !('file' in repo)) throw new Error('no file');
+    expect(repo.file.path).toBe('.windsurf/workflows/deploy.md');
+    expect(home !== undefined && 'file' in home ? home.file.path : '').toBe(
+      '.codeium/windsurf/global_workflows/deploy.md',
+    );
+    expect(repo.file.content).toContain('description: "Ship the service');
+    expect(repo.file.content).toContain(OURS_MARKER);
+    expect(repo.loses[0]).toBe(
+      'Windsurf has no skills, so it runs only when typed as /deploy.',
+    );
+
+    const long = { ...DEPLOY, instructions: 'Run the checks.\n'.repeat(1_000) };
+    const cut = skillFormatFor('windsurf')?.translate(long, {
+      project: true,
+      hasSkillsFolder: false,
+    });
+    if (cut === undefined || !('file' in cut)) throw new Error('no file');
+    expect(cut.file.content.length).toBeLessThanOrEqual(MOST_WORKFLOW_CHARACTERS);
+    expect(cut.file.content).toContain(OURS_MARKER);
+    expect(cut.loses.join(' ')).toContain('12000 characters');
   });
 
   it('falls back to a Cursor rule where Cursor keeps no skills folder', () => {
