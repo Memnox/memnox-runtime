@@ -153,7 +153,7 @@ async function call(
 }
 
 describe('the session tools', () => {
-  it('offers exactly why, status, replay, decisions, memory, brief, work, fingerprint and rewind', () => {
+  it('offers exactly why, status, replay, decisions, memory, brief, work, fingerprint, memnox_suggest and rewind', () => {
     expect(SESSION_TOOLS.map((tool) => tool.name)).toEqual([
       'why',
       'status',
@@ -163,6 +163,7 @@ describe('the session tools', () => {
       'brief',
       'work',
       'fingerprint',
+      'memnox_suggest',
       'rewind',
     ]);
   });
@@ -176,9 +177,13 @@ describe('the session tools', () => {
 
   /* Recording a fingerprint writes, and only ever adds what agents are held to, so the host
      need not ask; rewind moves a person's files, so it is the one the person is asked about. */
-  it('marks every tool read only except fingerprint and rewind, and only rewind destructive', () => {
+  it('marks every tool read only except fingerprint, memnox_suggest and rewind, and only rewind destructive', () => {
     const acting = SESSION_TOOLS.filter((tool) => !tool.annotations.readOnlyHint);
-    expect(acting.map((tool) => tool.name)).toEqual(['fingerprint', 'rewind']);
+    expect(acting.map((tool) => tool.name)).toEqual([
+      'fingerprint',
+      'memnox_suggest',
+      'rewind',
+    ]);
     expect(
       acting.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name),
     ).toEqual(['rewind']);

@@ -15,6 +15,7 @@ import { rewindTool, type RewindSeams } from './rewind-tool';
 import { briefTool, memoryTool } from './memory-tools';
 import { fingerprintTool } from './fingerprint-tool';
 import { workTool } from './work-tools';
+import { suggestTool } from './suggest-tool';
 
 /** One argument a tool takes: a string, or a list of small objects, such as a walk through's pages. */
 export type ToolProperty =
@@ -158,6 +159,41 @@ export const SESSION_TOOLS: readonly ToolDefinition[] = [
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   },
   {
+    name: 'memnox_suggest',
+    description:
+      'Propose something you learned for your person to confirm: a fact, a convention, or a rule with its effect and actions. It waits in their Learn queue and is never a fact or a rule until they confirm it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          description: 'fact, convention or rule; fact when left out',
+        },
+        statement: {
+          type: 'string',
+          description: 'what you learned, in one or two sentences',
+        },
+        about: { type: 'string', description: 'what it is about, in two or three words' },
+        effect: {
+          type: 'string',
+          description: 'on a rule: allow, ask or deny; ask when left out',
+        },
+        actions: {
+          type: 'string',
+          description:
+            'on a rule: the action patterns it covers, comma separated, such as "*deploy*"',
+        },
+        targets: {
+          type: 'string',
+          description: 'on a rule: target patterns, comma separated',
+        },
+        reason: { type: 'string', description: 'on a rule: why, in a sentence' },
+      },
+    },
+    // Adds to a queue only a person answers, and changes nothing an agent is held to.
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  },
+  {
     name: 'rewind',
     description:
       'Put the working tree back to before the last session changed it, or to a milestone. Your person must approve it; the current files are kept first.',
@@ -202,6 +238,8 @@ export async function callTool(
       return workTool(deps, args);
     case 'fingerprint':
       return fingerprintTool(deps, args);
+    case 'memnox_suggest':
+      return suggestTool(deps, args);
     case 'rewind':
       return rewindTool(deps, seams, args);
     default:

@@ -49,6 +49,8 @@ export const SESSION_TOOL_ANNOTATIONS: Readonly<Record<string, McpToolAnnotation
   work: READS,
   // Writes one file in `.memnox`, and only ever adds what agents are held to.
   fingerprint: WRITES,
+  // Adds to the Learn queue, which only a person answers.
+  memnox_suggest: WRITES,
   rewind: DESTROYS,
 };
 
