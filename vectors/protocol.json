@@ -212,7 +212,11 @@
       "skill-enable",
       "skill-sync",
       "skill-rollback",
-      "skill-accept"
+      "skill-accept",
+      "projects",
+      "project-open",
+      "project-put",
+      "project-apply"
     ],
     "events": [
       "held",

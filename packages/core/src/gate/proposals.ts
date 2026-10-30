@@ -10,6 +10,7 @@ import { PROPOSAL_ANSWER, type ProposalAnswer } from './answers';
 import type { WorkAccount } from '../daemon/work-cards';
 import type { HubChange } from '../mcp/registry';
 import type { SkillsChange } from '../skills/hub';
+import type { ProjectChange } from '../projects/project';
 
 export { PROPOSAL_ANSWER, type ProposalAnswer };
 
@@ -47,6 +48,8 @@ export const PROPOSAL_KIND = {
   AGENT_RESUME: 'agent-resume',
   /** A skill accepted, given to an agent, or rolled back, written into agents once the person signs. */
   SKILLS_HUB: 'skills-hub',
+  /** A project's servers, skills and rule file handed to the agents opened in it, once the person signs. */
+  PROJECT: 'project',
 } as const;
 
 export type ProposedChange =
@@ -98,7 +101,8 @@ export type ProposedChange =
   | { kind: typeof PROPOSAL_KIND.MCP_HUB; hub: HubChange }
   | { kind: typeof PROPOSAL_KIND.RULE_REMOVE; file: string; rule: string }
   | { kind: typeof PROPOSAL_KIND.AGENT_RESUME; agent: string }
-  | { kind: typeof PROPOSAL_KIND.SKILLS_HUB; skills: SkillsChange };
+  | { kind: typeof PROPOSAL_KIND.SKILLS_HUB; skills: SkillsChange }
+  | { kind: typeof PROPOSAL_KIND.PROJECT; project: ProjectChange };
 
 export interface Proposal {
   id: string;

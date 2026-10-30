@@ -96,6 +96,11 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.SKILL_SYNC]: REMOTE_CAPABILITY.ASK,
   // Opens a terminal on the Mac, which is something only the Mac does.
   [DAEMON_METHOD.AGENT_LAUNCH]: REMOTE_CAPABILITY.MAC,
+  [DAEMON_METHOD.PROJECTS]: REMOTE_CAPABILITY.SEE,
+  // Each writes instructions at once and only proposes what widens an agent, signed as rules are.
+  [DAEMON_METHOD.PROJECT_OPEN]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROJECT_PUT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROJECT_APPLY]: REMOTE_CAPABILITY.ASK,
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
@@ -169,6 +174,8 @@ export function proposalCapability(change: ProposedChange): RemoteCapability | n
   if (change.kind === PROPOSAL_KIND.MCP_HUB) return REMOTE_CAPABILITY.RULES;
   // A skill's tools and needs widen what an agent does exactly as a server does.
   if (change.kind === PROPOSAL_KIND.SKILLS_HUB) return REMOTE_CAPABILITY.RULES;
+  // A project's servers, skills and rule file reach as far as each of them does on its own.
+  if (change.kind === PROPOSAL_KIND.PROJECT) return REMOTE_CAPABILITY.RULES;
   // Taking a deny or an ask away widens what agents may do, exactly as adding an allow does.
   if (change.kind === PROPOSAL_KIND.RULE_REMOVE) return REMOTE_CAPABILITY.RULES;
   // Letting a paused agent carry on is steering it, as resuming one session is.

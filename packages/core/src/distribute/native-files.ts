@@ -121,6 +121,69 @@ export async function removeNativeFolder(
   return true;
 }
 
+/** The two lines that fence a block of ours inside a file a person also writes in. */
+export interface NativeBlockMarkers {
+  begin: string;
+  end: string;
+}
+
+/** The text with our block taken out, and the blank line it was set apart by; a person's text stays as it was. */
+export function withoutNativeBlock(text: string, markers: NativeBlockMarkers): string {
+  const start = text.indexOf(markers.begin);
+  if (start < 0) return text;
+  const stop = text.indexOf(markers.end, start);
+  // A begin with no end was cut by hand, so nothing past it is known to be ours.
+  if (stop < 0) return text;
+  const before = text.slice(0, start).replace(/\n+$/, '');
+  const after = text.slice(stop + markers.end.length).replace(/^\n+/, '');
+  if (before === '') return after;
+  return after === '' ? `${before}\n` : `${before}\n\n${after}`;
+}
+
+/** The text with our block in place of any earlier one, at the end, set apart from a person's text by a blank line. */
+export function withNativeBlock(
+  text: string,
+  body: string,
+  markers: NativeBlockMarkers,
+): string {
+  const theirs = withoutNativeBlock(text, markers).replace(/\n+$/, '');
+  const block = `${markers.begin}\n${body.trim()}\n${markers.end}\n`;
+  return theirs === '' ? block : `${theirs}\n\n${block}`;
+}
+
+/**
+ * Our block written into a file a person may also keep text in, such as an agent's instructions:
+ * only what sits between the markers is ever ours, so their words before and after it stay whole.
+ */
+export async function placeNativeBlock(
+  path: string,
+  body: string,
+  markers: NativeBlockMarkers,
+): Promise<NativePlaced> {
+  const current = await readOrNull(path);
+  const text = current === null ? '' : current.toString('utf8');
+  const next = withNativeBlock(text, body, markers);
+  if (next === text) return NATIVE_PLACED.UNCHANGED;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, next, 'utf8');
+  return NATIVE_PLACED.WRITTEN;
+}
+
+/** Our block taken out of the file; a file left empty by it was only ours, so it goes too. True when there was one. */
+export async function removeNativeBlock(
+  path: string,
+  markers: NativeBlockMarkers,
+): Promise<boolean> {
+  const current = await readOrNull(path);
+  if (current === null) return false;
+  const text = current.toString('utf8');
+  const next = withoutNativeBlock(text, markers);
+  if (next === text) return false;
+  if (next.trim() === '') await rm(path, { force: true });
+  else await writeFile(path, next, 'utf8');
+  return true;
+}
+
 /** Empty folders removed from the deepest up; one holding anything is left. */
 async function pruneEmpty(dir: string): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);

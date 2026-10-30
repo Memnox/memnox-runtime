@@ -21,6 +21,7 @@ export * from './daemon/activity';
 export * from './daemon/agents-view';
 export * from './daemon/skills-hub';
 export * from './daemon/held-action';
+export * from './daemon/projects';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,

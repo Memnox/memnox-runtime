@@ -21,6 +21,7 @@ import { POLICY_METHOD } from './policies';
 import { ACTIVITY_METHOD } from './activity';
 import { AGENTS_METHOD } from './agents-view';
 import { SKILLS_METHOD } from './skills-hub';
+import { PROJECTS_METHOD } from './projects';
 import { REMOTE_METHOD } from './remote';
 import { SPEECH_METHOD } from './speech';
 import { SPOKEN_RULE_METHOD } from './spoken-rule';
@@ -118,6 +119,7 @@ export const DAEMON_METHOD = {
   ...ACTIVITY_METHOD,
   ...AGENTS_METHOD,
   ...SKILLS_METHOD,
+  ...PROJECTS_METHOD,
 } as const;
 
 export type DaemonMethod = (typeof DAEMON_METHOD)[keyof typeof DAEMON_METHOD];
