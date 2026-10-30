@@ -8,9 +8,10 @@ export async function applyHubProposal(
 ): Promise<{ ok: true; outcome: string } | { ok: false; error: string }> {
   const changed = await applyHubChange(home, change);
   if ('refused' in changed) return { ok: false, error: changed.refused };
-  const files = changed.synced.files.length;
+  const { files, left } = changed.synced;
+  const written = `${PROPOSAL_ANSWER.CONFIRMED}: written to ${files.length} config${files.length === 1 ? '' : 's'}`;
   return {
     ok: true,
-    outcome: `${PROPOSAL_ANSWER.CONFIRMED}: written to ${files} config${files === 1 ? '' : 's'}`,
+    outcome: left.length === 0 ? written : `${written}. ${left.join(' ')}`,
   };
 }

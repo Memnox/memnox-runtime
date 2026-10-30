@@ -38,7 +38,7 @@ export async function applyProjectProposal(
       ok: false,
       error: `${project.root} is no longer the project that was proposed`,
     };
-  const servers = await giveServers(home, project);
+  const { given: servers, left } = await giveServers(home, project);
   const refused: string[] = [];
   for (const skill of project.skills) {
     const given = await applySkillsProposal(home, { assign: skill }, now);
@@ -50,7 +50,8 @@ export async function applyProjectProposal(
     await writeProjectState(home, { ...state, appliedAt: now.toISOString() });
   const given = describeCount(project.skills.length - refused.length, 'skill grant');
   const rules = policy ? ', and its rule file in force' : '';
-  const done = `${PROPOSAL_ANSWER.CONFIRMED}: ${describeCount(servers, 'server grant')}, ${given}${rules}`;
+  const leftAlone = left.length === 0 ? '' : `. ${left.join(' ')}`;
+  const done = `${PROPOSAL_ANSWER.CONFIRMED}: ${describeCount(servers, 'server grant')}, ${given}${rules}${leftAlone}`;
   return refused.length === 0
     ? { ok: true, outcome: done }
     : { ok: true, outcome: `${done}; not given: ${refused.join(' ')}` };
@@ -60,16 +61,19 @@ export async function applyProjectProposal(
  * Each server still in the hub given to its agent in this repository alone, written into that
  * agent's config for the repository; one an agent cannot be given there is never given machine-wide.
  */
-async function giveServers(home: string, project: ProjectChange): Promise<number> {
+async function giveServers(
+  home: string,
+  project: ProjectChange,
+): Promise<{ given: number; left: string[] }> {
   let hub = await readHub(home);
   const known = project.servers
     .filter((each) => hub.servers.some((server) => server.name === each.server))
     .filter((each) => takesProjectServers(each.agent))
     .map((each) => ({ ...each, project: project.root }));
-  if (known.length === 0) return 0;
+  if (known.length === 0) return { given: 0, left: [] };
   for (const assignment of known) hub = withAssignment(hub, assignment, true);
-  await syncHub(home, hub);
-  return known.length;
+  const synced = await syncHub(home, hub);
+  return { given: known.length, left: synced.left };
 }
 
 /** Only a file inside the repository that is still there; anything else was not what was shown. */

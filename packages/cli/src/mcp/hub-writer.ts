@@ -27,6 +27,8 @@ export interface HubSynced {
   plan: SyncPlan;
   /** The files written, each backed up first. */
   files: string[];
+  /** Sentences for a repository's own file left alone, which a person is told rather than left to find. */
+  left: string[];
 }
 
 /** Every config the hub can see, plus an empty one for an installed agent that has none yet. */
@@ -114,5 +116,6 @@ export async function syncHub(
     hub: projects.hub,
     plan: { files: [...plan.files, ...projects.plan.files] },
     files: [...files, ...projects.files],
+    left: projects.left,
   };
 }
