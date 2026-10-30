@@ -116,6 +116,7 @@ async function firewallOptionsFor(
     ...(ledger === null ? {} : { ledger }),
     ...(session === undefined ? {} : { sessionId: session }),
     ...(projectId === undefined ? {} : { projectId }),
+    workingDirectory: process.cwd(),
     ...(agent === undefined ? {} : { agent }),
     limits: sessionLimitsFor({ home }),
     stopped: () => protectionStopped(home),

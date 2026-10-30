@@ -32,4 +32,29 @@ describe('the proxy naming its project', () => {
     const elsewhere = new LocalGateAuthorizer(gate, 'github', 'ses_mcp');
     expect((await elsewhere.authorize(call)).effect).toBe(DECISION_EFFECT.ALLOW);
   });
+
+  it("lets a rule held to a repository's folders decide a call made there", async () => {
+    const repository = new LocalGate(
+      [
+        {
+          name: 'backend-profile-keeps-github-read-only',
+          match: {
+            actions: ['*'],
+            targets: ['github'],
+            workingDirectories: ['/work/billing', '/work/billing/*'],
+          },
+          decision: { effect: DECISION_EFFECT.DENY, reason: 'from the profile' },
+        },
+      ],
+      { agentName: 'claude-code' },
+    );
+    const started = (cwd: string): LocalGateAuthorizer =>
+      new LocalGateAuthorizer(repository, 'github', 'ses_mcp', undefined, { cwd });
+    expect((await started('/work/billing/api').authorize(call)).effect).toBe(
+      DECISION_EFFECT.DENY,
+    );
+    expect((await started('/work/other').authorize(call)).effect).toBe(
+      DECISION_EFFECT.ALLOW,
+    );
+  });
 });

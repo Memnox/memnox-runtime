@@ -57,6 +57,8 @@ export interface FirewallOptions {
   sessionId?: string;
   /** The project of the folder the proxy runs in, so a rule scoped to that project decides. */
   projectId?: string;
+  /** That folder, so a rule held to a repository's folders decides its calls as a hook's. */
+  workingDirectory?: string;
   /** Loading is the caller's job because it reads files; see loadLocalGate. */
   gate?: LocalGate;
   /** Read again on every call, so a pause or a pulled bundle bites at once; wins over `gate`. */
@@ -399,6 +401,9 @@ export class McpFirewall {
       {
         command: this.options.command,
         ...(this.options.env === undefined ? {} : { env: this.options.env }),
+        ...(this.options.workingDirectory === undefined
+          ? {}
+          : { cwd: this.options.workingDirectory }),
       },
       this.options.projectId,
     );
