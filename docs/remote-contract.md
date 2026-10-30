@@ -143,10 +143,35 @@ Device fingerprint: base64url, unpadded, of SHA256 over `signingPoint bytes || n
 bytes`. Touch ID signs `memnox-pair:v1:<pairingId>:<fingerprint>` for `pair-accept`, and
 `memnox-grant:v1:<deviceId>:<capability>` for `device-grant`.
 
+## Local network
+
+Off until the person turns it on with `lan-set`, which proposes a `lan` change only the Mac signs.
+Once on, the runtime listens on each of its RFC 1918 IPv4 addresses (10/8, 172.16/12, 192.168/16),
+never on every interface, on port 47390 or a free one when that is taken, and announces it:
+
+- Bonjour: `_memnox._tcp.local`, instance and host both a random `memnox-xxxxxxxx` kept in
+  `~/.memnox/remote/lan.json`, TXT `v=1` and nothing else. Answered only to private askers.
+- Framing: every message, each way, is the relay's own message, `mailbox (16 bytes) || payload`,
+  behind a four byte big endian length, at most 65552 bytes after the length. The payload framing,
+  the Noise patterns and the JSON lines are exactly as over the relay.
+- A frame whose mailbox names an open pairing goes to that pairing, and its replies come back down
+  the same connection. Any other frame is the connection's own session: an IK handshake, then
+  transport messages. The runtime replies under the mailbox the phone wrote. A phone with a relay
+  mailbox writes that one; a phone paired on the local network alone writes the QR's.
+- Limits: a peer that is not a private address is closed at once; 16 connections at once and 4 from
+  one address; 10 handshake messages a minute from one address, after which the connection closes;
+  a connection silent 10 seconds after it opens, or 120 seconds at any time, is closed.
+- Every request passes the same capability table as over the relay. `lan-set` is never remote.
+
 ## QR
 
-`memnox://pair?d=<base64url of JSON>` where the JSON is
-`{"v":1,"machineId":"...","machine":"...","relayUrl":"...","mailbox":"...","pairingToken":"rlp_...","runtimeNoiseStatic":"<base64>","secret":"<base64>","expiresAt":"<ISO 8601>"}`.
+`memnox://pair?d=<base64url of JSON>`. Version 1 names the relay and may name the local network:
+`{"v":1,"machineId":"...","machine":"...","relayUrl":"...","mailbox":"...","pairingToken":"rlp_...","runtimeNoiseStatic":"<base64>","secret":"<base64>","expiresAt":"<ISO 8601>","lan":{"hosts":["192.168.1.20"],"port":47390,"instance":"memnox-0a1b2c3d"}}`.
+Version 2 is a machine nobody signed in on with the local network on, and names only that:
+`{"v":2,"machineId":"lan_...","machine":"...","mailbox":"...","runtimeNoiseStatic":"<base64>","secret":"<base64>","expiresAt":"<ISO 8601>","lan":{...}}`.
+The mailbox of a version 2 QR is made by the runtime and never seen by the cloud, and the
+`paired` line then carries no `relayToken`. A phone tries the local network first where the QR or a
+Bonjour answer under its `instance` gives one, and the relay only where it holds a `relayToken`.
 
 ## New daemon methods
 
@@ -155,7 +180,9 @@ answered `outcome: 'refused'`.
 
 | Method                        | Request fields                        | Answer                                                                                                                                                                                                              |
 | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pair-begin`                  | `name?`                               | `outcome: 'pairing'`, `pairing: { id, qr, expiresAt, approver }`, or `refused` with `reason` when the machine is not connected to Memnox Cloud                                                                      |
+| `lan-status`                  |                                       | `lan: { on, listening, addresses, port?, advertised, instance?, reachable: [{ deviceId, name }] }`; remote under `see` |
+| `lan-set`                     | `lanOn`                               | `false` turns it off and closes every local connection at once; `true` answers `proposed` with the id the Mac signs, and nothing listens until it does. Never remote |
+| `pair-begin`                  | `name?`                               | `outcome: 'pairing'`, `pairing: { id, qr, expiresAt, approver }`, or `refused` with `reason` when the machine is not connected to Memnox Cloud and the local network is off                                                                      |
 | `pair-pending`                | `pairingId`                           | streams `pairing: { id, state, approver, phone? }`, state is `waiting`, `answered`, `paired`, `declined` or `expired`, and `phone` is `{ name, fingerprint, code? }`, with `code` only when `approver` is `mac-key` |
 | `pair-accept`                 | `pairingId`, `signature` or `code`    | `outcome: 'paired'`, `device`, or `refused`; a wrong `code` carries `triesLeft`, and at 0 the pairing is closed                                                                                                     |
 | `pair-decline`                | `pairingId`                           | `outcome: 'declined'`                                                                                                                                                                                               |
