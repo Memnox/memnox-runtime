@@ -1,20 +1,52 @@
 import type { DaemonRequest, DaemonResponse } from '@memnox/core';
 import { readStatus } from '../commands/status.command';
-import { homeAnswer } from './home-answer';
+import { activityAnswer, isActivityMethod } from './activity-answer';
+import { agentsAnswer, isAgentsMethod } from './agents-answer';
+import { homeAnswer, isHomeMethod } from './home-answer';
+import { isMcpHubMethod, mcpHubAnswer } from './mcp-hub-answer';
+import { isPolicyMethod, policiesAnswer } from './policies-answer';
 import type { SessionViews } from './session-view';
 
 /**
- * The daemon's door to the home, wired to the status screen here so the home reader itself never
- * imports a command and the status command can read the home without a loop between the two.
+ * The daemon's door to the home, the MCP Hub and the studio screens, wired to the status screen here so the home reader
+ * never imports a command and the status command can read the home without a loop between the two.
  */
+
+/** The home and the hub, the two screens a window opens on before any session is chosen. */
+export function isScreenMethod(method: string): boolean {
+  return isHomeMethod(method) || isMcpHubMethod(method) || isStudioMethod(method);
+}
+
+/** The Policy Studio, the activity screen and the agent manager. */
+function isStudioMethod(method: string): boolean {
+  return isPolicyMethod(method) || isActivityMethod(method) || isAgentsMethod(method);
+}
+
+/** `remote` is a paired phone, which may read the hub and propose but never hand over a secret. */
 export function answerHome(
   home: string,
   request: DaemonRequest,
   views: SessionViews,
+  remote = false,
 ): Promise<DaemonResponse> {
+  if (isMcpHubMethod(request.method))
+    return mcpHubAnswer(home, request, { now: new Date(), remote });
+  if (isStudioMethod(request.method)) return studioAnswer(home, request, views);
   return homeAnswer(home, request, {
     views,
     now: new Date(),
     status: (where) => readStatus(where, where),
   });
+}
+
+function studioAnswer(
+  home: string,
+  request: DaemonRequest,
+  views: SessionViews,
+): Promise<DaemonResponse> {
+  const now = new Date();
+  if (isPolicyMethod(request.method))
+    return policiesAnswer(home, request, { now, env: process.env });
+  if (isActivityMethod(request.method)) return activityAnswer(home, request, now);
+  return agentsAnswer(home, request, { now, cards: () => views.list() });
 }

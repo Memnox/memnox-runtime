@@ -28,6 +28,8 @@ import { fileForScope, scopeAnswered, scopedRules } from '../protect/rule-scope'
 import { decisionsOfRules, recordLocalDecisions } from '../sync/local-decisions';
 import { editedProposal, ranOf } from './confirm-edit';
 import { applyPersonal } from './confirm-work';
+import { applyHubProposal } from './mcp-hub-confirm';
+import { applyStudioProposal } from './studio-confirm';
 import {
   FROM_NOW_ON,
   NEVER_FROM_NOW_ON,
@@ -322,8 +324,10 @@ async function apply(
   if (change.kind === PROPOSAL_KIND.ANSWER) {
     return applyHeldAnswer(home, proposal, change, { at, by });
   }
+  if (change.kind === PROPOSAL_KIND.MCP_HUB) return applyHubProposal(home, change.hub);
   return (
-    (await applyPersonal(home, proposal)) ?? {
+    (await applyPersonal(home, proposal)) ??
+    (await applyStudioProposal(home, change, new Date(at))) ?? {
       ok: false,
       error: `${proposal.id} is nothing to apply`,
     }

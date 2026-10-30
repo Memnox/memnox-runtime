@@ -1,5 +1,9 @@
 import { DAEMON_METHOD } from '@memnox/core';
 import { isHomeMethod } from './home-answer';
+import { isActivityMethod } from './activity-answer';
+import { isAgentsMethod } from './agents-answer';
+import { isMcpHubMethod } from './mcp-hub-answer';
+import { isPolicyMethod } from './policies-answer';
 
 /** What the Mac app and a paired phone may ask the daemon, as against what an interceptor asks. */
 const VOICE_METHODS: readonly string[] = [
@@ -40,5 +44,12 @@ const VOICE_METHODS: readonly string[] = [
 ];
 
 export function isVoiceMethod(method: string): boolean {
-  return VOICE_METHODS.includes(method) || isHomeMethod(method);
+  return (
+    VOICE_METHODS.includes(method) ||
+    isHomeMethod(method) ||
+    isMcpHubMethod(method) ||
+    isPolicyMethod(method) ||
+    isActivityMethod(method) ||
+    isAgentsMethod(method)
+  );
 }

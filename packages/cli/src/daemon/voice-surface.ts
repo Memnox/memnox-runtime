@@ -22,8 +22,7 @@ import {
   pausedBrief,
 } from '../operator/voice-prompts';
 import { isWordsMethod, wordsAnswer } from '../operator/recognizer-words';
-import { isHomeMethod } from './home-answer';
-import { answerHome } from './home-status';
+import { answerHome, isScreenMethod } from './home-status';
 import { AddressLimit } from './address-limit';
 import { deliveredAnswer, phoneDeliveredAnswer, seenAnswer } from './voice-deliveries';
 import { SEEN } from './done-lines';
@@ -240,8 +239,8 @@ export class VoiceSurface {
       return locateAnswer(this.deps.home, request);
     if (request.method === DAEMON_METHOD.SESSION_VIEW)
       return sessionViewAnswer(this.views, request);
-    if (isHomeMethod(request.method))
-      return answerHome(this.deps.home, request, this.views);
+    if (isScreenMethod(request.method))
+      return answerHome(this.deps.home, request, this.views, principal !== undefined);
     if (request.method === DAEMON_METHOD.SESSIONS_LIST) {
       return { id: request.id, ok: true, sessions: await this.views.list() };
     }
