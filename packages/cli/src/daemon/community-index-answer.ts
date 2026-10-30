@@ -28,6 +28,12 @@ interface IndexDeps {
   /** A paired phone, which may browse and install but never point the machine at another index. */
   remote: boolean;
   send?: IndexSend;
+  /** Where what went wrong on the side, such as a marketplace count, is said; the daemon's log by default. */
+  log?: (message: string) => void;
+}
+
+function daemonLog(message: string): void {
+  process.stderr.write(`memnox: ${message}\n`);
 }
 
 type Answered = Omit<DaemonResponse, 'id'>;
@@ -83,6 +89,7 @@ async function install(
   const installed = await installFromIndex(home, {
     name: name.trim(),
     now: deps.now,
+    log: deps.log ?? daemonLog,
     ...(request.indexVersion === undefined ? {} : { version: request.indexVersion }),
     ...(deps.send === undefined ? {} : { send: deps.send }),
   });

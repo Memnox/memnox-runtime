@@ -19,6 +19,7 @@ import {
 import { holdSkill } from '../skills/skills-changes';
 import { importPack } from '../studio/rule-changes';
 import { describeCount } from '../plural';
+import { countMarketplaceInstall } from '../sync/marketplace-installs';
 import { fetchJson, readIndex, type IndexSend, type ReadIndex } from './index-source';
 
 /**
@@ -32,6 +33,8 @@ interface InstallInput {
   version?: string;
   now: Date;
   send?: IndexSend;
+  /** Where a marketplace count that did not arrive is said. */
+  log: (message: string) => void;
 }
 
 export async function installFromIndex(
@@ -58,9 +61,20 @@ export async function installFromIndex(
     };
   const content = await contentOf(read, entry, version, input.send);
   if ('refused' in content) return content;
-  return content.kind === INDEX_KIND.SKILL
-    ? installSkill(home, { entry, content, now: input.now })
-    : installPack(home, content, input.now);
+  const installed =
+    content.kind === INDEX_KIND.SKILL
+      ? await installSkill(home, { entry, content, now: input.now })
+      : await installPack(home, content, input.now);
+  // Only a marketplace counts installs; a git index is nobody's to tell.
+  if (!('refused' in installed) && read.marketplace)
+    await countMarketplaceInstall(home, {
+      listingId: content.id,
+      version: content.version,
+      source: read.source,
+      log: input.log,
+      ...(input.send === undefined ? {} : { send: input.send }),
+    });
+  return installed;
 }
 
 /** By id first, since two publishers may share a name; a name two listings share is refused. */

@@ -289,7 +289,62 @@ describe('the community index', () => {
     expect(
       listed.communityIndex?.entries.find((each) => each.id === 'lst_review')?.installed,
     ).toBe('1.1.0');
-    // An index is public, so the machine's credential never goes to the host serving it.
+    // An index is public, so the machine's credential goes only with the install count.
+    const counted = `${BASE}/v1/workspaces/ws_1/marketplace/listings/lst_review/versions/1.1.0/installs`;
+    fake.asked.forEach((url, at) =>
+      expect(fake.tokens[at]).toBe(
+        url === counted ? 'a-token-never-sent-to-the-shelf' : undefined,
+      ),
+    );
+    expect(fake.asked).toContain(counted);
+  });
+
+  it('counts an install with the marketplace, and never fails one when the count does not arrive', async () => {
+    const fake = await shelf(MARKETPLACE);
+    const counted = `${BASE}/v1/workspaces/ws_1/marketplace/listings/lst_safe/versions/2.0.0/installs`;
+    fake.documents.set(counted, {
+      listingId: 'lst_safe',
+      version: '2.0.0',
+      counted: true,
+    });
+    const at = await machine(fake);
+    const installed = await at.ask({
+      method: DAEMON_METHOD.INDEX_INSTALL,
+      indexName: 'lst_safe',
+    });
+    expect(installed.ok).toBe(true);
+    expect(fake.asked.filter((url) => url === counted)).toHaveLength(1);
+
+    fake.documents.delete(counted);
+    const logged: string[] = [];
+    const again = await communityIndexAnswer(
+      at.home,
+      {
+        id: 2,
+        method: DAEMON_METHOD.INDEX_INSTALL,
+        indexName: 'lst_safe',
+      } as DaemonRequest,
+      { now: NOW, remote: false, send: fake.send, log: (line) => logged.push(line) },
+    );
+    expect(again.ok).toBe(true);
+    expect(logged[0]).toContain('did not count lst_safe 2.0.0');
+  });
+
+  it('never counts an install from a git index', async () => {
+    const raw = 'https://raw.example/acme/skills/main/';
+    const fake = await shelf(raw);
+    const at = await machine(fake);
+    await applyIndexSourceProposal(at.home, {
+      kind: PROPOSAL_KIND.INDEX_SOURCE,
+      source: `${raw}index.json`,
+    });
+    await at.ask({ indexRefresh: true });
+    const installed = await at.ask({
+      method: DAEMON_METHOD.INDEX_INSTALL,
+      indexName: 'review',
+    });
+    expect(installed.ok).toBe(true);
+    expect(fake.asked.some((url) => url.endsWith('/installs'))).toBe(false);
     expect(fake.tokens.every((token) => token === undefined)).toBe(true);
   });
 
