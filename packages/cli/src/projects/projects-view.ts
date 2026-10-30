@@ -20,9 +20,16 @@ import {
   type ProjectView,
   type SkillsHub,
   type AgentQuestion,
+  PROJECT_SCOPE,
 } from '@memnox/core';
 import { readRegisteredFiles } from '../policy-path';
 import { serverGrantViews, skillGrantViews } from './project-grants';
+import {
+  organizationView,
+  readOrgOverlay,
+  sharedProjectAt,
+  type OrgOverlay,
+} from './project-organization';
 import {
   agentsSeen,
   projectAgents,
@@ -43,18 +50,21 @@ interface Shared {
   registered: string[];
   missions: Mission[];
   questions: AgentQuestion[];
+  overlay: OrgOverlay;
 }
 
 export async function readProjectsView(home: string, now: Date): Promise<ProjectsView> {
-  const [places, hub, skillsHub, registered, missions, questions] = await Promise.all([
-    projectPlaces(home),
-    readHub(home),
-    readSkillsHub(home),
-    readRegisteredFiles(home),
-    new Missions(home).all(),
-    new AgentQuestions(home).open(now.toISOString()),
-  ]);
-  const shared = { hub, skillsHub, registered, missions, questions };
+  const [places, hub, skillsHub, registered, missions, questions, overlay] =
+    await Promise.all([
+      projectPlaces(home),
+      readHub(home),
+      readSkillsHub(home),
+      readRegisteredFiles(home),
+      new Missions(home).all(),
+      new AgentQuestions(home).open(now.toISOString()),
+      readOrgOverlay(home),
+    ]);
+  const shared = { hub, skillsHub, registered, missions, questions, overlay };
   const projects = await Promise.all(places.map((place) => projectView(place, shared)));
   return {
     projects: projects.sort((a, b) =>
@@ -70,8 +80,10 @@ async function projectView(place: ProjectPlace, shared: Shared): Promise<Project
   const input = { manifest: read.manifest, root, agents };
   const sessions = new Set(hosts.map((host) => host.sessionId));
   const lastActive = lastActiveOf(place);
+  const org = organizationAt(root, shared);
   return {
     id: projectIdOf(root),
+    ...org,
     name: read.manifest.name,
     path: root,
     declared: read.declared,
@@ -87,7 +99,8 @@ async function projectView(place: ProjectPlace, shared: Shared): Promise<Project
     skills: skillGrantViews(shared.skillsHub, input),
     rules: await rulesView(root, read.manifest.policy, shared.registered),
     instructions: await instructionViews(root, read.manifest.instructions),
-    memoryScope: read.manifest.memory,
+    memoryScope:
+      org.organization === undefined ? read.manifest.memory : org.organization.memory,
     openMissions: openMissionsIn(shared.missions, root),
     openQuestions: shared.questions.filter((question) => sessions.has(question.sessionId))
       .length,
@@ -95,6 +108,19 @@ async function projectView(place: ProjectPlace, shared: Shared): Promise<Project
     ...(state === null || state.appliedAt === undefined
       ? {}
       : { appliedAt: state.appliedAt }),
+  };
+}
+
+/** The organization's read only scope over this clone, where Memnox Cloud shares its repository. */
+function organizationAt(
+  root: string,
+  shared: Shared,
+): Pick<ProjectView, 'scope' | 'organization'> {
+  const project = sharedProjectAt(root, shared.overlay.projects);
+  if (project === undefined) return {};
+  return {
+    scope: PROJECT_SCOPE.ORGANIZATION,
+    organization: organizationView(project, shared.overlay),
   };
 }
 

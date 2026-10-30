@@ -1,10 +1,13 @@
 import {
   manifestProblems,
   MEMORY_SCOPE,
+  orgProjectOwned,
+  readOrgProjects,
   writeProjectManifest,
   type MemoryScope,
   type ProjectManifest,
 } from '@memnox/core';
+import { sharedProjectAt } from './project-organization';
 import { rootOf } from './project-places';
 
 /**
@@ -15,12 +18,15 @@ import { rootOf } from './project-places';
 const MEMORY_SCOPES: readonly string[] = Object.values(MEMORY_SCOPE);
 
 export async function putProject(
+  home: string,
   path: string,
   draft: unknown,
 ): Promise<{ root: string } | { refused: string }> {
   const root = rootOf(path);
   if (root === null)
     return { refused: `${path} is not inside a repository on this computer.` };
+  const shared = sharedProjectAt(root, await readOrgProjects(home));
+  if (shared !== undefined) return { refused: orgProjectOwned(shared.name) };
   const manifest = manifestFromDraft(draft);
   if (manifest === null)
     return {

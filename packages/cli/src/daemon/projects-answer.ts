@@ -44,7 +44,7 @@ async function answerOf(
       return changedAnswer(await openProject(home, request.projectPath, now));
     case PROJECTS_METHOD.PROJECT_PUT: {
       if (request.projectPath === undefined) return refused('Name the repository.');
-      const put = await putProject(request.projectPath, request.projectDraft);
+      const put = await putProject(home, request.projectPath, request.projectDraft);
       return 'refused' in put ? refused(put.refused) : { ok: true };
     }
     case PROJECTS_METHOD.PROJECT_APPLY:

@@ -171,6 +171,11 @@ export function remoteIdentityOf(root: string): string | undefined {
   return repositoryIdentity(git(['-C', root, 'remote', 'get-url', 'origin']));
 }
 
+/** The checkout's `origin` exactly as git spells it, for a caller that reduces it by rules of its own. */
+export function originUrlOf(root: string): string | undefined {
+  return git(['-C', root, 'remote', 'get-url', 'origin']) ?? undefined;
+}
+
 /**
  * What every checkout of one repository shares: its remote, or with none the git
  * directory its worktrees have in common. Undefined outside a repository.

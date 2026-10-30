@@ -9,8 +9,10 @@ import {
   MEMNOX_HOME,
   orgConditionsPathFor,
   orgOverlaysFrom,
+  orgProjectsFrom,
   readJsonFile,
   writeOrgConditions,
+  writeOrgProjects,
   DECISION_EFFECT,
   HTTP,
   POLICY_MODE,
@@ -96,6 +98,8 @@ export interface Bundle {
   mcpServers?: unknown[];
   /** The organization's skills, read by the Skills Hub as a scope nobody here edits; each checked against its digest. */
   skills?: unknown[];
+  /** The repositories the organization shares with this machine's owner, each read only over its clone. */
+  projects?: unknown[];
 }
 
 export const PULL_OUTCOME = {
@@ -210,6 +214,8 @@ export async function applyBundle(
   await keepConditions(home, bundle, now(), machineId);
   await keepOrgMcpServers(home, bundle.mcpServers);
   await keepOrgSkills(home, bundle.skills, new Date(now()));
+  // Absent is a bundle sharing none with this owner, which takes back any shared before.
+  await writeOrgProjects(home, orgProjectsFrom(bundle.projects ?? []));
 
   return {
     outcome: PULL_OUTCOME.APPLIED,

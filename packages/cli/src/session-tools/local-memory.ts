@@ -13,6 +13,7 @@ import {
   type WorkspaceMemory,
 } from '@memnox/core';
 import { repositoryRootOf } from '@memnox/interceptors';
+import { projectMemoryKey } from '../projects/project-organization';
 
 /**
  * What a session is handed as memory: what this machine learned from its person's own sources
@@ -45,7 +46,7 @@ export async function readSessionMemory(
   now: Date,
 ): Promise<SessionMemory | null> {
   const pulled = await readWorkspaceMemoryCached(home);
-  const local = readLocal(home, cwd);
+  const local = readLocal(home, await projectKeysOf(home, cwd));
   if (local === null || (local.facts.length === 0 && local.candidates.length === 0)) {
     return pulled === null
       ? null
@@ -73,19 +74,30 @@ export async function readSessionMemory(
   };
 }
 
+/** The keys this repository's project memory is kept under: the clone, or the shared project it is. */
+async function projectKeysOf(home: string, cwd: string): Promise<string[]> {
+  const root = repositoryRootOf(cwd);
+  if (root === null) return [];
+  const place = await projectMemoryKey(home, root);
+  return 'key' in place ? [place.key] : [];
+}
+
 /** The person's own and this repository's items; another project's are not this session's. */
 function readLocal(
   home: string,
-  cwd: string,
+  projectKeys: readonly string[],
 ): { facts: WorkspaceFact[]; candidates: WorkspaceCandidate[] } | null {
   // A machine with no sources has no database, and reading creates none.
   if (!existsSync(memoryDatabasePathFor(home))) return null;
-  const root = repositoryRootOf(cwd);
   const store = SqliteMemoryStore.forHome(home);
   try {
     const items = store
       .items({ limit: MOST_LOCAL_READ })
-      .filter((item) => item.scope === MEMORY_SCOPE.PERSONAL || item.project === root);
+      .filter(
+        (item) =>
+          item.scope === MEMORY_SCOPE.PERSONAL ||
+          (item.project !== undefined && projectKeys.includes(item.project)),
+      );
     return {
       facts: items.filter((item) => item.status === MEMORY_STATUS.VERIFIED).map(factOf),
       candidates: items

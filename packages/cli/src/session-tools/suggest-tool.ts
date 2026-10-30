@@ -12,6 +12,7 @@ import {
 } from '@memnox/core';
 import { repositoryRootOf } from '@memnox/interceptors';
 import { learnedRuleProblems } from '../memory/learned-rule';
+import { projectMemoryKey } from '../projects/project-organization';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 
 /**
@@ -30,7 +31,13 @@ export async function suggestTool(
   deps: SessionToolDeps,
   args: ToolArgs,
 ): Promise<unknown> {
-  const read = suggestionOf(deps, args);
+  const root = repositoryRootOf(deps.cwd);
+  const place = root === null ? null : await projectMemoryKey(deps.home, root);
+  if (place !== null && 'none' in place)
+    return {
+      refused: 'This shared project keeps no memory, so nothing learned here is kept.',
+    };
+  const read = suggestionOf(deps, args, place === null ? undefined : place.key);
   if ('refused' in read) return read;
   const store = SqliteMemoryStore.forHome(deps.home);
   try {
@@ -47,9 +54,11 @@ export async function suggestTool(
   }
 }
 
+/** `project` is where this repository's memory is kept, the clone or its shared project; absent is personal. */
 function suggestionOf(
   deps: SessionToolDeps,
   args: ToolArgs,
+  project: string | undefined,
 ): NewMemoryItem | { refused: string } {
   const kind = textArg(args, 'kind') ?? MEMORY_KIND.FACT;
   if (!MEMORY_KINDS.includes(kind))
@@ -58,14 +67,13 @@ function suggestionOf(
   if (statement === undefined) return { refused: 'say what you learned in statement' };
   const rule = kind === MEMORY_KIND.RULE ? ruleOf(args) : undefined;
   if (rule !== undefined && 'refused' in rule) return rule;
-  const root = repositoryRootOf(deps.cwd);
   return {
     // Cast is safe: checked against the kinds above.
     kind: kind as MemoryKind,
     statement: statement.slice(0, MOST_STATEMENT_CHARS),
     subject: textArg(args, 'about') ?? '',
-    scope: root === null ? MEMORY_SCOPE.PERSONAL : MEMORY_SCOPE.PROJECT,
-    ...(root === null ? {} : { project: root }),
+    scope: project === undefined ? MEMORY_SCOPE.PERSONAL : MEMORY_SCOPE.PROJECT,
+    ...(project === undefined ? {} : { project }),
     origin: MEMORY_ORIGIN.AGENT,
     tainted: false,
     suggestedBy: deps.agent,
