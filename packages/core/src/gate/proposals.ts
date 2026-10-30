@@ -8,6 +8,7 @@ import { JsonRecordDir } from '../store/json-records';
 import type { HoldAnswer } from './hold';
 import { PROPOSAL_ANSWER, type ProposalAnswer } from './answers';
 import type { WorkAccount } from '../daemon/work-cards';
+import type { HubChange } from '../mcp/registry';
 
 export { PROPOSAL_ANSWER, type ProposalAnswer };
 
@@ -37,6 +38,12 @@ export const PROPOSAL_KIND = {
   WORK: 'work',
   /** An account a sign in reached, said once to be the person's own so it is matched from then on. */
   ACCOUNT: 'account',
+  /** A server added to the MCP Hub or given to an agent, written into configs once the person signs. */
+  MCP_HUB: 'mcp-hub',
+  /** A person's own deny or ask taken out of its file, which widens, so it waits on a signature. */
+  RULE_REMOVE: 'rule-remove',
+  /** A paused agent let carry on, lifting the pause here and the workspace's freeze on it. */
+  AGENT_RESUME: 'agent-resume',
 } as const;
 
 export type ProposedChange =
@@ -84,7 +91,10 @@ export type ProposedChange =
       toolkit: string;
       /** The account as the person heard it named: "maya on GitHub". */
       label: string;
-    };
+    }
+  | { kind: typeof PROPOSAL_KIND.MCP_HUB; hub: HubChange }
+  | { kind: typeof PROPOSAL_KIND.RULE_REMOVE; file: string; rule: string }
+  | { kind: typeof PROPOSAL_KIND.AGENT_RESUME; agent: string };
 
 export interface Proposal {
   id: string;

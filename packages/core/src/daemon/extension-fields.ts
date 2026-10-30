@@ -3,6 +3,10 @@ import type { ConnectionsRequestFields, ConnectionsResponseFields } from './conn
 import type { FilesRequestFields, FilesResponseFields } from './files';
 import type { HomeResponseFields } from './home';
 import type { InterceptRequestFields, InterceptResponseFields } from './intercept';
+import type { McpHubRequestFields, McpHubResponseFields } from './mcp-hub';
+import type { PolicyRequestFields, PolicyResponseFields } from './policies';
+import type { ActivityRequestFields, ActivityResponseFields } from './activity';
+import type { AgentsRequestFields, AgentsResponseFields } from './agents-view';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -74,7 +78,11 @@ export interface ExtensionRequestFields
     QuestionRequestFields,
     ConnectionsRequestFields,
     InterceptRequestFields,
-    SpokenRuleRequestFields {}
+    SpokenRuleRequestFields,
+    McpHubRequestFields,
+    PolicyRequestFields,
+    ActivityRequestFields,
+    AgentsRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -84,7 +92,11 @@ export interface ExtensionResponseFields
     HomeResponseFields,
     ConnectionsResponseFields,
     InterceptResponseFields,
-    SpokenRuleResponseFields {}
+    SpokenRuleResponseFields,
+    McpHubResponseFields,
+    PolicyResponseFields,
+    ActivityResponseFields,
+    AgentsResponseFields {}
 
 export interface ExtensionEventFields
   extends RemoteEventFields, TeamEventFields, WorkEventFields, QuestionEventFields {}

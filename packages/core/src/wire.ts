@@ -15,6 +15,10 @@ export * from './daemon/team-calls';
 export * from './daemon/home';
 export * from './daemon/intercept';
 export * from './daemon/remote';
+export * from './daemon/mcp-hub';
+export * from './daemon/policies';
+export * from './daemon/activity';
+export * from './daemon/agents-view';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,

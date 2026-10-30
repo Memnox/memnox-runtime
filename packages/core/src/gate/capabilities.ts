@@ -55,6 +55,34 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.DRIVE]: REMOTE_CAPABILITY.MAC,
   // Words for an agent to act on, so the follow up also carries a Face ID signature over them.
   [DAEMON_METHOD.FOLLOW_UP]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.HUB]: REMOTE_CAPABILITY.SEE,
+  // Only proposes a server or an assignment; it holds once the person signs it with the rules capability.
+  [DAEMON_METHOD.SERVER_PUT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.ASSIGN]: REMOTE_CAPABILITY.ASK,
+  // Narrowing, or writing only what the hub already holds signed, so asking is enough.
+  [DAEMON_METHOD.SERVER_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.IMPORT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SYNC]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.TEST]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SECRET_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.POLICY_RULES]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.RULE_TEST]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.RULES_EXPORT]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.PROGRESS]: REMOTE_CAPABILITY.SEE,
+  // Each only proposes; nothing holds until the person signs it with the rules capability.
+  [DAEMON_METHOD.RULE_PROPOSE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.RULE_PACK_IMPORT]: REMOTE_CAPABILITY.ASK,
+  // Narrowing at once, or a proposal where it widens, so asking is enough.
+  [DAEMON_METHOD.RULE_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.AUTOPILOT_REVOKE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.ACTIVITY]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.DECISION]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.ACTIVITY_EXPORT]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.AGENTS]: REMOTE_CAPABILITY.SEE,
+  // Holding an agent or a session back only narrows; letting one go on is a signed proposal.
+  [DAEMON_METHOD.AGENT_PAUSE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SESSION_STOP]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.AGENT_RESUME]: REMOTE_CAPABILITY.ASK,
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
@@ -124,6 +152,12 @@ export function proposalCapability(change: ProposedChange): RemoteCapability | n
   if (change.kind === PROPOSAL_KIND.RULES) return REMOTE_CAPABILITY.RULES;
   if (change.kind === PROPOSAL_KIND.REWIND) return REMOTE_CAPABILITY.REWIND;
   if (change.kind === PROPOSAL_KIND.MAC) return REMOTE_CAPABILITY.MAC;
+  // What an agent's servers can reach is as wide as a rule, so it is signed the way a rule is.
+  if (change.kind === PROPOSAL_KIND.MCP_HUB) return REMOTE_CAPABILITY.RULES;
+  // Taking a deny or an ask away widens what agents may do, exactly as adding an allow does.
+  if (change.kind === PROPOSAL_KIND.RULE_REMOVE) return REMOTE_CAPABILITY.RULES;
+  // Letting a paused agent carry on is steering it, as resuming one session is.
+  if (change.kind === PROPOSAL_KIND.AGENT_RESUME) return REMOTE_CAPABILITY.STEER;
   // Saying something as the person is answering for them, so a phone allowed to answer may sign it.
   if (change.kind === PROPOSAL_KIND.WORK || change.kind === PROPOSAL_KIND.ACCOUNT)
     return REMOTE_CAPABILITY.ANSWER;

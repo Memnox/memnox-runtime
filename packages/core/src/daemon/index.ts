@@ -20,4 +20,8 @@ export * from './team-calls';
 export * from './home';
 export * from './connections';
 export * from './intercept';
+export * from './mcp-hub';
+export * from './policies';
+export * from './activity';
+export * from './agents-view';
 export * from './vectors';

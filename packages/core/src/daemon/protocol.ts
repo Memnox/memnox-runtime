@@ -16,6 +16,10 @@ import type {
 } from './extension-fields';
 import { HOME_METHOD } from './home';
 import { INTERCEPT_METHOD } from './intercept';
+import { MCP_HUB_METHOD } from './mcp-hub';
+import { POLICY_METHOD } from './policies';
+import { ACTIVITY_METHOD } from './activity';
+import { AGENTS_METHOD } from './agents-view';
 import { REMOTE_METHOD } from './remote';
 import { SPEECH_METHOD } from './speech';
 import { SPOKEN_RULE_METHOD } from './spoken-rule';
@@ -108,6 +112,10 @@ export const DAEMON_METHOD = {
   ...HOME_METHOD,
   ...INTERCEPT_METHOD,
   ...SPOKEN_RULE_METHOD,
+  ...MCP_HUB_METHOD,
+  ...POLICY_METHOD,
+  ...ACTIVITY_METHOD,
+  ...AGENTS_METHOD,
 } as const;
 
 export type DaemonMethod = (typeof DAEMON_METHOD)[keyof typeof DAEMON_METHOD];
