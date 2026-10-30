@@ -25,6 +25,20 @@ export interface IndexPublisherView {
   name: string;
 }
 
+/** What a listing declares it needs, as its manifest in the index says; read before anything is installed. */
+export interface IndexNeedsView {
+  /** Paths it reads or writes. */
+  filesystem: string[];
+  /** Hosts it reaches. */
+  network: string[];
+  /** Commands it runs. */
+  commands: string[];
+  /** MCP servers it uses, by name. */
+  mcpServers: string[];
+  /** Tools it asks its agent for, by name. */
+  tools: string[];
+}
+
 /** One listing as a screen browses it. */
 export interface IndexEntryView {
   id: string;
@@ -44,6 +58,10 @@ export interface IndexEntryView {
   unsafe: boolean;
   /** The version of this skill the Skills Hub holds here, where it holds one. */
   installed?: string;
+  /** What it declares it needs; absent where the index carries no manifest for it. */
+  needs?: IndexNeedsView;
+  /** What a person should know before installing it, each in a sentence; empty where nothing stands out. */
+  warnings: string[];
 }
 
 export interface CommunityIndexView {

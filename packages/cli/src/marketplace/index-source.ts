@@ -37,6 +37,8 @@ interface KeptIndex {
 /** The index as read, from where, and why it is not fresh where it is not. */
 export interface ReadIndex {
   source: string;
+  /** Read from a Memnox Cloud marketplace, whose publishers it verifies, rather than another index. */
+  marketplace: boolean;
   fetchedAt?: string;
   index?: CommunityIndex;
   said?: string;
@@ -77,17 +79,18 @@ export async function readIndex(
 ): Promise<ReadIndex> {
   const kept = await readKept(home);
   const source = await sourceOf(home, kept);
+  const marketplace = await isMarketplace(home, source);
   const fresh =
     kept.readFrom === source &&
     kept.fetchedAt !== undefined &&
     input.now.getTime() - Date.parse(kept.fetchedAt) < FRESH_MS;
-  if (fresh && !input.refresh) return keptAs(source, kept);
+  if (fresh && !input.refresh) return keptAs(source, kept, marketplace);
   const fetched = await fetchJson(source, input.send ?? callCloud);
   const index = 'value' in fetched ? communityIndexFrom(fetched.value) : null;
   if (index === null) {
     const why =
       'said' in fetched ? fetched.said : `${source} did not answer with an index.`;
-    return { ...keptAs(source, kept), said: staleSaid(why, kept) };
+    return { ...keptAs(source, kept, marketplace), said: staleSaid(why, kept) };
   }
   const fetchedAt = input.now.toISOString();
   await writeJsonFile(cachePathFor(home), {
@@ -96,13 +99,22 @@ export async function readIndex(
     fetchedAt,
     index,
   });
-  return { source, fetchedAt, index };
+  return { source, marketplace, fetchedAt, index };
 }
 
-function keptAs(source: string, kept: KeptIndex): ReadIndex {
-  if (kept.readFrom !== source || kept.index === undefined) return { source };
+/** Memnox Cloud's own marketplace, or this workspace's: a URL elsewhere is somebody else's index, whatever its path. */
+async function isMarketplace(home: string, source: string): Promise<boolean> {
+  const account = await readAccount(home);
+  const bases = [defaultBaseUrl(), ...(account === null ? [] : [account.baseUrl])];
+  return bases.some((base) => new URL(MARKETPLACE_INDEX, base).toString() === source);
+}
+
+function keptAs(source: string, kept: KeptIndex, marketplace: boolean): ReadIndex {
+  if (kept.readFrom !== source || kept.index === undefined)
+    return { source, marketplace };
   return {
     source,
+    marketplace,
     index: kept.index,
     ...(kept.fetchedAt === undefined ? {} : { fetchedAt: kept.fetchedAt }),
   };

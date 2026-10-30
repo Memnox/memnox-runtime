@@ -196,6 +196,7 @@ describe('the community index', () => {
       (each) => each.id === 'lst_review',
     );
     expect(review?.yanked).toEqual(['1.0.0']);
+    expect(review?.warnings.some((each) => each.includes('not verified'))).toBe(false);
     const packs = await at.ask({ indexKind: INDEX_KIND.RULE_PACK, indexQuery: 'leaves' });
     expect(packs.communityIndex?.entries.map((each) => each.name)).toEqual([
       'safe-defaults',
@@ -222,6 +223,9 @@ describe('the community index', () => {
     const named = await at.ask({ indexSource: `${raw}index.json` });
     expect(named.communityIndex?.source).toBe(`${raw}index.json`);
     expect(named.communityIndex?.entries).toHaveLength(3);
+    // Nobody reviewed a git index's publishers, so each of its listings says so.
+    for (const entry of named.communityIndex?.entries ?? [])
+      expect(entry.warnings[0]).toContain('not verified');
   });
 
   it('holds a skill whose digest matches in the Skills Hub until it is accepted', async () => {

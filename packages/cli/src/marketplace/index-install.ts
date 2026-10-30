@@ -1,4 +1,6 @@
 import {
+  entryNeeds,
+  entryWarnings,
   INDEX_KIND,
   indexContentDigest,
   indexContentFrom,
@@ -193,7 +195,12 @@ export async function indexView(
     source: read.source,
     ...(read.fetchedAt === undefined ? {} : { fetchedAt: read.fetchedAt }),
     complete: read.index === undefined ? false : read.index.complete,
-    entries: entries.map((entry) => entryView(entry, installedHere(hub, entry))),
+    entries: entries.map((entry) =>
+      entryView(entry, {
+        installed: installedHere(hub, entry),
+        verified: read.marketplace,
+      }),
+    ),
     ...(read.said === undefined ? {} : { said: read.said }),
   };
 }
@@ -209,8 +216,12 @@ function installedHere(
     : skill.current;
 }
 
-function entryView(entry: IndexEntry, installed: string | undefined): IndexEntryView {
+function entryView(
+  entry: IndexEntry,
+  { installed, verified }: { installed: string | undefined; verified: boolean },
+): IndexEntryView {
   const kind: IndexKind = entry.kind;
+  const needs = entryNeeds(entry);
   return {
     id: entry.id,
     name: entry.name,
@@ -226,5 +237,7 @@ function entryView(entry: IndexEntry, installed: string | undefined): IndexEntry
     yanked: entry.yanked,
     unsafe: entry.latest === undefined && entry.yanked.length > 0,
     ...(installed === undefined ? {} : { installed }),
+    ...(needs === undefined ? {} : { needs }),
+    warnings: entryWarnings(entry, verified),
   };
 }

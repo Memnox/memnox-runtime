@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import { INDEX_KIND, type IndexKind } from '../daemon/community-index';
+import {
+  INDEX_KIND,
+  type IndexKind,
+  type IndexNeedsView,
+} from '../daemon/community-index';
 import { orgSkillDigest } from '../skills/org-skills';
 
 /**
@@ -27,6 +31,10 @@ export interface IndexEntry {
   agents: string[];
   latest?: { version: string; digest: string; contentUrl: string };
   yanked: string[];
+  /** What the listing's manifest declares, where the index carries one. */
+  declared?: IndexDeclared;
+  /** Lines the index flagged in its instructions as addressing a model, as text. */
+  flagged?: string[];
 }
 
 export interface CommunityIndex {
@@ -141,7 +149,32 @@ function indexEntryOf(value: unknown): IndexEntry | null {
     agents,
     ...(latest === null ? {} : { latest }),
     yanked,
+    ...manifestOf(fields),
   };
+}
+
+/** The manifest a listing may carry, on itself or on its latest version; a malformed one is none. */
+function manifestOf(fields: Fields): Pick<IndexEntry, 'declared' | 'flagged'> {
+  const latest = fieldsOf(fields['latest']);
+  const declared =
+    declaredOf(fields['declared']) ??
+    (latest === null ? null : declaredOf(latest['declared']));
+  const flagged = flaggedOf(fields['warnings']);
+  return {
+    ...(declared === null ? {} : { declared }),
+    ...(flagged.length === 0 ? {} : { flagged }),
+  };
+}
+
+/** Flagged lines as plain text or as `{ text }`, the marketplace's own shape; anything else is skipped. */
+function flaggedOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((each) => {
+    if (typeof each === 'string') return [each];
+    const fields = fieldsOf(each);
+    const said = fields === null ? undefined : text(fields, 'text');
+    return said === undefined ? [] : [said];
+  });
 }
 
 function latestOf(value: unknown): IndexEntry['latest'] | null {
@@ -260,4 +293,49 @@ export function matchingEntries(
     const haystack = `${entry.name} ${entry.description}`.toLowerCase();
     return words.every((word) => haystack.includes(word));
   });
+}
+
+/** What a listing declares it needs, for a screen; undefined where the index carries no manifest. */
+export function entryNeeds(entry: IndexEntry): IndexNeedsView | undefined {
+  const declared = entry.declared;
+  if (declared === undefined) return undefined;
+  return {
+    filesystem: [...declared.permissions.filesystem],
+    network: [...declared.permissions.network],
+    commands: [...declared.permissions.commands],
+    mcpServers: [...declared.mcpServers],
+    tools: [...declared.tools],
+  };
+}
+
+/** Each a sentence a person reads before installing; `verified` is a publisher Memnox Cloud reviewed. */
+export function entryWarnings(entry: IndexEntry, verified: boolean): string[] {
+  const needs = entryNeeds(entry);
+  return [
+    ...(verified
+      ? []
+      : [
+          'Its publisher is not verified by Memnox Cloud, since it comes from another index.',
+        ]),
+    ...(needs === undefined
+      ? [
+          'It declares nothing it needs in the index, so what it reaches is known only once fetched.',
+        ]
+      : needsWarnings(needs)),
+    ...(entry.flagged ?? []).map((line) => `Its instructions address a model: ${line}`),
+  ];
+}
+
+function listed(what: string, names: readonly string[]): string[] {
+  return names.length === 0 ? [] : [`${what}: ${names.join(', ')}.`];
+}
+
+function needsWarnings(needs: IndexNeedsView): string[] {
+  return [
+    ...listed('It widens the tools its agent may use', needs.tools),
+    ...listed('It reaches the network', needs.network),
+    ...listed('It runs commands', needs.commands),
+    ...listed('It reaches files', needs.filesystem),
+    ...listed('It uses MCP servers', needs.mcpServers),
+  ];
 }
