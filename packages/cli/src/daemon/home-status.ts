@@ -7,6 +7,7 @@ import { isMcpHubMethod, mcpHubAnswer } from './mcp-hub-answer';
 import { isPolicyMethod, policiesAnswer } from './policies-answer';
 import { isSkillsMethod, skillsHubAnswer } from './skills-hub-answer';
 import { isProjectsMethod, projectsAnswer } from './projects-answer';
+import { backupAnswer, isBackupMethod } from './backup-answer';
 import type { SessionViews } from './session-view';
 
 /**
@@ -21,6 +22,7 @@ export function isScreenMethod(method: string): boolean {
     isMcpHubMethod(method) ||
     isSkillsMethod(method) ||
     isProjectsMethod(method) ||
+    isBackupMethod(method) ||
     isStudioMethod(method)
   );
 }
@@ -41,6 +43,7 @@ export function answerHome(
     return mcpHubAnswer(home, request, { now: new Date(), remote });
   if (isSkillsMethod(request.method)) return skillsHubAnswer(home, request, new Date());
   if (isProjectsMethod(request.method)) return projectsAnswer(home, request, new Date());
+  if (isBackupMethod(request.method)) return backupAnswer(home, request, new Date());
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);
   return homeAnswer(home, request, {
     views,
