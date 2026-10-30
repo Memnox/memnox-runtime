@@ -26,6 +26,7 @@ export * from './daemon/memory';
 export * from './daemon/backup';
 export * from './daemon/lan';
 export * from './daemon/personal-sync';
+export * from './daemon/profiles';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,

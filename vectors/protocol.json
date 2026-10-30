@@ -238,7 +238,11 @@
       "personal-sync-conflicts",
       "personal-sync-resolve",
       "personal-sync-key-offer",
-      "personal-sync-key-accept"
+      "personal-sync-key-accept",
+      "profiles",
+      "profile-put",
+      "profile-remove",
+      "profile-apply"
     ],
     "events": [
       "held",

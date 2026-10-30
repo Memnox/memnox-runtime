@@ -124,6 +124,11 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.PERSONAL_SYNC_NOW]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.PERSONAL_SYNC_RESOLVE]: REMOTE_CAPABILITY.ASK,
   // The key offer and accept are left out on purpose: the sync key moves only between machines, never from a phone.
+  [DAEMON_METHOD.PROFILES]: REMOTE_CAPABILITY.SEE,
+  // A profile grants nothing kept on its own, and applying one only raises the proposals each piece raises.
+  [DAEMON_METHOD.PROFILE_PUT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROFILE_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROFILE_APPLY]: REMOTE_CAPABILITY.ASK,
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */

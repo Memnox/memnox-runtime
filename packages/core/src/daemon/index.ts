@@ -31,4 +31,5 @@ export * from './memory';
 export * from './backup';
 export * from './lan';
 export * from './personal-sync';
+export * from './profiles';
 export * from './vectors';
