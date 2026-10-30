@@ -33,6 +33,7 @@ import { applySkillsProposal } from './skills-hub-confirm';
 import { applyProjectProposal } from './projects-confirm';
 import { applyBackupProposal } from './backup-confirm';
 import { applyLanProposal } from './lan-answer';
+import { afterConfirmed, applyPersonalSyncProposal } from './personal-sync-answer';
 import { applyStudioProposal } from './studio-confirm';
 import {
   FROM_NOW_ON,
@@ -252,6 +253,7 @@ async function carryOut(
 ): Promise<ConfirmResult> {
   const run = input.run ?? runMemnox;
   const applied = await apply(home, proposal, { at: input.at, run, by, scope });
+  afterConfirmed(home, proposal.change.kind, applied.ok);
   const kind = proposal.change.kind;
   if (kind !== PROPOSAL_KIND.WORK && kind !== PROPOSAL_KIND.ACCOUNT) return applied;
   await proposals.ran(proposal.id, ranOf(proposal.change, applied, input.at));
@@ -339,7 +341,8 @@ async function apply(
     (await applyStudioProposal(home, change, new Date(at))) ??
     (await applyProjectProposal(home, change, new Date(at))) ??
     (await applyBackupProposal(home, change, new Date(at))) ??
-    (await applyLanProposal(home, change)) ?? {
+    (await applyLanProposal(home, change)) ??
+    (await applyPersonalSyncProposal(home, change)) ?? {
       ok: false,
       error: `${proposal.id} is nothing to apply`,
     }

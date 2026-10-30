@@ -18,8 +18,8 @@ export interface CloudResponse<T> {
 interface CloudRequest {
   baseUrl: string;
   path: string;
-  // `DELETE` revokes an offboarded agent's credential, or the reach would outlive the config.
-  method?: 'GET' | 'POST' | 'DELETE';
+  // `DELETE` revokes an offboarded agent's credential, or the reach would outlive the config; `PUT` carries personal sync.
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   /** The machine credential, where the route wants one. */
   token?: string;
   body?: unknown;

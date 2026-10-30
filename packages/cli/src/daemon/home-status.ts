@@ -10,6 +10,13 @@ import { isProjectsMethod, projectsAnswer } from './projects-answer';
 import { backupAnswer, isBackupMethod } from './backup-answer';
 import { isMemoryMethod, memoryAnswer } from './memory-answer';
 import { isLanMethod, lanAnswer } from './lan-answer';
+import {
+  changesSyncedItems,
+  isPersonalSyncMethod,
+  noteLocalChange,
+  personalSyncAnswer,
+  syncDepsFor,
+} from './personal-sync-answer';
 import type { SessionViews } from './session-view';
 
 /**
@@ -27,6 +34,7 @@ export function isScreenMethod(method: string): boolean {
     isBackupMethod(method) ||
     isMemoryMethod(method) ||
     isLanMethod(method) ||
+    isPersonalSyncMethod(method) ||
     isStudioMethod(method)
   );
 }
@@ -37,11 +45,23 @@ function isStudioMethod(method: string): boolean {
 }
 
 /** `remote` is a paired phone, which may read the hub and propose but never hand over a secret. */
-export function answerHome(
+export async function answerHome(
   home: string,
   request: DaemonRequest,
   views: SessionViews,
   remote = false,
+): Promise<DaemonResponse> {
+  const answered = await answerScreen(home, request, views, remote);
+  // What this machine carries changed, so the person's other machines hear of it on its next sync.
+  if (answered.ok && changesSyncedItems(request.method)) noteLocalChange(home);
+  return answered;
+}
+
+function answerScreen(
+  home: string,
+  request: DaemonRequest,
+  views: SessionViews,
+  remote: boolean,
 ): Promise<DaemonResponse> {
   if (isMcpHubMethod(request.method))
     return mcpHubAnswer(home, request, { now: new Date(), remote });
@@ -51,6 +71,8 @@ export function answerHome(
   if (isMemoryMethod(request.method))
     return memoryAnswer(home, request, { now: new Date() });
   if (isLanMethod(request.method)) return lanAnswer(home, request, new Date());
+  if (isPersonalSyncMethod(request.method))
+    return personalSyncAnswer(request, syncDepsFor(home));
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);
   return homeAnswer(home, request, {
     views,
