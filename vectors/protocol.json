@@ -165,6 +165,7 @@
       "rule-test",
       "rules-export",
       "rule-pack-import",
+      "rule-packs",
       "progress",
       "autopilot-revoke",
       "activity",

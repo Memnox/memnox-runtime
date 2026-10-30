@@ -20,6 +20,8 @@ export const POLICY_METHOD = {
   RULES_EXPORT: 'rules-export',
   /** A pack of rules as TOML, each turned into its own signed proposal. */
   RULE_PACK_IMPORT: 'rule-pack-import',
+  /** The packs Memnox ships, each offered whole and imported through RULE_PACK_IMPORT. */
+  RULE_PACKS: 'rule-packs',
   /** What could be handed over, what the autopilot holds, and where the machine stands. */
   PROGRESS: 'progress',
   /** Takes one autopilot grant back at once, since that only narrows. */
@@ -170,6 +172,16 @@ export interface ProgressView {
   lastWeek: ProgressWeek;
 }
 
+/** A pack Memnox ships, with its TOML to hand straight to RULE_PACK_IMPORT. */
+export interface RulePackView {
+  /** The file it ships as, without its extension, which stays the same between releases. */
+  id: string;
+  name: string;
+  description: string;
+  ruleCount: number;
+  toml: string;
+}
+
 export interface PolicyRequestFields {
   /** On RULE_PROPOSE. */
   ruleDraft?: RuleDraftInput;
@@ -196,4 +208,6 @@ export interface PolicyResponseFields {
   packProposed?: string[];
   /** On PROGRESS and AUTOPILOT_REVOKE. */
   progress?: ProgressView;
+  /** On RULE_PACKS. */
+  rulePacks?: RulePackView[];
 }

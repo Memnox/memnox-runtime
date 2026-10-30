@@ -1,0 +1,55 @@
+# A rule pack: import it from Memnox and each rule arrives as its own proposal to sign.
+version = 1
+
+[pack]
+name = "No outward writes"
+description = "Agents may change this machine as they like, and nothing they do leaves it: no push, no publish, no write through a server or a request."
+
+[[policies]]
+name = "pack-no-outward-writes-push-deny"
+description = "Pushing to any remote"
+
+[policies.match]
+actions = [ "git.push", "git.push-force", "git.push-f" ]
+
+[policies.decision]
+effect = "deny"
+reason = "this machine keeps its work to itself, so a person pushes when it is ready"
+
+[[policies]]
+name = "pack-no-outward-writes-mcp-deny"
+description = "MCP tools that change something outside this machine"
+
+[policies.match]
+actions = [ "mcp.*" ]
+classes = [ "write", "destructive", "communication" ]
+
+[policies.decision]
+effect = "deny"
+reason = "a server call that writes changes somebody else's system, and this machine sends no such change"
+
+[[policies]]
+name = "pack-no-outward-writes-network-deny"
+description = "Requests that change something on another host"
+
+[policies.match]
+actions = [ "http.request" ]
+
+[policies.match.arguments]
+method = [ "POST", "PUT", "PATCH", "DELETE", "UNKNOWN" ]
+
+[policies.decision]
+effect = "deny"
+reason = "only reading leaves this machine, so a request that writes is refused"
+
+[[policies]]
+name = "pack-no-outward-writes-publish-deny"
+description = "Publishing packages and images, and command line tools that change a cloud"
+
+[policies.match]
+actions = [ "npm.publish", "npm.unpublish", "docker.push", "aws.*", "gcloud.*", "az.*", "gh.*", "kubectl.*", "terraform.*", "vercel.*", "fly.*", "heroku.*", "netlify.*" ]
+classes = [ "write", "destructive", "communication" ]
+
+[policies.decision]
+effect = "deny"
+reason = "publishing and deploying change what other people run, so a person does it"

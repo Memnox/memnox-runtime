@@ -14,6 +14,7 @@ import {
   proposeRuleDraft,
   removeRule,
 } from '../studio/rule-changes';
+import { shippedRulePacks } from '../studio/rule-packs';
 import { testRule } from '../studio/rule-test';
 import { readRulesView } from '../studio/rules-in-force';
 
@@ -83,6 +84,8 @@ async function answerOf(
       return { ok: true, rulesToml: await exportRules(home) };
     case POLICY_METHOD.RULE_PACK_IMPORT:
       return importOne(home, request.rulePack, at);
+    case POLICY_METHOD.RULE_PACKS:
+      return { ok: true, rulePacks: await shippedRulePacks() };
     case POLICY_METHOD.PROGRESS:
       return { ok: true, progress: await readProgress(home, deps.now) };
     case POLICY_METHOD.AUTOPILOT_REVOKE:

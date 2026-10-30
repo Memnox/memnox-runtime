@@ -1,0 +1,29 @@
+# A rule pack: import it from Memnox and each rule arrives as its own proposal to sign.
+version = 1
+
+[pack]
+name = "Read-only agents"
+description = "Agents read, search and explain, and ask before they change anything at all, here or anywhere else."
+
+[[policies]]
+name = "pack-read-only-agents-change-ask"
+description = "Anything that writes, deletes or sends"
+
+[policies.match]
+actions = [ "*" ]
+classes = [ "write", "destructive", "communication" ]
+
+[policies.decision]
+effect = "ask"
+reason = "these agents are here to read, so every change waits for a person to say yes"
+
+[[policies]]
+name = "pack-read-only-agents-history-deny"
+description = "Force pushing and hard resets"
+
+[policies.match]
+actions = [ "git.push-force", "git.push-f", "git.reset-hard" ]
+
+[policies.decision]
+effect = "deny"
+reason = "a reading agent never needs to rewrite history"
