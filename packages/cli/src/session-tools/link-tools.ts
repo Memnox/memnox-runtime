@@ -1,6 +1,7 @@
 import { DISPLAY, DisplayRequests, wentIn, type DisplayDelivery } from '@memnox/core';
 import { OPERATOR_AGENT } from './propose-tools';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
+import { THE_DESKTOP } from '../this-machine';
 
 /**
  * Putting what the voice found in front of the person: a page opened in their browser, or a list on a card.
@@ -86,8 +87,8 @@ function openedAs(delivery: DisplayDelivery | null): Record<string, unknown> {
     };
   }
   return {
-    on: 'the Mac',
-    said: 'It opened in their browser on the Mac. Say so in a few words, naming the page, such as "opening pull request 49".',
+    on: `${THE_DESKTOP}`,
+    said: `It opened in their browser on ${THE_DESKTOP}. Say so in a few words, naming the page, such as "opening pull request 49".`,
   };
 }
 

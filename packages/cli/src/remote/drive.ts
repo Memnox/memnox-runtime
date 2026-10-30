@@ -10,7 +10,7 @@ import {
   type DrivenBy,
 } from '@memnox/core';
 import { refused } from './pairings';
-import { KEY, MACHINE, THIS_MACHINES_KEY } from '../this-machine';
+import { KEY, MACHINE, THE_DESKTOP, THIS_MACHINES_KEY } from '../this-machine';
 
 /** Why a grant to a paired device was refused: only this machine's own key widens what a device may do. */
 export const GRANT_UNSIGNED = `Giving a device more needs ${THIS_MACHINES_KEY}.`;
@@ -32,14 +32,14 @@ export function driveRefusal(
   now: string,
 ): string | null {
   if (!holds(device, REMOTE_CAPABILITY.MAC)) {
-    return `${device.name} may not act on this ${MACHINE}. Allow it from the Mac with ${KEY} first.`;
+    return `${device.name} may not act on this ${MACHINE}. Allow it from ${THE_DESKTOP} with ${KEY} first.`;
   }
   const until = Date.parse(request.until);
   const from = Date.parse(now);
   if (Number.isNaN(until) || until <= from)
     return 'Driving needs a time in the future to stop at.';
   if (until - from > LONGEST_DRIVE_MS + CLOCK_SLACK_MS) {
-    return 'Driving the Mac lasts at most fifteen minutes at a time.';
+    return `Driving ${THE_DESKTOP} lasts at most fifteen minutes at a time.`;
   }
   const signed =
     request.signature !== undefined &&
@@ -48,7 +48,7 @@ export function driveRefusal(
       driveMessage(device.id, request.until),
       request.signature,
     );
-  return signed ? null : `Driving the Mac needs Face ID on ${device.name}.`;
+  return signed ? null : `Driving ${THE_DESKTOP} needs Face ID on ${device.name}.`;
 }
 
 interface Grant extends DrivenBy {

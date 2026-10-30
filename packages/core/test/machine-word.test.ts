@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CONFIG,
+  desktopApp,
   keyAfter,
   keyGesture,
   KEY_WORD,
@@ -8,6 +9,7 @@ import {
   MACHINE_WORD,
   machineWord,
   renderConfig,
+  theDesktop,
 } from '../src/index';
 
 describe('what the machine is called', () => {
@@ -42,5 +44,23 @@ describe('the key the written settings file names', () => {
   it('names the one this machine signs with', () => {
     expect(renderConfig(DEFAULT_CONFIG, 'darwin')).toContain('signed with Touch ID,');
     expect(renderConfig(DEFAULT_CONFIG, 'win32')).toContain('signed with Windows Hello,');
+  });
+});
+
+describe('the desktop app, told apart from a phone', () => {
+  it('is the Mac on a Mac, and the computer on Windows and Linux', () => {
+    expect(theDesktop('darwin')).toBe('the Mac');
+    expect(theDesktop('linux')).toBe('the computer');
+    expect(desktopApp('darwin')).toBe('Mac app');
+    expect(desktopApp('win32')).toBe('desktop app');
+  });
+
+  it('is where the written settings file says the local network is turned on', () => {
+    expect(renderConfig(DEFAULT_CONFIG, 'darwin')).toContain(
+      '# Turned on from the Mac, signed',
+    );
+    expect(renderConfig(DEFAULT_CONFIG, 'linux')).toContain(
+      '# Turned on from the computer, signed with your password,',
+    );
   });
 });

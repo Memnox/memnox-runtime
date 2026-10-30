@@ -1,6 +1,6 @@
 import { basename } from 'node:path';
 import { DELIVERY, DISPLAY, type DaemonEvent } from '@memnox/core';
-import { KEY, MACHINE } from '../this-machine';
+import { KEY, MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * The one line a phone speaks once the Mac did something it asked for. Built from what was
@@ -11,7 +11,7 @@ import { KEY, MACHINE } from '../this-machine';
 export const OPEN_THE_MAC = `Open Memnox on your ${MACHINE} to do that`;
 
 /** Said when the phone was never allowed to act on the Mac. */
-export const NOT_ALLOWED_ON_MAC = `This phone may not act on your ${MACHINE} yet. Allow it from the Mac with ${KEY} first`;
+export const NOT_ALLOWED_ON_MAC = `This phone may not act on your ${MACHINE} yet. Allow it from ${THE_DESKTOP} with ${KEY} first`;
 
 /** How the Mac said a look ended, beside the deliveries a typed instruction has. */
 export const SEEN = 'seen';

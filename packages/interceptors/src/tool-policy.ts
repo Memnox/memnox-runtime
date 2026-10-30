@@ -1,3 +1,4 @@
+import { platform } from 'node:os';
 import {
   ruledFor,
   alternativeFor,
@@ -35,6 +36,9 @@ import { EDIT_HOOK_EVENT } from './edit-hook';
 import type { HookAuthorizer, HookVerdict } from './hook-authorizer';
 import { ShellSeam } from './shell-seam';
 import type { ToolCall, ToolRequest } from './tool-calls';
+
+/** The machine the hook runs on, which names the desktop app a held question also went to. */
+const HOST = platform();
 
 /**
  * An agent's own tool call ruled on against the rules every other seam loads, the mode
@@ -281,7 +285,7 @@ export function toolReply(
     permissionDecisionReason: reason,
   };
   // The host shows this to the person, so a held question never depends on the agent relaying it.
-  const shown = held === null || asking ? {} : { systemMessage: heldNotice(held) };
+  const shown = held === null || asking ? {} : { systemMessage: heldNotice(held, HOST) };
   return { stdout: JSON.stringify({ hookSpecificOutput, ...shown }) };
 }
 
@@ -331,13 +335,13 @@ function reasonFor(
 ): string {
   // The held text already says why, in the person's words, and what to do next.
   if (ruling.effect === DECISION_EFFECT.ASK && !asking && held !== null)
-    return heldText(held);
+    return heldText(held, HOST);
   const parts = [`Memnox: ${ruling.reason}`];
   if (ruling.rule !== undefined) parts.push(`(rule ${ruling.rule})`);
   if (ruling.alternative !== undefined)
     parts.push(describeAlternative(ruling.alternative));
   if (ruling.effect === DECISION_EFFECT.ASK && !asking)
-    parts.push(held === null ? NO_WAY_TO_ASK : heldText(held));
+    parts.push(held === null ? NO_WAY_TO_ASK : heldText(held, HOST));
   return parts.join(' ');
 }
 

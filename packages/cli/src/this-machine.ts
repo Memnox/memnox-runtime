@@ -1,5 +1,12 @@
 import { platform } from 'node:os';
-import { keyAfter, keyGesture, keyWord, machineWord } from '@memnox/core';
+import {
+  desktopApp,
+  keyAfter,
+  keyGesture,
+  keyWord,
+  machineWord,
+  theDesktop,
+} from '@memnox/core';
 
 /** Read once here, so no tool's words read the platform themselves. */
 const HOST = platform();
@@ -21,3 +28,10 @@ export const THE_KEY = keyAfter(HOST, 'the');
 export const THIS_MACHINES_KEY = keyAfter(HOST, `this ${MACHINE}'s`);
 /** What the person does when the key asks. */
 export const KEY_GESTURE = keyGesture(HOST);
+
+/** The desktop app told apart from a phone: "the Mac", or elsewhere "the computer". */
+export const THE_DESKTOP = theDesktop(HOST);
+/** The same at the start of a sentence. */
+export const THE_DESKTOP_START = `${THE_DESKTOP.charAt(0).toUpperCase()}${THE_DESKTOP.slice(1)}`;
+/** The desktop app by its kind: "Mac app", or elsewhere "desktop app". */
+export const DESKTOP_APP = desktopApp(HOST);

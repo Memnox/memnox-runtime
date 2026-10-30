@@ -14,6 +14,7 @@ import { liveRun, tabOf } from './run-tab';
 import { runOfStart } from './start-memory';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import type { ToolDefinition } from './session-tools';
+import { MACHINE, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * Looking at the person's screen: the brain asks, the Mac captures one window, reads its words and
@@ -23,8 +24,7 @@ import type { ToolDefinition } from './session-tools';
 
 export const LOOK_TOOL: ToolDefinition = {
   name: 'look',
-  description:
-    'See what is on the person\'s screen right now: the window in front, or the app they named. It returns the words on it, read on their Mac, an outline of its buttons and fields, and what changed since you last looked at that app. Use it when they ask what is on their screen, what they are looking at, to read an error, what changed, or to check something they point at with "this" or "here", and before you say something you did is on screen. Pass visual "true" only when they ask how something looks, its layout, colours or a picture, since only then does the screenshot itself leave their Mac for you to read. It only looks and changes nothing.',
+  description: `See what is on the person's screen right now: the window in front, or the app they named. It returns the words on it, read on their ${MACHINE}, an outline of its buttons and fields, and what changed since you last looked at that app. Use it when they ask what is on their screen, what they are looking at, to read an error, what changed, or to check something they point at with "this" or "here", and before you say something you did is on screen. Pass visual "true" only when they ask how something looks, its layout, colours or a picture, since only then does the screenshot itself leave their ${MACHINE} for you to read. It only looks and changes nothing.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -52,8 +52,7 @@ export const LOOK_TOOL: ToolDefinition = {
 const SIGHT_WAIT_MS = 15_000;
 const SIGHT_POLL_MS = 150;
 
-const NOT_SEEN =
-  'The Mac did not answer with what is on screen. Say you could not see it just now, and never describe the screen from a guess.';
+const NOT_SEEN = `${THE_DESKTOP_START} did not answer with what is on screen. Say you could not see it just now, and never describe the screen from a guess.`;
 
 const OUTLINE_ONLY =
   'Memnox may not record the screen, so only the outline of the window came back. Answer from it, say once that you could not see the picture, and that turning on Screen Recording for Memnox in System Settings lets you.';

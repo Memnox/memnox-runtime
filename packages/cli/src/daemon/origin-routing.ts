@@ -25,6 +25,7 @@ import { displayName, readNames } from '../agents/names';
 import { doneText, macRationale, NOT_ALLOWED_ON_MAC, OPEN_THE_MAC } from './done-lines';
 import { write, type Peer } from './socket-write';
 import { settled } from './waiting-feed';
+import { DESKTOP_APP, THE_DESKTOP } from '../this-machine';
 
 /**
  * Where an answer goes when a phone asked: words to the phone, hands on the Mac. A show only the
@@ -280,7 +281,7 @@ export class OriginRouter {
   ): Promise<void> {
     const device = await new Devices(this.deps.home).find(deviceId);
     if (device === null || mac.length === 0) {
-      return this.refuse(event, deviceId, OPEN_THE_MAC, 'the Mac app is not open');
+      return this.refuse(event, deviceId, OPEN_THE_MAC, `the ${DESKTOP_APP} is not open`);
     }
     const reads = event.display !== undefined && MAC_READS.includes(event.display);
     // A new session always waits on Face ID, since a drive grant never covers starting one.
@@ -292,7 +293,7 @@ export class OriginRouter {
         event,
         deviceId,
         NOT_ALLOWED_ON_MAC,
-        `${device.name} may not act on the Mac`,
+        `${device.name} may not act on ${THE_DESKTOP}`,
       );
     }
     await this.propose(event, device);

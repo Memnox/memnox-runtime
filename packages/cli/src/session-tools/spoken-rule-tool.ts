@@ -2,7 +2,7 @@ import { namedList, proposeSpokenRule, spokenRuleSentence } from '../protect/spo
 import { proposeTool, SAID_ARG } from './operator-args';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import type { ToolDefinition } from './session-tools';
-import { KEY_THEIRS } from '../this-machine';
+import { KEY_THEIRS, MACHINE } from '../this-machine';
 
 /**
  * propose_rule given the person's own sentence. No model is called from here: the voice is
@@ -68,8 +68,7 @@ export const PROPOSE_RULE_TOOL: ToolDefinition = proposeTool(
     },
     project: {
       type: 'string',
-      description:
-        'the repository they named, by folder name or full path; leave it out when they named none, and the whole Mac is suggested',
+      description: `the repository they named, by folder name or full path; leave it out when they named none, and the whole ${MACHINE} is suggested`,
     },
     said: SAID_ARG,
   },

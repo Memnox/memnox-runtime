@@ -1,11 +1,12 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { platform, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   APPROVAL_ROUTE,
   configPathFor,
   DECISION_EFFECT,
+  desktopApp,
   ENFORCEMENT_MODE,
   LocalGate,
   PendingApprovals,
@@ -390,7 +391,7 @@ describe('a question while the Mac voice is listening', () => {
     const answer = await askWithVoice(machine, 50);
     expect(answer?.ruling.effect).toBe(DECISION_EFFECT.ASK);
     expect(answer?.reply?.stdout).not.toContain('AskUserQuestion');
-    expect(answer?.reply?.stdout).toContain('from the Memnox Mac app');
+    expect(answer?.reply?.stdout).toContain(`from the Memnox ${desktopApp(platform())}`);
     const [held] = await new PendingApprovals(machine).list(NOW.toISOString());
     expect(held?.alsoOn).toEqual(['mac']);
   });

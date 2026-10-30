@@ -30,7 +30,7 @@ import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import { knownRepositories, repositoryNamed } from './known-repositories';
 import { teamCallsNow } from '../daemon/team-calls-store';
 import { proposeSpokenRuleTool } from './spoken-rule-tool';
-import { KEY_THEIRS, MACHINE } from '../this-machine';
+import { KEY_THEIRS, MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * What the operator may do with what a person said: write it down as a proposal. A refusal
@@ -165,7 +165,7 @@ async function proposeAllow(
   });
   return {
     proposed: proposal.id,
-    said: `Waiting for ${KEY_THEIRS}. Nothing is allowed until the person confirms on the Mac.`,
+    said: `Waiting for ${KEY_THEIRS}. Nothing is allowed until the person confirms on ${THE_DESKTOP}.`,
   };
 }
 
@@ -211,7 +211,7 @@ export async function proposeRuleTool(
     proposed: proposal.id,
     rule: { name: rule.name, action: verb, effect, file, branches, targets },
     places: scopes.map((scope) => scope.label),
-    said: `The rule is on a card on the Mac with where it could hold, ${suggested.label} picked for now. Ask in one short sentence whether it should hold on the whole ${MACHINE} or only in ${offered[0] === undefined ? 'one repository' : basename(named ?? offered[0])}; they pick on the card and confirm with ${KEY_THEIRS}. It is not in force until they do.`,
+    said: `The rule is on a card on ${THE_DESKTOP} with where it could hold, ${suggested.label} picked for now. Ask in one short sentence whether it should hold on the whole ${MACHINE} or only in ${offered[0] === undefined ? 'one repository' : basename(named ?? offered[0])}; they pick on the card and confirm with ${KEY_THEIRS}. It is not in force until they do.`,
   };
 }
 
@@ -310,7 +310,7 @@ async function repositoryFor(
   return {
     refused:
       projects.length === 0
-        ? `no repository sounds like ${project}, so name it by its full path or leave it out to offer the whole Mac`
+        ? `no repository sounds like ${project}, so name it by its full path or leave it out to offer the whole ${MACHINE}`
         : `name one project: ${projects.join(', ')}`,
   };
 }

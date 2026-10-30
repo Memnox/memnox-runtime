@@ -41,6 +41,7 @@ import { RelayLink, relayUrl, type OpenRelay } from './relay-link';
 import { RemoteSession } from './remote-session';
 import type { VoiceHold } from './voice-hold';
 import { PhoneWakes } from './wake';
+import { THE_DESKTOP } from '../this-machine';
 
 /**
  * Where the phone's tunnel ends: the relay link, the local network when the person turned it on,
@@ -238,7 +239,7 @@ export class RemoteEndpoint {
     if (method === DAEMON_METHOD.VOICE_CHOICE) return this.voiceChoice(request);
     return refused(
       request,
-      'Driving the Mac and letting its voice go come from a paired phone, never from this socket.',
+      `Driving ${THE_DESKTOP} and letting its voice go come from a paired phone, never from this socket.`,
     );
   }
 

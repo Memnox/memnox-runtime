@@ -11,7 +11,7 @@ import {
   writeJsonFile,
   type SessionPost,
 } from '@memnox/core';
-import { THEIR_KEY } from '../this-machine';
+import { THEIR_KEY, THE_DESKTOP } from '../this-machine';
 
 /**
  * What the voice must not lose when its brain starts a fresh conversation: the last few things
@@ -103,7 +103,7 @@ export async function waitingOnYes(
     ),
     ...proposals.map(
       (each) =>
-        `${each.rationale}: waiting for ${THEIR_KEY} on the Mac, proposal ${each.id}`,
+        `${each.rationale}: waiting for ${THEIR_KEY} on ${THE_DESKTOP}, proposal ${each.id}`,
     ),
     // An agent's question in its terminal is answered by keys pressed there, never by sending it words.
     ...asking.map(

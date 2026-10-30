@@ -10,7 +10,7 @@ import {
   VOICE_RUN,
   voiceCommand,
 } from './voice-commands';
-import { KEY_GESTURE, MACHINE, THEIR_KEY, THE_KEY } from '../this-machine';
+import { KEY_GESTURE, MACHINE, THEIR_KEY, THE_DESKTOP, THE_KEY } from '../this-machine';
 
 /**
  * `memnox_command`: any memnox command, said out loud. What reads runs now and comes back to be
@@ -25,7 +25,7 @@ const COMMAND_TTL_MS = minutesToMs(5);
 const SUM_UP =
   'Sum up what it printed in a sentence or two, in plain words, the answer first. Never read it out, never say a command line, and if it failed, say what the output says went wrong.';
 
-const PROPOSED = `Nothing has run. Read back in a sentence what it will do, in plain words, and that it waits for ${THEIR_KEY} on the Mac. When they say they confirmed, call command_output with this id and sum up what it printed.`;
+const PROPOSED = `Nothing has run. Read back in a sentence what it will do, in plain words, and that it waits for ${THEIR_KEY} on ${THE_DESKTOP}. When they say they confirmed, call command_output with this id and sum up what it printed.`;
 
 export async function memnoxCommandTool(
   deps: SessionToolDeps,

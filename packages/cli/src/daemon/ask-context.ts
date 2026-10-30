@@ -9,7 +9,7 @@ import type {
 import type { FolderUse } from '../operator/folders';
 import type { HeardWord } from '../operator/heard-words';
 import type { ProfileFact } from '../operator/profile';
-import { KEY_THEIRS } from '../this-machine';
+import { KEY_THEIRS, THE_DESKTOP, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * What is on the machine right now, put in front of what the person said, so "open my last
@@ -27,7 +27,7 @@ const HEADING =
  * Sent when the person held Control and Option to speak: the keys, not any word, say these are rules.
  * The brain drafts them with propose_rule, and the Mac asks where each holds before Touch ID.
  */
-export const RULE_NOTE = `[Memnox, not the person] They held the rule keys, so what follows is a rule or policy they want enforced on their agents. Pass each rule to propose_rule as their sentence now, and say back the rule it reads as; ask any open question it returns before anything else. Where the sentence is refused, call it with the action, the effect, any branches or paths it names, and the project only if they named one. The card on the Mac is confirmed with ${KEY_THEIRS}. Never say it is in force. If what they said is not a rule at all, say so in one sentence and propose nothing.`;
+export const RULE_NOTE = `[Memnox, not the person] They held the rule keys, so what follows is a rule or policy they want enforced on their agents. Pass each rule to propose_rule as their sentence now, and say back the rule it reads as; ask any open question it returns before anything else. Where the sentence is refused, call it with the action, the effect, any branches or paths it names, and the project only if they named one. The card on ${THE_DESKTOP} is confirmed with ${KEY_THEIRS}. Never say it is in force. If what they said is not a rule at all, say so in one sentence and propose nothing.`;
 
 /**
  * Sent when the Mac asks again what the person asked before a sign in finished. The words are theirs from earlier,
@@ -37,8 +37,7 @@ export const RESUME_NOTE =
   '[Memnox, not the person] They just finished signing in, and these are their words from before it. Carry on with the request they were about now that the tool is connected: use find_tool and then run_tool or propose_tool. Never open a sign in again for it, and never ask whether to.';
 
 /** Sent when the Mac's own wake line already said hello, which the brain never hears, so it greeted a second time. */
-export const GREETED_NOTE =
-  '[Memnox, not the person] The Mac already greeted them out loud a moment ago, so this is mid conversation: never open with a greeting or say good morning, afternoon or evening.';
+export const GREETED_NOTE = `[Memnox, not the person] ${THE_DESKTOP_START} already greeted them out loud a moment ago, so this is mid conversation: never open with a greeting or say good morning, afternoon or evening.`;
 
 /** Put after words the brain held for, once waiting turned up nothing more, so it answers rather than holds again. */
 export const FINISHED_NOTE =
@@ -47,7 +46,7 @@ export const FINISHED_NOTE =
 /** Said ahead of a phone's question, so the brain never offers a start the tools would refuse. */
 export function phoneContext(fromPhone: boolean): string {
   return fromPhone
-    ? '[Memnox, not the person] They are speaking through their phone, away from the Mac, so a new session they ask for waits on their Face ID there.'
+    ? `[Memnox, not the person] They are speaking through their phone, away from ${THE_DESKTOP}, so a new session they ask for waits on their Face ID there.`
     : '';
 }
 

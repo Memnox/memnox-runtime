@@ -17,6 +17,7 @@ import type { SessionToolDeps } from './read-tools';
 import { editorName } from './start-place';
 import { questionBeforeStart } from './start-question';
 import { claudeTrusts } from './claude-trust';
+import { THE_DESKTOP, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * How a start reaches where it runs beyond a terminal tab, and what may be said of it once there:
@@ -151,14 +152,10 @@ function startedAs(
   };
 }
 
-const AWAITING_FACE_ID =
-  'It waits for their Face ID on the card their phone now shows, and the Mac opens the tab the moment they approve. Say only that it is on their phone to approve, in a few words; never that it is starting or started.';
-const UNCONFIRMED =
-  'Handed to the Mac to open a tab and start it, and neither the Mac nor the agent has said it is running yet. Say you asked for it and it has not come up yet; never that it is starting or working.';
-const NOT_SEEN =
-  'The Mac typed the line that starts it into a new terminal, but the agent has not shown itself running there yet. Say in one sentence that you typed it in and it has not come up yet, and offer to check it for them; never say it is starting or working.';
-const NOT_STARTED =
-  'The Mac could not open the tab and start it. Say sorry in a few words and say why in plain words; nothing started.';
+const AWAITING_FACE_ID = `It waits for their Face ID on the card their phone now shows, and ${THE_DESKTOP} opens the tab the moment they approve. Say only that it is on their phone to approve, in a few words; never that it is starting or started.`;
+const UNCONFIRMED = `Handed to ${THE_DESKTOP} to open a tab and start it, and neither ${THE_DESKTOP} nor the agent has said it is running yet. Say you asked for it and it has not come up yet; never that it is starting or working.`;
+const NOT_SEEN = `${THE_DESKTOP_START} typed the line that starts it into a new terminal, but the agent has not shown itself running there yet. Say in one sentence that you typed it in and it has not come up yet, and offer to check it for them; never say it is starting or working.`;
+const NOT_STARTED = `${THE_DESKTOP_START} could not open the tab and start it. Say sorry in a few words and say why in plain words; nothing started.`;
 const STARTED =
   'A new terminal tab opened in that repository and the agent is starting on the task. Say so in a few words, and offer to tell them when it finishes.';
 const STARTED_IN_EDITOR =

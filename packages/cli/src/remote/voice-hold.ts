@@ -6,6 +6,7 @@ import {
   type VoiceHolder,
   type VoiceOn,
 } from '@memnox/core';
+import { THE_DESKTOP } from '../this-machine';
 
 /**
  * Which paired phone holds the voice: that phone speaks every event and the Mac only shows it.
@@ -79,7 +80,7 @@ export function voiceOnNotice(voiceOn: VoiceOn, at: string): DaemonEvent {
     kind: DAEMON_EVENT.NOTICE,
     subject: 'voice_on',
     agent: UNNAMED_AGENT,
-    summary: voiceOn.holding ? `Talking on ${voiceOn.name}` : 'Back on the Mac',
+    summary: voiceOn.holding ? `Talking on ${voiceOn.name}` : `Back on ${THE_DESKTOP}`,
     at,
     voiceOn,
   };

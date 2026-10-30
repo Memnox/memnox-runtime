@@ -53,7 +53,7 @@ import {
   voiceArguments,
   type CommandRun,
 } from '../session-tools/voice-commands';
-import { MACHINE } from '../this-machine';
+import { MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * A person's answer arriving from the Mac app or a paired phone. Refusing never needs proof; a yes
@@ -190,7 +190,7 @@ function fromNowOnOutcome(
   offered: { proposed: string } | { notProposed: string },
 ): string {
   return 'proposed' in offered
-    ? `${answer}, and the rule for from now on waits on the Mac as ${offered.proposed}`
+    ? `${answer}, and the rule for from now on waits on ${THE_DESKTOP} as ${offered.proposed}`
     : `${answer}, and nothing from now on: ${offered.notProposed}`;
 }
 

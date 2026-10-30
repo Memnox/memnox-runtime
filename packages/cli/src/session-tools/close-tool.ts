@@ -10,6 +10,7 @@ import { witnessed } from './witnessed';
 import type { SessionScope } from './session-scope';
 import { processAlive } from './sessions-tool';
 import { CLOSES_CLEANLY, FINDS_ITS_TAB } from './session-tools.constants';
+import { THE_DESKTOP } from '../this-machine';
 
 /**
  * Closing a session wherever it runs. iTerm and an editor's terminal close the tab itself; a tmux
@@ -160,7 +161,6 @@ const PANEL_ENDED =
   'Its agent is ended, so the session is over and does nothing more, and its conversation is kept; its panel in the editor stays open showing it. Say it is closed in a few words.';
 const ENDED_TAB_LEFT =
   'Its agent is ended, so the session is over and its conversation is kept, but its tab is still open at a shell prompt: why says why. Say exactly that in one sentence.';
-const CLOSE_UNCONFIRMED =
-  'Handed to the Mac to close its window and tab, which has not confirmed yet. Say you are closing it; never that it is closed.';
+const CLOSE_UNCONFIRMED = `Handed to ${THE_DESKTOP} to close its window and tab, which has not confirmed yet. Say you are closing it; never that it is closed.`;
 const NOT_CLOSED =
   'Nothing was closed and it is still running: why says the reason. Say that in one sentence, the reason in plain words, and offer to stop it instead, which presses Escape. When closing several, say it once for all of them together.';

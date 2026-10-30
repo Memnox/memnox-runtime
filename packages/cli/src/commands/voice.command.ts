@@ -12,7 +12,7 @@ import type { CliContext } from '../cli-context';
 import { confirmOnTerminal, type Confirm } from '../confirm';
 import { forgetHeardWord, readHeardWords } from '../operator/heard-words';
 import { keepAddress, keepOwner, readAddress, readOwner } from '../operator/owner';
-import { MACHINE } from '../this-machine';
+import { DESKTOP_APP, MACHINE } from '../this-machine';
 
 interface VoiceDeps {
   home: () => string;
@@ -27,11 +27,15 @@ export function registerVoiceCommand(
   const deps: VoiceDeps = { home: homedir, confirm: confirmOnTerminal, ...overrides };
   const voice = program
     .command('voice')
-    .description('The key the Mac app confirms with, and how the voice addresses you')
+    .description(
+      `The key the ${DESKTOP_APP} confirms with, and how the voice addresses you`,
+    )
     .action(async () => runKey(context, deps));
   voice
     .command('forget-key')
-    .description('Clear the confirmation key, so the Mac app can register its own again')
+    .description(
+      `Clear the confirmation key, so the ${DESKTOP_APP} can register its own again`,
+    )
     .option('--yes', 'clear it without asking')
     .action(async (options: { yes?: boolean }) => runForget(context, deps, options));
   voice

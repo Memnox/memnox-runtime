@@ -24,6 +24,7 @@ import { answerWaiting } from '../src/daemon/confirm-question';
 import { NEVER_FROM_NOW_ON } from '../src/daemon/from-now-on';
 import { machinePolicyPath } from '../src/protect/machine-rules';
 import { personKey } from './phone-harness';
+import { THE_DESKTOP } from '../src/this-machine';
 
 /**
  * A no from a phone paired straight to the Mac carries the person's reason into the held call, so the agent
@@ -112,7 +113,7 @@ describe('deny from now on', () => {
 
     expect(said).toMatchObject({
       ok: true,
-      outcome: expect.stringContaining('waits on the Mac'),
+      outcome: expect.stringContaining(`waits on ${THE_DESKTOP}`),
     });
     const answered = await new PendingApprovals(home).read(id);
     expect(answered?.answer).toBe(HOLD_ANSWER.DENY);

@@ -25,6 +25,7 @@ import { askedFromPhone } from '../src/daemon/asked-from';
 import type { Peer } from '../src/daemon/socket-write';
 import { VoiceSurface } from '../src/daemon/voice-surface';
 import { BRAIN_CHUNK, type Brain } from '../src/operator/brain';
+import { THE_DESKTOP } from '../src/this-machine';
 
 /**
  * When a phone asks, words go back to the phone and hands stay on the Mac: a show only the Mac can
@@ -511,7 +512,7 @@ describe('the Mac staying silent while a phone holds the voice', () => {
       mac.lines.flatMap((each) =>
         each.event?.voiceOn === undefined ? [] : [each.event.summary],
       ),
-    ).toEqual(['Talking on iPhone', 'Back on the Mac']);
+    ).toEqual(['Talking on iPhone', `Back on ${THE_DESKTOP}`]);
     expect(voiceOnOf(remote)).toEqual([]);
   });
 

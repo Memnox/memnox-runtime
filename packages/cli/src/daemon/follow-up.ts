@@ -17,7 +17,7 @@ import { sendInstructionTool } from '../session-tools/instruct-tools';
 import type { RemotePrincipal } from './confirm';
 import type { OriginRouter } from './origin-routing';
 import type { SessionViews } from './session-view';
-import { KEY, MACHINE } from '../this-machine';
+import { KEY, MACHINE, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * The person's own words typed into one session from a phone's composer or the Mac: sent as they
@@ -106,7 +106,10 @@ export async function followUpAnswer(
   const sent = ((await deps.send(instruction.id)) ?? {}) as Sent;
   const outcome = sent.how === undefined ? undefined : OUTCOME_OF[sent.how];
   if (sent.sent !== true || outcome === undefined) {
-    return refused(request, sent.why ?? 'The Mac could not hand that to the agent.');
+    return refused(
+      request,
+      sent.why ?? `${THE_DESKTOP_START} could not hand that to the agent.`,
+    );
   }
   return { id: request.id, ok: true, outcome };
 }

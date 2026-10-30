@@ -4,7 +4,7 @@ import {
   type EnforcementMode,
 } from '../constants/enforcement.constants';
 import { isEnforcementMode } from '../domain/enforcement';
-import { keyWord } from '../constants/machine-word.constants';
+import { keyWord, theDesktop } from '../constants/machine-word.constants';
 import { isLoopbackUrl } from '../memory/embedding';
 import { DEFAULT_NOTICE_WARMUP_DAYS } from '../notice/notice.constants';
 import {
@@ -232,7 +232,7 @@ function renderRouting(config: MemnoxConfig, os: string): string[] {
     `autopilot = ${config.autopilot}`,
     '',
     '# Listen for your paired phones on the local network as well as through Memnox Cloud.',
-    `# Turned on from the Mac, signed with ${keyWord(os)}, since it widens who can reach this machine.`,
+    `# Turned on from ${theDesktop(os)}, signed with ${keyWord(os)}, since it widens who can reach this machine.`,
     `lan = ${config.lan === true}`,
     '',
     '# Memory search ranks by meaning as well as by keyword with a local embedding model,',

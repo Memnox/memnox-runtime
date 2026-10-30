@@ -10,7 +10,7 @@ import { withEvents } from '../event-store';
 import { OPERATOR_AGENT } from './propose-tools';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import { scopeOf } from './session-scope';
-import { KEY_THEIRS, MACHINE } from '../this-machine';
+import { KEY_THEIRS, MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * Stopping and restarting a session by voice. Pausing only ever holds an agent back, so it is
@@ -70,7 +70,7 @@ export async function proposeResumeTool(
   });
   return {
     proposed: proposal.id,
-    said: `Waiting for ${KEY_THEIRS}. It stays paused until the person confirms on the Mac.`,
+    said: `Waiting for ${KEY_THEIRS}. It stays paused until the person confirms on ${THE_DESKTOP}.`,
   };
 }
 

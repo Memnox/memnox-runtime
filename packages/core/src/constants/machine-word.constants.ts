@@ -47,3 +47,13 @@ export function keyAfter(platform: string, word: string): string {
 export function keyGesture(platform: string): string {
   return platform === MACOS ? 'touch the sensor' : 'answer it';
 }
+
+/** The desktop app as somebody tells it apart from their phone: "the Mac", and elsewhere "the computer". */
+export function theDesktop(platform: string): string {
+  return `the ${machineWord(platform)}`;
+}
+
+/** The desktop app by its kind, after an article: "Mac app", and elsewhere "desktop app". */
+export function desktopApp(platform: string): string {
+  return platform === MACOS ? 'Mac app' : 'desktop app';
+}

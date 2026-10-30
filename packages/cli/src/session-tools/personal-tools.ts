@@ -12,7 +12,7 @@ import type { CheckedAccount, PersonalTools } from '../sync/personal-work';
 import { workAccountOf } from '../sync/personal-work';
 import { OPERATOR_AGENT } from './propose-tools';
 import { proposedReply } from './work-sent';
-import { MACHINE } from '../this-machine';
+import { MACHINE, THE_DESKTOP } from '../this-machine';
 
 export { sentTool } from './work-sent';
 import { PendingSignIns } from '../sync/sign-ins';
@@ -173,7 +173,7 @@ function signInLines(first: readonly string[], again: readonly string[]): string
     ...(first.length === 0
       ? []
       : [
-          `They have not signed in to ${namesOf(first)} yet, so nothing there can be done in their name. Its sign in is now open in front of them, in the browser on the Mac or as an icon on the phone: they sign in once, and you carry on with what they asked as soon as they have. Say that in a sentence and stop.`,
+          `They have not signed in to ${namesOf(first)} yet, so nothing there can be done in their name. Its sign in is now open in front of them, in the browser on ${THE_DESKTOP} or as an icon on the phone: they sign in once, and you carry on with what they asked as soon as they have. Say that in a sentence and stop.`,
         ]),
     ...(again.length === 0
       ? []

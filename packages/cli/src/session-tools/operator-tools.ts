@@ -54,7 +54,7 @@ import { PROFILE_CALLS, PROFILE_TOOLS } from './profile-tools';
 import { AGENT_ARG, proposeTool, SAID_ARG } from './operator-args';
 import { readTool, SESSION_ARG, type ToolDefinition } from './session-tools';
 import { TOOL_ARG } from './session-tools.constants';
-import { KEY_THEIRS, MACHINE, NO_KEY } from '../this-machine';
+import { KEY_THEIRS, MACHINE, NO_KEY, THE_DESKTOP } from '../this-machine';
 
 /**
  * The tools the voice's brain is given, and the one rule over them: it reads everything and
@@ -352,12 +352,12 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   },
   proposeTool(
     'propose_resume',
-    `Resume a paused session the person asked to carry on. Nothing restarts until they confirm with ${KEY_THEIRS} on the Mac, so say that.`,
+    `Resume a paused session the person asked to carry on. Nothing restarts until they confirm with ${KEY_THEIRS} on ${THE_DESKTOP}, so say that.`,
     { agent: AGENT_ARG, session: SESSION_ARG, said: SAID_ARG },
   ),
   proposeTool(
     'propose_answer',
-    `Answer a held call with what the person said. "deny" takes effect at once. "once" and "session" wait for ${KEY_THEIRS} on the Mac, so say that the person has to confirm.`,
+    `Answer a held call with what the person said. "deny" takes effect at once. "once" and "session" wait for ${KEY_THEIRS} on ${THE_DESKTOP}, so say that the person has to confirm.`,
     {
       call: { type: 'string', description: 'the held call id, from "waiting"' },
       answer: { type: 'string', description: 'once, session or deny' },
@@ -463,7 +463,7 @@ export async function callOperatorTool(
   }
 }
 
-const ABOUT_OPERATOR = `You are the voice of Memnox, speaking with the person who runs these agents. Answer out loud: short sentences, the answer first, numbers said plainly, never a list read aloud. Read the machine through these tools before you answer, and never guess. What an agent changed is in changes, with the lines of one file when you pass its path; what it reached outside this machine is in outside. Several sessions can be open at once, even for one agent: call sessions first, pass the session id to every other tool, and when the person did not say which, take the one they last wrote to, its spokenToAt, and say so. When the person answers a held call or asks for a rule, in whatever words, call propose_answer or propose_rule. When they want an agent to do something, call propose_instruction, read it back, and send_instruction only after their yes. You can never allow anything yourself: every allow waits for the person to confirm with ${KEY_THEIRS} on the Mac, so tell them that.`;
+const ABOUT_OPERATOR = `You are the voice of Memnox, speaking with the person who runs these agents. Answer out loud: short sentences, the answer first, numbers said plainly, never a list read aloud. Read the machine through these tools before you answer, and never guess. What an agent changed is in changes, with the lines of one file when you pass its path; what it reached outside this machine is in outside. Several sessions can be open at once, even for one agent: call sessions first, pass the session id to every other tool, and when the person did not say which, take the one they last wrote to, its spokenToAt, and say so. When the person answers a held call or asks for a rule, in whatever words, call propose_answer or propose_rule. When they want an agent to do something, call propose_instruction, read it back, and send_instruction only after their yes. You can never allow anything yourself: every allow waits for the person to confirm with ${KEY_THEIRS} on ${THE_DESKTOP}, so tell them that.`;
 
 export const OPERATOR_CATALOGUE: ToolCatalogue = {
   info: { name: 'memnox-operator', version: '1' },

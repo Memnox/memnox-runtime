@@ -24,6 +24,7 @@ import {
   type UpdateRecord,
 } from './update/install';
 import type { Verdict } from './update/provenance';
+import { DESKTOP_APP } from '../this-machine';
 
 /** Every outside effect, so a test touches no network and runs no package manager. */
 export interface UpdateDeps {
@@ -84,7 +85,7 @@ export function registerUpdateCommand(
     .description('Update Memnox to the latest version, and rewire this machine to it')
     .option(
       '-y, --yes',
-      'update without asking, as the Mac app does for a daemon too old for it',
+      `update without asking, as the ${DESKTOP_APP} does for a daemon too old for it`,
     )
     .option(
       '--skip-verify',
