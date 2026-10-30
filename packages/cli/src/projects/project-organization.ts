@@ -33,7 +33,7 @@ export interface OrgOverlay {
 }
 
 /** Reads a clone's `origin`; injected so a test needs no git. */
-export type OriginOf = (root: string) => string | undefined;
+type OriginOf = (root: string) => string | undefined;
 
 export async function readOrgOverlay(home: string): Promise<OrgOverlay> {
   const projects = await readOrgProjects(home);
