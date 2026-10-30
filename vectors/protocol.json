@@ -242,7 +242,9 @@
       "profiles",
       "profile-put",
       "profile-remove",
-      "profile-apply"
+      "profile-apply",
+      "index-list",
+      "index-install"
     ],
     "events": [
       "held",

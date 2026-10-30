@@ -32,4 +32,5 @@ export * from './backup';
 export * from './lan';
 export * from './personal-sync';
 export * from './profiles';
+export * from './community-index';
 export * from './vectors';

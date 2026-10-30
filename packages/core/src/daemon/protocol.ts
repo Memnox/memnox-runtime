@@ -27,6 +27,7 @@ import { MEMORY_METHOD } from './memory';
 import { LAN_METHOD } from './lan';
 import { PERSONAL_SYNC_METHOD } from './personal-sync';
 import { PROFILES_METHOD } from './profiles';
+import { INDEX_METHOD } from './community-index';
 import { REMOTE_METHOD } from './remote';
 import { SPEECH_METHOD } from './speech';
 import { SPOKEN_RULE_METHOD } from './spoken-rule';
@@ -130,6 +131,7 @@ export const DAEMON_METHOD = {
   ...LAN_METHOD,
   ...PERSONAL_SYNC_METHOD,
   ...PROFILES_METHOD,
+  ...INDEX_METHOD,
 } as const;
 
 export type DaemonMethod = (typeof DAEMON_METHOD)[keyof typeof DAEMON_METHOD];

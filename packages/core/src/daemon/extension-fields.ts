@@ -18,6 +18,7 @@ import type {
   PersonalSyncResponseFields,
 } from './personal-sync';
 import type { ProfilesRequestFields, ProfilesResponseFields } from './profiles';
+import type { IndexRequestFields, IndexResponseFields } from './community-index';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -101,7 +102,8 @@ export interface ExtensionRequestFields
     MemoryRequestFields,
     LanRequestFields,
     PersonalSyncRequestFields,
-    ProfilesRequestFields {}
+    ProfilesRequestFields,
+    IndexRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -122,7 +124,8 @@ export interface ExtensionResponseFields
     MemoryResponseFields,
     LanResponseFields,
     PersonalSyncResponseFields,
-    ProfilesResponseFields {}
+    ProfilesResponseFields,
+    IndexResponseFields {}
 
 export interface ExtensionEventFields
   extends

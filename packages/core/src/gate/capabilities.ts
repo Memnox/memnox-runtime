@@ -129,6 +129,9 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.PROFILE_PUT]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.PROFILE_REMOVE]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.PROFILE_APPLY]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.INDEX_LIST]: REMOTE_CAPABILITY.SEE,
+  // Checked against its digest, and only ever a skill held for acceptance or a pack's rules proposed.
+  [DAEMON_METHOD.INDEX_INSTALL]: REMOTE_CAPABILITY.ASK,
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
