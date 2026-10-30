@@ -232,6 +232,55 @@ export async function assignSkill(
   };
 }
 
+/**
+ * The hub naming a personal skill's version as current beside what was accepted here, so the
+ * Skills Hub shows it held until the person accepts it, as a version put from a screen is.
+ */
+export async function holdVersion(
+  home: string,
+  { name, version }: { name: string; version: string },
+  at: string,
+): Promise<void> {
+  const hub = await readSkillsHub(home);
+  const held = skillNamed(hub, name);
+  if (
+    held !== undefined &&
+    (held.scope !== SKILL_SCOPE.PERSONAL || held.current === version)
+  )
+    return;
+  const skill: HubSkill = held ?? {
+    name,
+    scope: SKILL_SCOPE.PERSONAL,
+    current: version,
+    enabled: true,
+    accepted: [],
+    assignments: [],
+    updatedAt: at,
+  };
+  await writeSkillsHub(
+    home,
+    withSkill(hub, { ...skill, current: version, updatedAt: at }),
+  );
+}
+
+/** A skill from outside written as a personal version and held, never handed out until it is accepted here. */
+export async function holdSkill(
+  home: string,
+  skill: CanonicalSkill,
+  now: Date,
+): Promise<{ held: true } | { refused: string }> {
+  const problems = skillProblems(skill);
+  if (problems.length > 0) return { refused: problems.join(' ') };
+  const { name, version } = skill.manifest;
+  const before = skillNamed(await readSkillsHub(home), name);
+  if (before !== undefined && before.scope !== SKILL_SCOPE.PERSONAL)
+    return { refused: `${name} is already kept as a ${before.scope} skill.` };
+  const kept = await keepVersion(home, before, { skill, scope: SKILL_SCOPE.PERSONAL });
+  if ('refused' in kept) return kept;
+  await holdVersion(home, { name, version }, now.toISOString());
+  return { held: true };
+}
+
 /** Removing takes a skill out of the hub and every agent at once, and a personal one's kept versions with it. */
 export async function removeSkill(
   home: string,

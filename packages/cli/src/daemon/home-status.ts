@@ -11,6 +11,7 @@ import { backupAnswer, isBackupMethod } from './backup-answer';
 import { isMemoryMethod, memoryAnswer } from './memory-answer';
 import { isLanMethod, lanAnswer } from './lan-answer';
 import { isProfilesMethod, profilesAnswer } from './profiles-answer';
+import { communityIndexAnswer, isIndexMethod } from './community-index-answer';
 import {
   changesSyncedItems,
   isPersonalSyncMethod,
@@ -37,6 +38,7 @@ export function isScreenMethod(method: string): boolean {
     isLanMethod(method) ||
     isPersonalSyncMethod(method) ||
     isProfilesMethod(method) ||
+    isIndexMethod(method) ||
     isStudioMethod(method)
   );
 }
@@ -76,6 +78,8 @@ function answerScreen(
   if (isPersonalSyncMethod(request.method))
     return personalSyncAnswer(request, syncDepsFor(home));
   if (isProfilesMethod(request.method)) return profilesAnswer(home, request, new Date());
+  if (isIndexMethod(request.method))
+    return communityIndexAnswer(home, request, { now: new Date(), remote });
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);
   return homeAnswer(home, request, {
     views,

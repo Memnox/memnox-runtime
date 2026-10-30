@@ -11,6 +11,7 @@ import { isMemoryMethod } from './memory-answer';
 import { isLanMethod } from './lan-answer';
 import { isPersonalSyncMethod } from './personal-sync-answer';
 import { isProfilesMethod } from './profiles-answer';
+import { isIndexMethod } from './community-index-answer';
 
 /** What the Mac app and a paired phone may ask the daemon, as against what an interceptor asks. */
 const VOICE_METHODS: readonly string[] = [
@@ -62,6 +63,7 @@ export function isVoiceMethod(method: string): boolean {
     isLanMethod(method) ||
     isPersonalSyncMethod(method) ||
     isProfilesMethod(method) ||
+    isIndexMethod(method) ||
     isPolicyMethod(method) ||
     isActivityMethod(method) ||
     isAgentsMethod(method)

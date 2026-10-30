@@ -24,13 +24,10 @@ import {
   SYNC_KIND,
   validatePolicyDocument,
   withServer,
-  withSkill,
   withoutServer,
   writeCanonicalSkill,
   writeHub,
-  writeSkillsHub,
   type HubServer,
-  type HubSkill,
   type MemoryKind,
   type NewMemoryItem,
   type Policy,
@@ -39,7 +36,7 @@ import {
 } from '@memnox/core';
 import { syncHub } from '../mcp/hub-writer';
 import { machinePolicyPath, writeMachineRules } from '../protect/machine-rules';
-import { removeSkill } from '../skills/skills-changes';
+import { holdVersion, removeSkill } from '../skills/skills-changes';
 import { removeRule } from '../studio/rule-changes';
 import { memoryNameOf, type MemoryBody, type SkillBody } from './local-items';
 
@@ -192,38 +189,11 @@ async function applySkill(place: Place, item: SyncItem): Promise<Applied> {
   });
   // A version already kept here is the hub's own copy, which nothing from elsewhere rewrites.
   if (!existsSync(dir)) await writeCanonicalSkill(dir, skill);
-  await holdInHub(place, item.name, body.version);
+  await holdVersion(place.home, { name: item.name, version: body.version }, place.at);
   return {
     here: false,
     said: `${item.name} ${body.version} came from your other machine and waits in the Skills Hub to be accepted here.`,
   };
-}
-
-/**
- * The hub naming the version that arrived as current, beside what was accepted here, so the Skills
- * Hub shows it held until the person accepts it, as a version put from a screen is.
- */
-async function holdInHub(place: Place, name: string, version: string): Promise<void> {
-  const hub = await readSkillsHub(place.home);
-  const held = skillNamed(hub, name);
-  if (
-    held !== undefined &&
-    (held.scope !== SKILL_SCOPE.PERSONAL || held.current === version)
-  )
-    return;
-  const skill: HubSkill = held ?? {
-    name,
-    scope: SKILL_SCOPE.PERSONAL,
-    current: version,
-    enabled: true,
-    accepted: [],
-    assignments: [],
-    updatedAt: place.at,
-  };
-  await writeSkillsHub(
-    place.home,
-    withSkill(hub, { ...skill, current: version, updatedAt: place.at }),
-  );
 }
 
 async function applyRule(place: Place, item: SyncItem): Promise<Applied> {
