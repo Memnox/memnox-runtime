@@ -1,8 +1,10 @@
 import {
   HUB_TRANSPORT,
   hubServerProblems,
+  isOrgServer,
   isOwnServer,
   readHub,
+  readOrgServers,
   unwrapLaunch,
   withAssignment,
   withChange,
@@ -31,10 +33,17 @@ export async function applyHubChange(
   if ('put' in change) {
     const problems = hubServerProblems(change.put);
     if (problems.length > 0) return { refused: problems.join(' ') };
+    if (isOrgServer(await readOrgServers(home), change.put.name))
+      return { refused: orgOwned(change.put.name) };
   } else if (!hub.servers.some((each) => each.name === change.assign.server)) {
     return { refused: `The hub has no server named ${change.assign.server}.` };
   }
   return { synced: await syncHub(home, withChange(hub, change)) };
+}
+
+/** What a screen is told when it reaches for a server only the organization changes. */
+export function orgOwned(name: string): string {
+  return `${name} is the organization's server, so it is changed in Memnox Cloud rather than here.`;
 }
 
 /**
@@ -48,6 +57,10 @@ export async function importServer(
   const hub = await readHub(home);
   if (hub.servers.some((each) => each.name === wanted.name))
     return { refused: `The hub already has a server named ${wanted.name}.` };
+  if (isOrgServer(await readOrgServers(home), wanted.name))
+    return {
+      refused: `The organization already provides a server named ${wanted.name}.`,
+    };
   const configs = await readHubConfigs(home, home);
   const config = configs.find(
     (each) =>

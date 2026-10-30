@@ -5,10 +5,14 @@ import {
   HUB_TRANSPORT,
   LEDGER_SCAN_LIMIT,
   MCP_HEALTH,
+  MCP_SCOPE,
   planSync,
   readHub,
   readHubHealth,
+  readOrgServers,
+  withOrganization,
   type HubHealth,
+  type Hub,
   type HubServer,
   type McpHubEntryView,
   type McpHubServerView,
@@ -37,32 +41,45 @@ export async function readHubView(
   home: string,
   { secrets, now }: HubViewInput,
 ): Promise<McpHubView> {
-  const [hub, health, configs, calls] = await Promise.all([
+  const [own, org, health, configs, calls] = await Promise.all([
     readHub(home),
+    readOrgServers(home),
     readHubHealth(home),
     readHubConfigs(home, home),
     callsSince(home, new Date(now.getTime() - daysToMs(WEEK_DAYS))),
   ]);
-  const plan = planSync(hub, configs);
+  const hub = withOrganization(own, org);
+  const agents = configs.flatMap((config) =>
+    config.agent === undefined ? [] : [{ agent: config.agent, path: config.path }],
+  );
   const servers: McpHubServerView[] = [];
   for (const server of hub.servers) {
+    const personal = own.servers.includes(server);
     servers.push({
       ...serverFields(server, health),
-      agents: agentsOf(hub, server.name),
+      scope: personal ? MCP_SCOPE.PERSONAL : MCP_SCOPE.ORGANIZATION,
+      agents: personal ? agentsOf(hub, server.name) : orgAgentsOf(hub, server, agents),
       secretsHeld: await heldOf(server, secrets),
       callsThisWeek: calls.get(server.name) ?? 0,
     });
   }
-  return {
-    servers,
-    agents: configs.flatMap((config) =>
-      config.agent === undefined ? [] : [{ agent: config.agent, path: config.path }],
-    ),
-    ...entriesOf(plan),
-  };
+  return { servers, agents, ...entriesOf(planSync(hub, configs)) };
 }
 
-type ServerFields = Omit<McpHubServerView, 'agents' | 'secretsHeld' | 'callsThisWeek'>;
+/** An organization server handed to every agent is shown on the agents here, not on every kind there is. */
+function orgAgentsOf(
+  hub: Hub,
+  server: HubServer,
+  here: readonly { agent: string }[],
+): string[] {
+  const present = new Set(here.map((each) => each.agent));
+  return agentsOf(hub, server.name).filter((agent) => present.has(agent));
+}
+
+type ServerFields = Omit<
+  McpHubServerView,
+  'scope' | 'agents' | 'secretsHeld' | 'callsThisWeek'
+>;
 
 function serverFields(server: HubServer, health: HubHealth): ServerFields {
   const last = health[server.name] ?? { state: MCP_HEALTH.UNKNOWN };

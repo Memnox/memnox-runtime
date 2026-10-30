@@ -3,6 +3,7 @@ import {
   HUB_TRANSPORT,
   hubServerProblems,
   isKeptSecretName,
+  isOrgServer,
   MCP_HUB_METHOD,
   minutesToMs,
   nodeSecretStore,
@@ -10,7 +11,9 @@ import {
   Proposals,
   readHub,
   readHubHealth,
+  readOrgServers,
   withAssignment,
+  withOrganization,
   withoutServer,
   writeHubHealth,
   type DaemonRequest,
@@ -21,7 +24,7 @@ import {
   type McpSyncSummary,
   type SecretStore,
 } from '@memnox/core';
-import { importServer, type HubChanged } from '../mcp/hub-changes';
+import { importServer, orgOwned, type HubChanged } from '../mcp/hub-changes';
 import { testHubServer, type ListerFor } from '../mcp/hub-test';
 import { readHubView } from '../mcp/hub-view';
 import { syncHub, type HubSynced } from '../mcp/hub-writer';
@@ -114,6 +117,8 @@ async function putServer(
     return refused('Send the server as a name, a transport, env and secrets.');
   const problems = hubServerProblems(server);
   if (problems.length > 0) return refused(problems.join(' '));
+  if (isOrgServer(await readOrgServers(home), server.name))
+    return refused(orgOwned(server.name));
   return propose(
     home,
     { put: server },
@@ -124,6 +129,7 @@ async function putServer(
 async function removeServer(home: string, request: DaemonRequest): Promise<Answered> {
   const name = request.mcpServerName;
   if (name === undefined) return refused('Name the server to remove.');
+  if (await onlyOrganizations(home, name)) return refused(orgOwned(name));
   const synced = await syncHub(home, withoutServer(await readHub(home), name));
   const { [name]: _gone, ...health } = await readHubHealth(home);
   await writeHubHealth(home, health);
@@ -140,6 +146,7 @@ async function assign(
   const agent = agentOf(request.mcpAgent);
   if (server === undefined || agent === null)
     return refused('Name the server and the agent.');
+  if (await onlyOrganizations(home, server)) return refused(orgOwned(server));
   const hub = await readHub(home);
   if (!hub.servers.some((each) => each.name === server))
     return refused(`The hub has no server named ${server}.`);
@@ -148,6 +155,13 @@ async function assign(
     return propose(home, { assign: { server, agent } }, { rationale, now });
   }
   return syncedAnswer(await syncHub(home, withAssignment(hub, { server, agent }, false)));
+}
+
+/** A name only the organization holds, which this machine reads and never changes. */
+async function onlyOrganizations(home: string, name: string): Promise<boolean> {
+  const own = await readHub(home);
+  if (own.servers.some((each) => each.name === name)) return false;
+  return isOrgServer(await readOrgServers(home), name);
 }
 
 async function propose(
@@ -178,7 +192,7 @@ async function test(
   request: DaemonRequest,
   deps: Resolved,
 ): Promise<Answered> {
-  const hub = await readHub(home);
+  const hub = withOrganization(await readHub(home), await readOrgServers(home));
   const server = hub.servers.find((each) => each.name === request.mcpServerName);
   if (server === undefined) return refused('Name a server the hub holds.');
   const mcpHealth = await testHubServer(home, server, {

@@ -13,7 +13,9 @@ import {
   OVERLAY_KIND,
   overlaysInForce,
   readHub,
+  readOrgServers,
   startableKindOf,
+  withOrganization,
   type AgentSessions,
   type AgentStatus,
   type AgentView,
@@ -77,7 +79,9 @@ async function factsOf(
       // A keeper record that will not read claims no agent is dormant, which is the honest answer.
       readDormantHere(home, input.snapshots, input.now).catch(() => []),
       overlaysInForce(home),
-      readHub(home),
+      readHub(home).then(async (hub) =>
+        withOrganization(hub, await readOrgServers(home)),
+      ),
       readHubConfigs(home, home),
       // Sessions that will not list leave every count at none rather than failing the cards.
       input.cards().catch((): SessionCard[] => []),

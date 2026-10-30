@@ -33,6 +33,14 @@ export const MCP_HEALTH = {
 
 export type McpHealthState = (typeof MCP_HEALTH)[keyof typeof MCP_HEALTH];
 
+/** Whose a server is: the person's own on this machine, or the organization's, which is read only here. */
+export const MCP_SCOPE = {
+  PERSONAL: 'personal',
+  ORGANIZATION: 'organization',
+} as const;
+
+export type McpScope = (typeof MCP_SCOPE)[keyof typeof MCP_SCOPE];
+
 export interface McpToolSummary {
   name: string;
   description?: string;
@@ -48,6 +56,8 @@ export interface McpServerHealth {
 
 export interface McpHubServerView {
   name: string;
+  /** An organization server is never edited, removed or reassigned on this machine. */
+  scope: McpScope;
   description?: string;
   transport: HubTransport;
   command?: string;

@@ -7,9 +7,11 @@ import {
   formatOf,
   MCP_CONFIG_LOCATIONS,
   planSync,
+  readOrgServers,
   readTextServers,
   removeTextServer,
   serversKeyOf,
+  withOrganization,
   writeHub,
   writtenAfter,
   type ConfigServers,
@@ -129,14 +131,17 @@ async function isFolder(path: string): Promise<boolean> {
   }
 }
 
-/** Plans the hub against every config, writes the changes, and keeps what was written as the hub's own. */
+/**
+ * Plans the hub, with the organization's servers beside its own, against every config, writes the
+ * changes, and keeps what was written as the hub's own so a later hand edit reads as drift.
+ */
 export async function syncHub(
   home: string,
   hub: Hub,
   project: string = home,
 ): Promise<HubSynced> {
   const configs = await readHubConfigs(home, project);
-  const plan = planSync(hub, configs);
+  const plan = planSync(withOrganization(hub, await readOrgServers(home)), configs);
   const files: string[] = [];
   for (const file of plan.files) {
     const config = configs.find((each) => each.path === file.path);
