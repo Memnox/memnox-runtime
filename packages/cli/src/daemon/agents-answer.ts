@@ -14,7 +14,7 @@ import {
   type StartableAgent,
 } from '@memnox/core';
 import { agentNamed, pauseAgent } from '../agents/agent-pause';
-import { launchAgent } from '../agents/agent-launch';
+import { launchAgent, launchable } from '../agents/agent-launch';
 import { applyProfile } from '../profiles/profile-apply';
 import { readAgentsView } from '../studio/agents-read';
 
@@ -129,14 +129,17 @@ async function launch(
   request: DaemonRequest,
   deps: AgentsDeps,
 ): Promise<Answered> {
-  const profiled = await profileFirst(home, request, deps.now);
-  if ('refused' in profiled) return refused(profiled.refused);
-  const launched = await launchAgent(home, {
+  const input = {
     agent: request.agentKind,
     workingDirectory: request.workingDirectory,
-    now: deps.now,
     ...(deps.resolveCommand === undefined ? {} : { resolve: deps.resolveCommand }),
-  });
+  };
+  // Checked before any profile proposal is raised, so a refused launch leaves no card behind.
+  const checked = await launchable(input);
+  if ('refused' in checked) return refused(checked.refused);
+  const profiled = await profileFirst(home, request, deps.now);
+  if ('refused' in profiled) return refused(profiled.refused);
+  const launched = await launchAgent(home, { ...input, now: deps.now });
   if ('refused' in launched) return refused(launched.refused);
   return { ok: true, agentLaunched: launched, ...profiled };
 }

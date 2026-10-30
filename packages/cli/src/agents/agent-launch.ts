@@ -30,10 +30,12 @@ interface LaunchInput {
 
 const ONLY_KNOWN = `Only ${Object.keys(STARTABLE_AGENT).join(', ')} have a launch command Memnox knows.`;
 
-export async function launchAgent(
-  home: string,
-  input: LaunchInput,
-): Promise<AgentLaunched | { refused: string }> {
+/** What a launch would open, or why it would be refused, checked before anything is raised for it. */
+export async function launchable(
+  input: Omit<LaunchInput, 'now'>,
+): Promise<
+  { agent: StartableAgent; folder: string; command: string } | { refused: string }
+> {
   const agent = input.agent === undefined ? null : startableKindOf(input.agent);
   if (agent === null)
     return {
@@ -47,6 +49,16 @@ export async function launchAgent(
     return {
       refused: `The ${STARTABLE_AGENT[agent]} command is not installed on this computer.`,
     };
+  return { agent, folder, command };
+}
+
+export async function launchAgent(
+  home: string,
+  input: LaunchInput,
+): Promise<AgentLaunched | { refused: string }> {
+  const checked = await launchable(input);
+  if ('refused' in checked) return checked;
+  const { agent, folder, command } = checked;
   const start = startOf({ agent, command, folder, at: input.now.toISOString() });
   const line = startCommand(start);
   await new DisplayRequests(home).request({

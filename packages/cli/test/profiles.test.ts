@@ -204,4 +204,35 @@ describe('profiles', () => {
     expect(launched.proposed).toBe(launched.profileApplied?.proposed[0]);
     expect(await kindsProposed(at.home)).toContain(PROPOSAL_KIND.MCP_HUB);
   });
+
+  it('raises nothing for a launch that is refused, so no card is left to expire', async () => {
+    const at = await machine();
+    await backend(at);
+    const launch = (fields: Partial<DaemonRequest>, installed: boolean) =>
+      agentsAnswer(
+        at.home,
+        {
+          id: 4,
+          method: DAEMON_METHOD.AGENT_LAUNCH,
+          agentKind: 'claude-code',
+          workingDirectory: at.project,
+          profileName: 'Backend Engineering',
+          ...fields,
+        } as DaemonRequest,
+        {
+          now: NOW,
+          cards: async () => [],
+          resolveCommand: () => (installed ? '/usr/local/bin/claude' : null),
+        },
+      );
+    const notInstalled = await launch({}, false);
+    expect(notInstalled.ok).toBe(false);
+    expect(notInstalled.reason).toContain('not installed');
+    const noFolder = await launch(
+      { workingDirectory: join(at.project, 'nowhere') },
+      true,
+    );
+    expect(noFolder.ok).toBe(false);
+    expect(await kindsProposed(at.home)).toEqual([]);
+  });
 });
