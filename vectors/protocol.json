@@ -175,7 +175,16 @@
       "agent-pause",
       "agent-resume",
       "session-stop",
-      "agent-launch"
+      "agent-launch",
+      "skills-hub",
+      "skill-import",
+      "skill-put",
+      "skill-assign",
+      "skill-disable",
+      "skill-enable",
+      "skill-sync",
+      "skill-rollback",
+      "skill-accept"
     ],
     "events": [
       "held",

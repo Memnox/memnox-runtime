@@ -28,6 +28,7 @@ export * from './domain/sensitive-data';
 export * from './discovery/index';
 export * from './mcp/index';
 export * from './distribute/index';
+export * from './skills/index';
 export * from './policy/index';
 export * from './ledger/index';
 export * from './recovery/index';

@@ -24,4 +24,5 @@ export * from './mcp-hub';
 export * from './policies';
 export * from './activity';
 export * from './agents-view';
+export * from './skills-hub';
 export * from './vectors';

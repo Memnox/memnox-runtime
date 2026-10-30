@@ -7,6 +7,7 @@ import type { McpHubRequestFields, McpHubResponseFields } from './mcp-hub';
 import type { PolicyRequestFields, PolicyResponseFields } from './policies';
 import type { ActivityRequestFields, ActivityResponseFields } from './activity';
 import type { AgentsRequestFields, AgentsResponseFields } from './agents-view';
+import type { SkillsRequestFields, SkillsResponseFields } from './skills-hub';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -82,7 +83,8 @@ export interface ExtensionRequestFields
     McpHubRequestFields,
     PolicyRequestFields,
     ActivityRequestFields,
-    AgentsRequestFields {}
+    AgentsRequestFields,
+    SkillsRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -96,7 +98,8 @@ export interface ExtensionResponseFields
     McpHubResponseFields,
     PolicyResponseFields,
     ActivityResponseFields,
-    AgentsResponseFields {}
+    AgentsResponseFields,
+    SkillsResponseFields {}
 
 export interface ExtensionEventFields
   extends RemoteEventFields, TeamEventFields, WorkEventFields, QuestionEventFields {}

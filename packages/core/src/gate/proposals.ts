@@ -9,6 +9,7 @@ import type { HoldAnswer } from './hold';
 import { PROPOSAL_ANSWER, type ProposalAnswer } from './answers';
 import type { WorkAccount } from '../daemon/work-cards';
 import type { HubChange } from '../mcp/registry';
+import type { SkillsChange } from '../skills/hub';
 
 export { PROPOSAL_ANSWER, type ProposalAnswer };
 
@@ -44,6 +45,8 @@ export const PROPOSAL_KIND = {
   RULE_REMOVE: 'rule-remove',
   /** A paused agent let carry on, lifting the pause here and the workspace's freeze on it. */
   AGENT_RESUME: 'agent-resume',
+  /** A skill accepted, given to an agent, or rolled back, written into agents once the person signs. */
+  SKILLS_HUB: 'skills-hub',
 } as const;
 
 export type ProposedChange =
@@ -94,7 +97,8 @@ export type ProposedChange =
     }
   | { kind: typeof PROPOSAL_KIND.MCP_HUB; hub: HubChange }
   | { kind: typeof PROPOSAL_KIND.RULE_REMOVE; file: string; rule: string }
-  | { kind: typeof PROPOSAL_KIND.AGENT_RESUME; agent: string };
+  | { kind: typeof PROPOSAL_KIND.AGENT_RESUME; agent: string }
+  | { kind: typeof PROPOSAL_KIND.SKILLS_HUB; skills: SkillsChange };
 
 export interface Proposal {
   id: string;

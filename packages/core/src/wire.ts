@@ -19,6 +19,7 @@ export * from './daemon/mcp-hub';
 export * from './daemon/policies';
 export * from './daemon/activity';
 export * from './daemon/agents-view';
+export * from './daemon/skills-hub';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,
