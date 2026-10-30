@@ -9,6 +9,7 @@ import type {
 import type { FolderUse } from '../operator/folders';
 import type { HeardWord } from '../operator/heard-words';
 import type { ProfileFact } from '../operator/profile';
+import { KEY_THEIRS } from '../this-machine';
 
 /**
  * What is on the machine right now, put in front of what the person said, so "open my last
@@ -26,8 +27,7 @@ const HEADING =
  * Sent when the person held Control and Option to speak: the keys, not any word, say these are rules.
  * The brain drafts them with propose_rule, and the Mac asks where each holds before Touch ID.
  */
-export const RULE_NOTE =
-  '[Memnox, not the person] They held the rule keys, so what follows is a rule or policy they want enforced on their agents. Pass each rule to propose_rule as their sentence now, and say back the rule it reads as; ask any open question it returns before anything else. Where the sentence is refused, call it with the action, the effect, any branches or paths it names, and the project only if they named one. The card on the Mac is confirmed with Touch ID. Never say it is in force. If what they said is not a rule at all, say so in one sentence and propose nothing.';
+export const RULE_NOTE = `[Memnox, not the person] They held the rule keys, so what follows is a rule or policy they want enforced on their agents. Pass each rule to propose_rule as their sentence now, and say back the rule it reads as; ask any open question it returns before anything else. Where the sentence is refused, call it with the action, the effect, any branches or paths it names, and the project only if they named one. The card on the Mac is confirmed with ${KEY_THEIRS}. Never say it is in force. If what they said is not a rule at all, say so in one sentence and propose nothing.`;
 
 /**
  * Sent when the Mac asks again what the person asked before a sign in finished. The words are theirs from earlier,

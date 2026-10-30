@@ -1,7 +1,7 @@
 import { AGENT_ARG, proposeTool, SAID_ARG } from './operator-args';
 import { readTool, SESSION_ARG, type ToolDefinition } from './session-tools';
 import { APP_ACTION, TOOL_ARG } from './session-tools.constants';
-import { MACHINE } from '../this-machine';
+import { KEY_THEIRS, MACHINE, ONE_KEY, THEIR_KEY } from '../this-machine';
 
 /**
  * The tools that act on the person's behalf beyond reading: running memnox commands, tracing,
@@ -10,8 +10,7 @@ import { MACHINE } from '../this-machine';
 export const ACTING_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'memnox_command',
-    description:
-      'Run any memnox command the person asks for, like "status", "timeline --since 1h", "doctor", "mode autonomous", "freeze" or "protect --yes". What only reads runs now and its output comes back for you to sum up. What changes something is proposed and runs only after their Touch ID. "login" connects this machine alone to Memnox Cloud, while signing the person in as themselves is memnox_sign_in, and "agents onboard <agent> [more agents]" puts one or several agents under it with one Touch ID: after Touch ID each runs on its own, with a browser page to approve and no terminal, and its end is told to you. A few never run by voice, and it says why. Run "help <command>" first when unsure of a flag. Commands that change something run with no terminal, so pass --yes to one that would otherwise stop to ask.',
+    description: `Run any memnox command the person asks for, like "status", "timeline --since 1h", "doctor", "mode autonomous", "freeze" or "protect --yes". What only reads runs now and its output comes back for you to sum up. What changes something is proposed and runs only after ${THEIR_KEY}. "login" connects this machine alone to Memnox Cloud, while signing the person in as themselves is memnox_sign_in, and "agents onboard <agent> [more agents]" puts one or several agents under it with ${ONE_KEY}: after ${KEY_THEIRS} each runs on its own, with a browser page to approve and no terminal, and its end is told to you. A few never run by voice, and it says why. Run "help <command>" first when unsure of a flag. Commands that change something run with no terminal, so pass --yes to one that would otherwise stop to ask.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -28,7 +27,7 @@ export const ACTING_TOOLS: readonly ToolDefinition[] = [
   },
   readTool(
     'command_output',
-    'What a memnox command printed after the person confirmed it with Touch ID, by the id memnox_command returned.',
+    `What a memnox command printed after the person confirmed it with ${KEY_THEIRS}, by the id memnox_command returned.`,
     { proposal: { type: 'string', description: 'the id memnox_command returned' } },
   ),
   {
@@ -219,7 +218,7 @@ export const ACTING_TOOLS: readonly ToolDefinition[] = [
   },
   proposeTool(
     'propose_rewind',
-    'Put a repository back to how it was before what a session just did, when the person says it broke something or asks to undo it. Nothing moves until they confirm with Touch ID; their current files are kept first. Pass undo "true" when they ask to bring back what a rewind put away.',
+    `Put a repository back to how it was before what a session just did, when the person says it broke something or asks to undo it. Nothing moves until they confirm with ${KEY_THEIRS}; their current files are kept first. Pass undo "true" when they ask to bring back what a rewind put away.`,
     {
       agent: AGENT_ARG,
       session: SESSION_ARG,

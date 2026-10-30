@@ -17,7 +17,7 @@ import { sendInstructionTool } from '../session-tools/instruct-tools';
 import type { RemotePrincipal } from './confirm';
 import type { OriginRouter } from './origin-routing';
 import type { SessionViews } from './session-view';
-import { MACHINE } from '../this-machine';
+import { KEY, MACHINE } from '../this-machine';
 
 /**
  * The person's own words typed into one session from a phone's composer or the Mac: sent as they
@@ -90,7 +90,7 @@ export async function followUpAnswer(
   if (signer === null || !holds(signer, REMOTE_CAPABILITY.STEER)) {
     const where =
       principal === undefined
-        ? 'Touch ID on this Mac'
+        ? `${KEY} on this ${MACHINE}`
         : `Face ID on ${principal.device.name}`;
     return refused(request, `Sending words to an agent needs ${where}.`);
   }

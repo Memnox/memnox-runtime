@@ -2,6 +2,7 @@ import { namedList, proposeSpokenRule, spokenRuleSentence } from '../protect/spo
 import { proposeTool, SAID_ARG } from './operator-args';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import type { ToolDefinition } from './session-tools';
+import { KEY_THEIRS } from '../this-machine';
 
 /**
  * propose_rule given the person's own sentence. No model is called from here: the voice is
@@ -37,7 +38,7 @@ export async function proposeSpokenRuleTool(
 /** The rule tool the voice is given, its own words first and the fields only where those are refused. */
 export const PROPOSE_RULE_TOOL: ToolDefinition = proposeTool(
   'propose_rule',
-  'Write down a rule the person asked for. Pass their words as sentence first: it is read into the rule, with any destinations, kinds of data, paths, databases or agents it names, and the result says it back, or asks what it left open, such as which destinations are approved; ask that, then call again with the same sentence and approved. Only when the sentence is refused, pass action and effect yourself, optionally only on some branches or paths. Nothing is in force until they confirm with Touch ID, and on a machine in a team it then also goes to the team, where a second admin approves it.',
+  `Write down a rule the person asked for. Pass their words as sentence first: it is read into the rule, with any destinations, kinds of data, paths, databases or agents it names, and the result says it back, or asks what it left open, such as which destinations are approved; ask that, then call again with the same sentence and approved. Only when the sentence is refused, pass action and effect yourself, optionally only on some branches or paths. Nothing is in force until they confirm with ${KEY_THEIRS}, and on a machine in a team it then also goes to the team, where a second admin approves it.`,
   {
     sentence: {
       type: 'string',

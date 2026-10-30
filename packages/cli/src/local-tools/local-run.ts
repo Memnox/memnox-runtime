@@ -19,7 +19,7 @@ import { socketDial } from '../remote/daemon-dial';
 import type { PersonalAnswer, PersonalRun } from '../sync/personal-work';
 import { LOCAL_SLUG, type LocalCli, type LocalServer } from './local-catalogue';
 import type { McpPool } from './mcp-client';
-import { MACHINE } from '../this-machine';
+import { KEY_THEIRS, MACHINE } from '../this-machine';
 
 /**
  * One call to a tool on this Mac, through the daemon's pauses, budgets, limits and rules as an agent's
@@ -143,7 +143,7 @@ export async function runLocalTool(
   if ('said' in planned) return refused(planned.said);
   if (planned.changes && !confirmed) {
     return refused(
-      'That changes something, so it is not run on your word alone: write it down with propose_tool, and it runs once they confirm with Touch ID.',
+      `That changes something, so it is not run on your word alone: write it down with propose_tool, and it runs once they confirm with ${KEY_THEIRS}.`,
     );
   }
   const verdict = await strictest(deps.gate, planned);
@@ -156,7 +156,7 @@ export async function runLocalTool(
   // An ask is answered by the person's own Touch ID on this very call, and by nothing less.
   if (verdict.effect === DECISION_EFFECT.ASK && !confirmed) {
     return refused(
-      `A rule asks the person first: ${verdict.reason}. Write it down with propose_tool so they can confirm it with Touch ID.`,
+      `A rule asks the person first: ${verdict.reason}. Write it down with propose_tool so they can confirm it with ${KEY_THEIRS}.`,
     );
   }
   const ran = await planned.run();

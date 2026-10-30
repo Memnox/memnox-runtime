@@ -18,7 +18,7 @@ import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import type { ToolDefinition } from './session-tools';
 import type { ScopeKind } from './session-scope';
 import { stopSession } from './stop-tool';
-import { MACHINE } from '../this-machine';
+import { KEY_THEIRS, MACHINE } from '../this-machine';
 
 /**
  * "Pause Codex": one agent stopped on this machine and every other left working. Pausing only holds
@@ -44,7 +44,7 @@ const PAUSE_AGENT_TOOL: ToolDefinition = {
 
 const PROPOSE_AGENT_RESUME_TOOL: ToolDefinition = proposeTool(
   'propose_agent_resume',
-  'Let one agent the person paused carry on, like "let Cursor carry on" or "unpause Codex". Nothing restarts until they confirm with Touch ID on the Mac, so say that. When the answer is ambiguous, ask which agent they meant.',
+  `Let one agent the person paused carry on, like "let Cursor carry on" or "unpause Codex". Nothing restarts until they confirm with ${KEY_THEIRS} on the Mac, so say that. When the answer is ambiguous, ask which agent they meant.`,
   { agent: AGENT_NAME_ARG, said: SAID_ARG },
 );
 
@@ -96,7 +96,7 @@ async function proposeAgentResumeTool(
   return {
     proposed: proposal.id,
     agent: named.kind,
-    said: 'Waiting for Touch ID. It stays paused until the person confirms on the Mac.',
+    said: `Waiting for ${KEY_THEIRS}. It stays paused until the person confirms on the Mac.`,
   };
 }
 

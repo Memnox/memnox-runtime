@@ -10,7 +10,7 @@ import {
   VOICE_RUN,
   voiceCommand,
 } from './voice-commands';
-import { MACHINE } from '../this-machine';
+import { KEY_GESTURE, MACHINE, THEIR_KEY, THE_KEY } from '../this-machine';
 
 /**
  * `memnox_command`: any memnox command, said out loud. What reads runs now and comes back to be
@@ -25,8 +25,7 @@ const COMMAND_TTL_MS = minutesToMs(5);
 const SUM_UP =
   'Sum up what it printed in a sentence or two, in plain words, the answer first. Never read it out, never say a command line, and if it failed, say what the output says went wrong.';
 
-const PROPOSED =
-  'Nothing has run. Read back in a sentence what it will do, in plain words, and that it waits for their Touch ID on the Mac. When they say they confirmed, call command_output with this id and sum up what it printed.';
+const PROPOSED = `Nothing has run. Read back in a sentence what it will do, in plain words, and that it waits for ${THEIR_KEY} on the Mac. When they say they confirmed, call command_output with this id and sum up what it printed.`;
 
 export async function memnoxCommandTool(
   deps: SessionToolDeps,
@@ -88,7 +87,7 @@ function named(argv: readonly string[], machine: () => string): string[] {
   return [...argv, '--name', machine()];
 }
 
-const PROPOSED_ON_ITS_OWN = `Nothing has run. Read back in a sentence what it will do, and that it needs their Touch ID. For login, say that once they touch the sensor a page opens in their browser to approve this ${MACHINE}, and nothing else is needed; an onboarding needs only the touch. It then runs on its own with no terminal, and you are told when it finishes, so do not ask them to wait or check.`;
+const PROPOSED_ON_ITS_OWN = `Nothing has run. Read back in a sentence what it will do, and that it needs ${THEIR_KEY}. For login, say that once they ${KEY_GESTURE} a page opens in their browser to approve this ${MACHINE}, and nothing else is needed; an onboarding needs only the touch. It then runs on its own with no terminal, and you are told when it finishes, so do not ask them to wait or check.`;
 
 const STILL_RUNNING = `It is still running on its own: a login or an onboarding is waiting for them to approve this ${MACHINE} in the browser page that opened. Say so in a sentence; they will be told when it is done.`;
 
@@ -101,7 +100,7 @@ export async function commandOutputTool(
   if (result === null) {
     return {
       ran: false,
-      said: 'It has not run yet: the Touch ID sheet is still waiting, or they declined. Call waiting to see which.',
+      said: `It has not run yet: ${THE_KEY} sheet is still waiting, or they declined. Call waiting to see which.`,
     };
   }
   if (result.running === true) return { ran: true, running: true, said: STILL_RUNNING };

@@ -20,6 +20,7 @@ import {
 import type { CliContext } from '../cli-context';
 import { socketDial, type DaemonDial } from '../remote/daemon-dial';
 import { qrLines } from '../remote/qr-text';
+import { KEY, MACHINE } from '../this-machine';
 
 /** Asks the person for a line and gives it back, or null when they closed the terminal. */
 type AskLine = (question: string) => Promise<string | null>;
@@ -89,10 +90,7 @@ async function runPair(run: PairRun): Promise<number> {
       method: DAEMON_METHOD.PAIR_DECLINE,
       pairingId: pairing.id,
     });
-    return failed(
-      run,
-      'This machine approves pairings with Touch ID, in the Memnox app.',
-    );
+    return failed(run, `This machine approves pairings with ${KEY}, in the Memnox app.`);
   }
   showQr(run, pairing.qr, pairing.expiresAt);
   const reached = await answeredOrOver(run.dial, pairing.id);
@@ -112,7 +110,7 @@ async function whyNot(run: PairRun): Promise<string | null> {
   const listed = await run.dial.ask({ id: 1, method: DAEMON_METHOD.DEVICES_LIST });
   if (listed === null) return NO_DAEMON;
   return listed.devices?.some((each) => each.kind === DEVICE_KIND.MAC) === true
-    ? 'This Mac approves pairings with Touch ID, so pair from the Memnox app in the menu bar.'
+    ? `This ${MACHINE} approves pairings with ${KEY}, so pair from the Memnox app in the menu bar.`
     : null;
 }
 

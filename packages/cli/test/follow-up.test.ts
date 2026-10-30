@@ -18,7 +18,7 @@ import {
 import type { RemotePrincipal } from '../src/daemon/confirm';
 import { followUpAnswer, type FollowUpDeps } from '../src/daemon/follow-up';
 import { personKey, type PersonKey } from './phone-harness';
-import { MACHINE } from '../src/this-machine';
+import { KEY, MACHINE } from '../src/this-machine';
 
 /**
  * Words typed on a phone into one session: they reach it as they are, and only under that phone's
@@ -181,7 +181,7 @@ describe('a follow up typed on a phone', () => {
     const signature = p.key.signs(followUpMessage(SESSION, WORDS));
     expect((await followUpAnswer(request({ signature }), p.deps)).ok).toBe(true);
     expect((await followUpAnswer(request({}), p.deps)).reason).toContain(
-      'Touch ID on this Mac',
+      `${KEY} on this ${MACHINE}`,
     );
   });
 });

@@ -13,6 +13,7 @@ import { registerDevicesCommand } from '../src/commands/devices.command';
 import { registerPairCommand } from '../src/commands/pair.command';
 import type { DaemonDial } from '../src/remote/daemon-dial';
 import { plainStyle } from '../src/style';
+import { KEY } from '../src/this-machine';
 
 const LINK = 'memnox://pair?d=eyJ2IjoxfQ';
 
@@ -162,7 +163,7 @@ describe('memnox pair', () => {
     const out = await pair(daemon, []);
 
     expect(daemon.asked.map((each) => each.method)).toEqual([DAEMON_METHOD.DEVICES_LIST]);
-    expect([...out.lines, ...out.notes].join('\n')).toContain('Touch ID');
+    expect([...out.lines, ...out.notes].join('\n')).toContain(KEY);
   });
 
   it('declines the pairing when the person types nothing', async () => {

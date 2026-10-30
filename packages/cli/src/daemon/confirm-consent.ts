@@ -11,6 +11,7 @@ import {
 } from '@memnox/core';
 import type { ConfirmInput } from './confirm';
 import { signedMessage } from './confirm-edit';
+import { KEY } from '../this-machine';
 
 /**
  * Whether an answer counts and who the ledger names for it: a refusal never needs proof, and a yes
@@ -22,8 +23,7 @@ const BY_VOICE = 'person (voice)';
 /** A yes to a call that stays inside its session's repository, which needs no fingerprint. */
 const IN_SESSION = 'person (inside the session)';
 
-const UNSIGNED =
-  'letting something happen needs Touch ID, and this answer carries no valid signature';
+const UNSIGNED = `letting something happen needs ${KEY}, and this answer carries no valid signature`;
 
 /** What an answer needs before it counts. */
 export interface Needs {

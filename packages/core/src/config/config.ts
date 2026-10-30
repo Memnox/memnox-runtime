@@ -4,6 +4,7 @@ import {
   type EnforcementMode,
 } from '../constants/enforcement.constants';
 import { isEnforcementMode } from '../domain/enforcement';
+import { keyWord } from '../constants/machine-word.constants';
 import { isLoopbackUrl } from '../memory/embedding';
 import { DEFAULT_NOTICE_WARMUP_DAYS } from '../notice/notice.constants';
 import {
@@ -179,8 +180,11 @@ function splitList(value: string): string[] {
     .filter((each) => each !== '');
 }
 
-/** Written with the comments a person reads before changing a mode by hand. */
-export function renderConfig(config: MemnoxConfig): string {
+/**
+ * Written with the comments a person reads before changing a mode by hand. The platform names the
+ * key in them, given by whoever writes the file, so this stays pure.
+ */
+export function renderConfig(config: MemnoxConfig, os = ''): string {
   return [
     '# Memnox: written on first run, yours to edit.',
     '',
@@ -207,12 +211,12 @@ export function renderConfig(config: MemnoxConfig): string {
     '# Days after setup when those are only recorded, so day one is not a wall of asks.',
     `noticeWarmupDays = ${config.noticeWarmupDays}`,
     '',
-    ...renderRouting(config),
+    ...renderRouting(config, os),
   ].join('\n');
 }
 
 /** Where questions and paths go, and the autopilot: the half of the file added later. */
-function renderRouting(config: MemnoxConfig): string[] {
+function renderRouting(config: MemnoxConfig, os: string): string[] {
   return [
     '# session | both. A question the agent cannot show its own prompt for is always',
     '# asked in the agent session; both also sends it to your Slack or Discord DM.',
@@ -228,7 +232,7 @@ function renderRouting(config: MemnoxConfig): string[] {
     `autopilot = ${config.autopilot}`,
     '',
     '# Listen for your paired phones on the local network as well as through Memnox Cloud.',
-    '# Turned on from the Mac, signed with Touch ID, since it widens who can reach this machine.',
+    `# Turned on from the Mac, signed with ${keyWord(os)}, since it widens who can reach this machine.`,
     `lan = ${config.lan === true}`,
     '',
     '# Memory search ranks by meaning as well as by keyword with a local embedding model,',

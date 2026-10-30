@@ -25,6 +25,7 @@ import type { CloudCall } from '../src/sync/rule-draft-cloud';
 import { callOperatorTool } from '../src/session-tools/operator-tools';
 import type { SessionToolDeps } from '../src/session-tools/read-tools';
 import type { RewindSeams } from '../src/session-tools/rewind-tool';
+import { KEY_THEIRS } from '../src/this-machine';
 
 /**
  * Any rule a person says, on the Mac or the phone: read back, signed, in force on this machine from
@@ -117,7 +118,7 @@ describe('a rule said to the voice', () => {
       sentence: 'Codex may not touch the payments database',
     })) as { proposed: string; readBack: string; said: string; offeredToTeam: boolean };
     expect(answer.readBack).toBe('Codex-cli may not touch anything named payments.');
-    expect(answer.said).toContain('Touch ID');
+    expect(answer.said).toContain(KEY_THEIRS);
     expect(answer.offeredToTeam).toBe(false);
 
     const query = { action: 'sql.query', target: 'postgres://db/payments' };

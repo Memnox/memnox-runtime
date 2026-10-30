@@ -32,7 +32,7 @@ import type { HeartbeatBeats } from '../sync/beat';
 import { cloudRelay, type RelayCloud } from '../sync/relay';
 import { defaultBaseUrl } from '../sync/cloud-url';
 import { ensureDeviceSpace, relayMachine, spaceBaseUrl } from '../sync/device-space';
-import { DriveGrants } from './drive';
+import { DriveGrants, GRANT_UNSIGNED } from './drive';
 import { loadNoise, type Noise } from './noise';
 import { LocalNetwork, type LanSeams } from './local-network';
 import { PairingBook, refused } from './pairings';
@@ -282,8 +282,7 @@ export class RemoteEndpoint {
       mac === null ||
       (signature !== undefined &&
         verifiesSigned(mac.signingPoint, grantMessage(deviceId, capability), signature));
-    if (!signed)
-      return refused(request, "Giving a device more needs this Mac's Touch ID.");
+    if (!signed) return refused(request, GRANT_UNSIGNED);
     const granted = await devices.grant(deviceId, capability);
     if (granted === null) return refused(request, 'No paired device has that id.');
     return {

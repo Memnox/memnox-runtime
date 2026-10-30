@@ -33,6 +33,7 @@ import {
   settle,
   type PersonKey,
 } from './phone-harness';
+import { THIS_MACHINES_KEY } from '../src/this-machine';
 
 /**
  * Pairing a phone and talking through its tunnel, with the real snow addon and an in memory relay.
@@ -336,7 +337,7 @@ describe('pairing on a machine with no Mac key, such as a server reached over SS
     });
 
     expect(typed.outcome).toBe(REMOTE_OUTCOME.REFUSED);
-    expect(typed.reason).toContain('Touch ID');
+    expect(typed.reason).toContain(THIS_MACHINES_KEY);
   });
 
   it('pairs a Mac reaching it through the relay as a desktop, with what a phone holds', async () => {

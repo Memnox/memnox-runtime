@@ -16,6 +16,7 @@ import {
 import { draftInCloud, type CloudCall } from '../sync/rule-draft-cloud';
 import { machinePolicyPath } from './machine-rules';
 import { machineScope } from './rule-scope';
+import { KEY_THEIRS } from '../this-machine';
 
 /**
  * A rule a person said, drafted by the enrolled workspace (whose plan decides if a model reads it) or by
@@ -113,7 +114,7 @@ export function spokenRuleSentence(answer: SpokenRuleAnswer): string {
   const team = answer.offeredToTeam
     ? ' Once they confirm it also goes to the team as a proposal, and it becomes a team rule only when a second admin approves it.'
     : '';
-  return `Read it back: ${answer.readBack} It holds on this machine from the next action once they confirm with Touch ID or Face ID, and not before.${team}`;
+  return `Read it back: ${answer.readBack} It holds on this machine from the next action once they confirm with ${KEY_THEIRS} or Face ID, and not before.${team}`;
 }
 
 /** A comma separated list of what the person named, as its parts. */

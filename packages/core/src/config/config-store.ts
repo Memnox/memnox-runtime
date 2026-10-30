@@ -1,4 +1,5 @@
 import { mkdir, readFile } from 'node:fs/promises';
+import { platform } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
   CONFIG_FILE,
@@ -71,5 +72,5 @@ export async function saveLanSetting(home: string, on: boolean): Promise<void> {
 export async function saveConfig(home: string, config: MemnoxConfig): Promise<void> {
   const path = configPathFor(home);
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeAtomic(path, renderConfig(config));
+  await writeAtomic(path, renderConfig(config, platform()));
 }

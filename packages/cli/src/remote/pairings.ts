@@ -30,6 +30,7 @@ import {
 } from './pairing';
 import { MAILBOX_BYTES } from './framing';
 import { readVoice, runtimeNoiseKey, type NoiseKeypair } from './remote-files';
+import { THIS_MACHINES_KEY } from '../this-machine';
 
 /**
  * The pairings this machine has open: a cloud mailbox or a local one, a QR, a handshake, and the
@@ -261,7 +262,7 @@ export class PairingBook {
     if (approver === PAIR_APPROVER.MAC_KEY) {
       return (await this.signedByMac(pairing.id, phone, request.signature))
         ? null
-        : refused(request, "That approval was not signed with this Mac's Touch ID.");
+        : refused(request, `That approval was not signed with ${THIS_MACHINES_KEY}.`);
     }
     return sameDigits(phone.code, request.code)
       ? null
