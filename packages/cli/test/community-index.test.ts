@@ -9,9 +9,12 @@ import {
   DAEMON_METHOD,
   INDEX_FORMAT,
   INDEX_KIND,
+  INDEX_SOURCE,
   indexContentPath,
   orgSkillDigest,
+  PROPOSAL_ANSWER,
   PROPOSAL_KIND,
+  proposalCapability,
   Proposals,
   readSkillsHub,
   writeAccount,
@@ -19,6 +22,7 @@ import {
   type DaemonResponse,
 } from '@memnox/core';
 import { communityIndexAnswer } from '../src/daemon/community-index-answer';
+import { applyIndexSourceProposal } from '../src/daemon/index-source-answer';
 import { isVoiceMethod } from '../src/daemon/voice-methods';
 import { CloudUnreachable, type CloudResponse } from '../src/sync/client';
 import type { IndexSend } from '../src/marketplace/index-source';
@@ -213,19 +217,59 @@ describe('the community index', () => {
     expect(offline.communityIndex?.said).toContain('could not be reached');
   });
 
-  it('reads a plain git repository named at the machine, and never from a phone', async () => {
+  it('reads a plain git repository once the Mac signs for it, and never from a phone', async () => {
     const raw = 'https://raw.example/acme/skills/main/';
     const at = await machine(await shelf(raw));
-    const fromPhone = await at.ask({ indexSource: `${raw}index.json` }, true);
-    expect(fromPhone.ok).toBe(false);
-    const clear = await at.ask({ indexSource: 'http://raw.example/index.json' });
-    expect(clear.ok).toBe(false);
-    const named = await at.ask({ indexSource: `${raw}index.json` });
-    expect(named.communityIndex?.source).toBe(`${raw}index.json`);
-    expect(named.communityIndex?.entries).toHaveLength(3);
+    const setSource = (indexSource: string | undefined, remote = false) =>
+      at.ask(
+        {
+          method: DAEMON_METHOD.INDEX_SOURCE_SET,
+          ...(indexSource === undefined ? {} : { indexSource }),
+        },
+        remote,
+      );
+    expect((await setSource(`${raw}index.json`, true)).ok).toBe(false);
+    expect((await setSource('http://raw.example/index.json')).ok).toBe(false);
+    const named = await setSource(`${raw}index.json`);
+    expect(named.proposed).toMatch(/^prp_/);
+    // Nothing is trusted before the signature: the marketplace is still what is read.
+    expect(named.communityIndex?.source).toBe(`${MARKETPLACE}index.json`);
+    const [proposal] = await new Proposals(at.home).open(NOW.toISOString());
+    expect(proposal?.change).toEqual({
+      kind: PROPOSAL_KIND.INDEX_SOURCE,
+      source: `${raw}index.json`,
+    });
+    if (proposal === undefined) throw new Error('nothing was proposed');
+    expect(proposalCapability(proposal.change)).toBeNull();
+    expect(await applyIndexSourceProposal(at.home, proposal.change)).toEqual({
+      ok: true,
+      outcome: PROPOSAL_ANSWER.CONFIRMED,
+    });
+    const read = await at.ask({ indexRefresh: true });
+    expect(read.communityIndex?.source).toBe(`${raw}index.json`);
+    expect(read.communityIndex?.marketplace).toBe(false);
+    expect(read.communityIndex?.entries).toHaveLength(3);
     // Nobody reviewed a git index's publishers, so each of its listings says so.
-    for (const entry of named.communityIndex?.entries ?? [])
+    for (const entry of read.communityIndex?.entries ?? [])
       expect(entry.warnings[0]).toContain('not verified');
+    expect((await setSource(`${raw}index.json`)).proposed).toBeUndefined();
+  });
+
+  it('goes back to the marketplace at once, since that only narrows what is trusted', async () => {
+    const raw = 'https://raw.example/acme/skills/main/';
+    const at = await machine(await shelf(MARKETPLACE));
+    await applyIndexSourceProposal(at.home, {
+      kind: PROPOSAL_KIND.INDEX_SOURCE,
+      source: `${raw}index.json`,
+    });
+    const back = await at.ask({
+      method: DAEMON_METHOD.INDEX_SOURCE_SET,
+      indexSource: INDEX_SOURCE.MARKETPLACE,
+    });
+    expect(back.proposed).toBeUndefined();
+    expect(back.communityIndex?.source).toBe(`${MARKETPLACE}index.json`);
+    expect(back.communityIndex?.marketplace).toBe(true);
+    expect(await new Proposals(at.home).open(NOW.toISOString())).toEqual([]);
   });
 
   it('holds a skill whose digest matches in the Skills Hub until it is accepted', async () => {

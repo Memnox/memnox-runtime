@@ -132,6 +132,7 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.INDEX_LIST]: REMOTE_CAPABILITY.SEE,
   // Checked against its digest, and only ever a skill held for acceptance or a pack's rules proposed.
   [DAEMON_METHOD.INDEX_INSTALL]: REMOTE_CAPABILITY.ASK,
+  // index-source-set is left out on purpose: which index this machine trusts is decided at the machine.
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
@@ -211,6 +212,8 @@ export function proposalCapability(change: ProposedChange): RemoteCapability | n
   if (change.kind === PROPOSAL_KIND.LAN) return null;
   // The sync key opens everything the person syncs, so only the Mac, with Touch ID, moves it.
   if (change.kind === PROPOSAL_KIND.PERSONAL_SYNC_KEY) return null;
+  // Another index decides what can be installed here, so only the Mac, with Touch ID, trusts one.
+  if (change.kind === PROPOSAL_KIND.INDEX_SOURCE) return null;
   // A project's servers, skills and rule file reach as far as each of them does on its own.
   if (change.kind === PROPOSAL_KIND.PROJECT) return REMOTE_CAPABILITY.RULES;
   // Taking a deny or an ask away widens what agents may do, exactly as adding an allow does.

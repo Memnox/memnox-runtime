@@ -193,6 +193,7 @@ export async function indexView(
   const entries = read.index === undefined ? [] : filter.matching(read.index.entries);
   return {
     source: read.source,
+    marketplace: read.marketplace,
     ...(read.fetchedAt === undefined ? {} : { fetchedAt: read.fetchedAt }),
     complete: read.index === undefined ? false : read.index.complete,
     entries: entries.map((entry) =>

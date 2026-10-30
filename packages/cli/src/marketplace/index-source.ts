@@ -72,6 +72,17 @@ export async function setIndexSource(
   return { ok: true };
 }
 
+/** Back to the marketplace, which only narrows what is trusted, so it is done at once. */
+export async function resetIndexSource(home: string): Promise<void> {
+  const { source: _named, ...kept } = await readKept(home);
+  await writeJsonFile(cachePathFor(home), kept);
+}
+
+/** The source read from now, so a request naming it again raises nothing. */
+export async function currentIndexSource(home: string): Promise<string> {
+  return sourceOf(home, await readKept(home));
+}
+
 /** The index, read again where it is stale, asked for, or from another source; else as kept. */
 export async function readIndex(
   home: string,

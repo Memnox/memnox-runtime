@@ -9,6 +9,14 @@ export const INDEX_METHOD = {
   INDEX_LIST: 'index-list',
   /** Fetches one version, checks its digest, and holds the skill or proposes the pack's rules. */
   INDEX_INSTALL: 'index-install',
+  /** Where the index is read from: a new one is a proposal the Mac signs, the marketplace again is at once. */
+  INDEX_SOURCE_SET: 'index-source-set',
+} as const;
+
+/** The source named by a word rather than a URL. */
+export const INDEX_SOURCE = {
+  /** Memnox Cloud's marketplace, of the workspace this machine is on: the default. */
+  MARKETPLACE: 'marketplace',
 } as const;
 
 /** What a listing is, in the marketplace's own words. */
@@ -67,6 +75,8 @@ export interface IndexEntryView {
 export interface CommunityIndexView {
   /** Where the index was read from. */
   source: string;
+  /** Whether that is a Memnox Cloud marketplace, the default, rather than an index somebody named. */
+  marketplace: boolean;
   /** When it was read; absent before it was ever read. */
   fetchedAt?: string;
   /** False where the index held more than it carries. */
@@ -97,7 +107,7 @@ export interface IndexRequestFields {
   indexKind?: IndexKind;
   /** On INDEX_LIST: read again now rather than from what was last read. */
   indexRefresh?: boolean;
-  /** On INDEX_LIST, from this machine only: the index to read from now on, an https URL to its `index.json`. */
+  /** On INDEX_SOURCE_SET, from this machine only: an https URL to an `index.json`, or `marketplace`; absent is `marketplace`. */
   indexSource?: string;
   /** On INDEX_INSTALL: the listing, by id or by name. */
   indexName?: string;

@@ -244,7 +244,8 @@
       "profile-remove",
       "profile-apply",
       "index-list",
-      "index-install"
+      "index-install",
+      "index-source-set"
     ],
     "events": [
       "held",

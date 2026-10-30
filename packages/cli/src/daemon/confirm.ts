@@ -33,6 +33,7 @@ import { applySkillsProposal } from './skills-hub-confirm';
 import { applyProjectProposal } from './projects-confirm';
 import { applyBackupProposal } from './backup-confirm';
 import { applyLanProposal } from './lan-answer';
+import { applyIndexSourceProposal } from './index-source-answer';
 import { afterConfirmed, applyPersonalSyncProposal } from './personal-sync-answer';
 import { applyStudioProposal } from './studio-confirm';
 import {
@@ -342,6 +343,7 @@ async function apply(
     (await applyProjectProposal(home, change, new Date(at))) ??
     (await applyBackupProposal(home, change, new Date(at))) ??
     (await applyLanProposal(home, change)) ??
+    (await applyIndexSourceProposal(home, change)) ??
     (await applyPersonalSyncProposal(home, change)) ?? {
       ok: false,
       error: `${proposal.id} is nothing to apply`,

@@ -56,6 +56,8 @@ export const PROPOSAL_KIND = {
   LAN: 'lan',
   /** The personal sync key sealed to another of the person's machines, or taken from one, behind a fingerprint both show. */
   PERSONAL_SYNC_KEY: 'personal-sync-key',
+  /** The community index read from another source, which decides what can be installed here, so only the Mac signs it. */
+  INDEX_SOURCE: 'index-source',
 } as const;
 
 export type ProposedChange =
@@ -118,6 +120,7 @@ export type ProposedChange =
       createdAt: string;
     }
   | { kind: typeof PROPOSAL_KIND.LAN; on: true }
+  | { kind: typeof PROPOSAL_KIND.INDEX_SOURCE; source: string }
   | {
       kind: typeof PROPOSAL_KIND.PERSONAL_SYNC_KEY;
       /** What both machines showed, checked again before the key moves. */
