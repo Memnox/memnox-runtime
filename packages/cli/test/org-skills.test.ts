@@ -9,12 +9,16 @@ import {
   orgSkillDigest,
   orgSkillsFrom,
   orgSkillsPathFor,
+  PROPOSAL_KIND,
+  Proposals,
   readOrgSkills,
+  readSkillsHub,
   SKILL_SCOPE,
   type DaemonRequest,
   type DaemonResponse,
 } from '@memnox/core';
 import { skillsHubAnswer } from '../src/daemon/skills-hub-answer';
+import { syncSkills } from '../src/skills/skills-writer';
 import { applyBundle, PULL_OUTCOME, type Bundle } from '../src/sync/bundle';
 
 /**
@@ -220,5 +224,25 @@ describe('organization skills', () => {
       }),
     ]);
     expect(existsSync(join(dir, ...CLAUDE_SKILL))).toBe(false);
+  });
+
+  it('raise what they declare they need as rules for the agents they were written into, once', async () => {
+    const dir = await home();
+    const needy = {
+      ...REVIEW,
+      permissions: { filesystem: [], network: ['api.example.com'], commands: ['curl'] },
+    };
+    await applyBundle(dir, bundleWith([needy]), { now: () => NOW.getTime() });
+    const open = await new Proposals(dir).open(NOW.toISOString());
+    expect(open).toHaveLength(2);
+    for (const proposal of open) {
+      expect(proposal.change.kind).toBe(PROPOSAL_KIND.RULES);
+      if (proposal.change.kind !== PROPOSAL_KIND.RULES) continue;
+      expect(proposal.change.rules[0]?.match.agents).toContain('claude-code');
+      expect(proposal.change.rules[0]?.match.agents).not.toContain('cursor');
+    }
+    // Written again with nothing new, nothing more is asked of the person.
+    await syncSkills(dir, await readSkillsHub(dir), NOW);
+    expect(await new Proposals(dir).open(NOW.toISOString())).toHaveLength(2);
   });
 });

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  canonicalOrgSkill,
   NATIVE_PLACED,
   placeNativeFile,
   placeNativeFolder,
@@ -22,7 +23,8 @@ import {
   recordConfigChanges,
   type ConfigRecord,
 } from '../keeper/config-events';
-import { orgHubSkills } from './org-skill-hub';
+import { orgHubSkills, type OrgHubSkill } from './org-skill-hub';
+import { proposeOrgSkillNeeds, type OrgSkillWritten } from './org-skill-needs';
 import { readKeptSkill, type KeptSkill } from './skill-standing';
 
 /**
@@ -71,14 +73,14 @@ export async function syncSkills(
     }
     wanted.push(...wantedOf(home, skill, read, skipped));
   }
-  for (const org of await orgHubSkills(home, hub)) {
-    wanted.push(...wantedOf(home, org.skill, org.read, skipped));
-  }
+  const orgs = await orgHubSkills(home, hub);
+  for (const org of orgs) wanted.push(...wantedOf(home, org.skill, org.read, skipped));
   const removed = await removeStale(hub.written, [...wanted, ...kept]);
   const placed = await placeWanted(hub.written, wanted, skipped);
   const next = { ...hub, written: [...kept, ...placed.written] };
   await writeSkillsHub(home, next);
   await recordConfigChanges(home, [...placed.records, ...removed.records], now);
+  await proposeOrgSkillNeeds(home, orgsWritten(orgs, placed.written), now);
   return {
     hub: next,
     summary: {
@@ -88,6 +90,23 @@ export async function syncSkills(
       skipped,
     },
   };
+}
+
+/** Each organization skill with the agents it now sits in, which its needs are proposed for. */
+function orgsWritten(
+  orgs: readonly OrgHubSkill[],
+  written: readonly SkillWritten[],
+): OrgSkillWritten[] {
+  return orgs.map((org) => ({
+    name: org.org.name,
+    digest: org.org.digest,
+    skill: canonicalOrgSkill(org.org),
+    agents: [
+      ...new Set(
+        written.filter((each) => each.skill === org.org.name).map((each) => each.agent),
+      ),
+    ],
+  }));
 }
 
 function wantedOf(
