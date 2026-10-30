@@ -30,6 +30,7 @@ import { editedProposal, ranOf } from './confirm-edit';
 import { applyPersonal } from './confirm-work';
 import { applyHubProposal } from './mcp-hub-confirm';
 import { applySkillsProposal } from './skills-hub-confirm';
+import { applyProjectProposal } from './projects-confirm';
 import { applyStudioProposal } from './studio-confirm';
 import {
   FROM_NOW_ON,
@@ -333,7 +334,8 @@ async function apply(
     return applySkillsProposal(home, change.skills, new Date(at));
   return (
     (await applyPersonal(home, proposal)) ??
-    (await applyStudioProposal(home, change, new Date(at))) ?? {
+    (await applyStudioProposal(home, change, new Date(at))) ??
+    (await applyProjectProposal(home, change, new Date(at))) ?? {
       ok: false,
       error: `${proposal.id} is nothing to apply`,
     }
