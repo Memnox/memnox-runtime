@@ -3,6 +3,7 @@ import {
   hubServerProblems,
   isOrgServer,
   isOwnServer,
+  proxiedRemoteOf,
   readHub,
   readOrgServers,
   unwrapLaunch,
@@ -102,13 +103,7 @@ function serverOf(name: string, entry: unknown): HubServer | null {
   // Cast is safe: each field is checked for its type below before it is used.
   const line = entry as Record<string, unknown>;
   if (typeof line['url'] === 'string')
-    return {
-      name,
-      transport: HUB_TRANSPORT.HTTP,
-      url: line['url'],
-      env: {},
-      secrets: {},
-    };
+    return remoteServer(name, line['url'], stringsOf(line['headers']));
   if (typeof line['command'] !== 'string') return null;
   const args = Array.isArray(line['args'])
     ? line['args'].filter((arg): arg is string => typeof arg === 'string')
@@ -120,6 +115,8 @@ function serverOf(name: string, entry: unknown): HubServer | null {
   };
   // Memnox's own session server answers from the ledger, so putting it behind the proxy would govern itself.
   if (isOwnServer(launch)) return null;
+  const remote = proxiedRemoteOf(launch);
+  if (remote !== null) return remoteServer(name, remote.url, remote.headers);
   const original = unwrapLaunch(launch) ?? launch;
   return {
     name,
@@ -127,6 +124,22 @@ function serverOf(name: string, entry: unknown): HubServer | null {
     command: original.command,
     args: original.args,
     env: original.env ?? {},
+    secrets: {},
+  };
+}
+
+/** A remote server as the hub keeps it, from a URL line or one the proxy already reaches it through. */
+function remoteServer(
+  name: string,
+  url: string,
+  headers: Record<string, string>,
+): HubServer {
+  return {
+    name,
+    transport: HUB_TRANSPORT.HTTP,
+    url,
+    ...(Object.keys(headers).length === 0 ? {} : { headers }),
+    env: {},
     secrets: {},
   };
 }

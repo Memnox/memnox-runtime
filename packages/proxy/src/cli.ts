@@ -18,6 +18,8 @@ import {
   probationOf,
   projectIdAt,
   protectionStopped,
+  remoteAddressProblem,
+  resolveHeaderRefs,
   SESSION_VAR,
   trustCommandFor,
   UNNAMED_AGENT,
@@ -27,7 +29,7 @@ import {
 } from '@memnox/core';
 
 import { parseFirewallArgs, type FirewallArgs } from './firewall-args';
-import { McpFirewall, type FirewallOptions } from './firewall';
+import { McpFirewall, type FirewallOptions, type RemoteServer } from './firewall';
 import { ENV_TOOLS_ALLOW, ENV_TOOLS_DENY } from './firewall.constants';
 import { LiveGate } from './live-gate';
 import { localGateEnvironment } from './local-gate-loader';
@@ -39,9 +41,11 @@ import { sessionLimitsFor } from './session-limits';
  */
 
 const USAGE = `Usage: memnox-mcp-proxy --name <server-name> -- <server command...>
+       memnox-mcp-proxy --name <server-name> --url <https url> [--header "Name: value"]...
 
-Wraps a stdio MCP server. Every tools/call is ruled on in this process before it
-reaches the server, so a call's arguments never leave the machine.
+Wraps a stdio MCP server, or reaches a streamable HTTP one. Every tools/call is ruled
+on in this process before it reaches the server, so a refused call never leaves the
+machine. A header value may name a kept secret as memnox-secret:<name>.
 
 Normally you do not run this by hand: "memnox mcp wrap" points your agent's config
 at it, and "memnox mcp unwrap" puts the config back.
@@ -72,7 +76,36 @@ async function main(): Promise<void> {
   }
 
   await resolveSecrets(homedir());
-  new McpFirewall(await firewallOptionsFor(args, homedir())).start();
+  const remote = await remoteFor(args, homedir());
+  const options = await firewallOptionsFor(args, homedir());
+  new McpFirewall(remote === undefined ? options : { ...options, remote }).start();
+}
+
+/**
+ * The remote server's address and headers, each secret a header names read from the OS store here
+ * and nowhere else. Only header names are ever said, since a value may be a credential.
+ */
+async function remoteFor(
+  args: FirewallArgs,
+  home: string,
+): Promise<RemoteServer | undefined> {
+  const url = args.url;
+  if (url === undefined) return undefined;
+  const problem = remoteAddressProblem(url);
+  if (problem !== undefined) {
+    warn(problem);
+    process.exit(EXIT.FAILED);
+  }
+  const store = nodeSecretStore(home);
+  const resolved = await resolveHeaderRefs(args.headers ?? {}, (name) => store.get(name));
+  if (resolved.missing.length > 0) {
+    for (const each of resolved.missing)
+      warn(
+        `the ${each.header} header needs the secret ${each.secret}, which this machine does not hold`,
+      );
+    process.exit(EXIT.FAILED);
+  }
+  return { url, headers: resolved.headers };
 }
 
 /**

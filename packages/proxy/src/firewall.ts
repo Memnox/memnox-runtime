@@ -10,17 +10,9 @@ import {
   toolArrivalEvent,
   UNNAMED_AGENT,
   UNNAMED_SESSION,
-  type EnforcementMode,
   type McpToolDeclaration,
   type PinnedTool,
-  type ToolPins,
   type EventSink,
-  type HoldService,
-  type LocalGate,
-  type SessionNote,
-  type SessionNotes,
-  type SharedActions,
-  type UnusualNotice,
 } from '@memnox/core';
 
 import {
@@ -31,14 +23,19 @@ import {
   type CallAuthorizer,
 } from './call-authorizer';
 import { DuplicateWorkAuthorizer } from './duplicate-work';
-import type { GateSource } from './live-gate';
+import {
+  notesFor,
+  taintFor,
+  unnamedSession,
+  type FirewallOptions,
+  type RemoteServer,
+} from './firewall-options';
 import { FirewallSession, type FirewallChannel } from './firewall-session';
+import { HttpUpstream } from './http-upstream';
 import { LineBuffer } from './json-rpc';
-import { ProbationAuthorizer, type ProbationLookup } from './probation-authorizer';
+import { ProbationAuthorizer } from './probation-authorizer';
 import { recordToLedger, type LedgerContext } from './ledger';
-import type { SessionLimits } from './session-limits';
 import type { McpCallRecord } from './result-guard';
-import type { ToolCall } from './tool-call';
 import { ToolFilter } from './tool-filter';
 import { ToolManifest } from './tool-manifest';
 
@@ -47,98 +44,7 @@ import { ToolManifest } from './tool-manifest';
  * verdict on every `tools/call` in between. Everything else is forwarded untouched.
  */
 
-export interface FirewallOptions {
-  /** The wrapped MCP server, e.g. ["npx", "-y", "@some/mcp-server"]. */
-  command: string[];
-  serverName: string;
-  allowPattern?: string;
-  denyPattern?: string;
-  /** Groups this proxy's calls in the audit timeline. */
-  sessionId?: string;
-  /** The project of the folder the proxy runs in, so a rule scoped to that project decides. */
-  projectId?: string;
-  /** That folder, so a rule held to a repository's folders decides its calls as a hook's. */
-  workingDirectory?: string;
-  /** Loading is the caller's job because it reads files; see loadLocalGate. */
-  gate?: LocalGate;
-  /** Read again on every call, so a pause or a pulled bundle bites at once; wins over `gate`. */
-  gates?: GateSource;
-  /** The wrapped server's environment, which may name the database it reaches. */
-  env?: NodeJS.ProcessEnv;
-  log?: (message: string) => void;
-  /** The MCP client this wraps, for the row. Never a credential. */
-  agent?: string;
-  /**
-   * Where rows go, opened by the caller; absent means
-   * no recording, so a test writes to no ledger.
-   */
-  ledger?: EventSink;
-  /** Supplied so a row's time is the caller's to fix in a test. */
-  now?: () => Date;
-  /**
-   * The pause and the budget. Absent means neither
-   * is consulted, so nothing here reads a disk.
-   */
-  limits?: SessionLimits;
-  /** True while `memnox stop` holds. Absent means never, so a test reads no disk. */
-  stopped?: () => Promise<boolean>;
-  /**
-   * Holds an ASK for a person. Absent means an ASK
-   * is a denial and says so, right for a test only.
-   */
-  hold?: HoldService;
-  /**
-   * The workspace's register of what other agents
-   * are about to do. Absent means nothing is asked.
-   */
-  actions?: SharedActions;
-  /** The workspace's inbox for this agent. Absent means nothing is collected. */
-  notes?: SessionNotes;
-  /** Whether this server is still on probation. Absent means it never is. */
-  probation?: ProbationLookup;
-  /** Where an instruction-shaped result puts the session under suspicion. Absent, nowhere. */
-  notice?: UnusualNotice;
-  /** What this server listed last time. Absent means no listing is compared. */
-  pins?: ToolPins;
-  /** The machine's mode, for the row a new tool is recorded under. */
-  mode?: EnforcementMode;
-}
-
-/**
- * The session a claim is filed under when the agent named
- * none: one per proxy, as agents start servers per session.
- */
-function unnamedSession(): string {
-  return `ses_proxy_${process.pid}`;
-}
-
-/**
- * What this proxy collects notes as: the same
- * agent and session its claims are filed under.
- */
-function notesFor(options: FirewallOptions): { notes?: () => Promise<SessionNote[]> } {
-  const inbox = options.notes;
-  if (inbox === undefined) return {};
-  const agent = options.agent ?? UNNAMED_AGENT;
-  const session = options.sessionId ?? unnamedSession();
-  return { notes: () => inbox.collect(agent, session) };
-}
-
-/**
- * The server and tool whose result read like instructions, named so every
- * seam in the session can say which result it is still wary of.
- */
-function taintFor(options: FirewallOptions): {
-  onInstruction?: (call: ToolCall) => void;
-} {
-  const notice = options.notice;
-  if (notice === undefined) return {};
-  return {
-    onInstruction: (call) => {
-      notice.taint(`${options.serverName}.${call.name}`);
-    },
-  };
-}
+export type { FirewallOptions, RemoteServer } from './firewall-options';
 
 /** The signals an agent ends its servers with. */
 const ENDING_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'] as const;
@@ -148,6 +54,10 @@ export interface FirewallProcessDeps {
   spawn?: (command: string, args: string[]) => ChildProcess;
   input?: NodeJS.EventEmitter;
   exit?: (code: number) => void;
+  /** Where the agent's answers are written; stdout unless a test reads them. */
+  output?: (payload: string) => void;
+  /** How a remote server is reached; the global fetch unless a test answers for it. */
+  fetch?: typeof fetch;
 }
 
 /** What a shell would report for the server's end, so a signal is never read as a clean exit. */
@@ -167,6 +77,11 @@ export class McpFirewall {
   private readonly log: (message: string) => void;
   private readonly ledger: EventSink | null;
   private child: ChildProcess | null = null;
+  /** Set instead of the child for a server reached over HTTP. */
+  private upstream: HttpUpstream | null = null;
+  private output: (payload: string) => void = (payload) => {
+    process.stdout.write(payload);
+  };
   private readonly authorizer: CallAuthorizer;
   /** Set once the agent is ending the session, so its server stopping is not reported. */
   private ending = false;
@@ -304,6 +219,13 @@ export class McpFirewall {
    * Spawn, stream, and exit are parameters, and this class's only ambient dependencies.
    */
   start(deps: FirewallProcessDeps = {}): void {
+    if (deps.output !== undefined) this.output = deps.output;
+    const remote = this.options.remote;
+    if (remote === undefined) this.startLocal(deps);
+    else this.startRemote(remote, deps);
+  }
+
+  private startLocal(deps: FirewallProcessDeps): void {
     const [executable, ...args] = this.options.command;
     if (!executable) throw new Error('firewall requires a server command to wrap');
 
@@ -336,8 +258,35 @@ export class McpFirewall {
     });
     // A test that injects its own exit owns its own signals.
     if (deps.exit === undefined) this.releaseOnSignals(child, exit);
-    this.pipeClient(deps.input ?? process.stdin, child);
+    this.pipeClient(deps.input ?? process.stdin, () => {
+      const stdin = child.stdin;
+      if (stdin !== null) stdin.end();
+    });
     this.pipeServer(child);
+  }
+
+  /** A remote server has no process: the agent closing its stream, or a signal, ends the session. */
+  private startRemote(remote: RemoteServer, deps: FirewallProcessDeps): void {
+    const exit = deps.exit ?? ((code: number) => process.exit(code));
+    const upstream = new HttpUpstream({
+      ...remote,
+      name: this.options.serverName,
+      onLine: (line) => this.session.fromServer(line),
+      log: this.log,
+      ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+    });
+    this.upstream = upstream;
+    const finish = (status: number): void => {
+      if (this.exiting) return;
+      this.exiting = true;
+      void this.close()
+        .then(() => upstream.close())
+        .then(() => exit(status));
+    };
+    if (deps.exit === undefined)
+      for (const signal of ENDING_SIGNALS)
+        process.once(signal, () => finish(exitCodeForSignal(signal)));
+    this.pipeClient(deps.input ?? process.stdin, () => finish(EXIT.OK));
   }
 
   /**
@@ -357,17 +306,20 @@ export class McpFirewall {
     }
   }
 
-  private pipeClient(input: NodeJS.EventEmitter, child: ChildProcess): void {
+  private pipeClient(input: NodeJS.EventEmitter, ended: () => void): void {
     const clientToServer = new LineBuffer();
+    const ruling = new Set<Promise<void>>();
     input.on('data', (chunk: Buffer) => {
       for (const line of clientToServer.push(chunk.toString('utf8'))) {
-        void this.session.fromClient(line);
+        const ruled = this.session.fromClient(line);
+        ruling.add(ruled);
+        void ruled.finally(() => ruling.delete(ruled));
       }
     });
-    // Without forwarding the close, the child never sees an end and stays resident.
+    // Without forwarding the close, the server never sees an end; calls still being ruled on go first.
     input.on('end', () => {
-      const stdin = child.stdin;
-      if (stdin !== null) stdin.end();
+      if (ruling.size === 0) return ended();
+      void Promise.allSettled([...ruling]).then(ended);
     });
   }
 
@@ -449,6 +401,7 @@ export class McpFirewall {
   private buildChannel(): FirewallChannel {
     return {
       toServer: (payload) => {
+        if (this.upstream !== null) return this.upstream.send(payload);
         const child = this.child;
         if (child === null) return false;
 
@@ -462,7 +415,7 @@ export class McpFirewall {
         stdin.write(payload);
         return true;
       },
-      toClient: (payload) => process.stdout.write(payload),
+      toClient: (payload) => this.output(payload),
     };
   }
 }

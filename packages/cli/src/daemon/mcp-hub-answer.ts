@@ -256,7 +256,8 @@ function hubServerFrom(value: unknown): HubServer | null {
   if (!TRANSPORTS.includes(transport)) return null;
   const env = stringRecord(raw['env']);
   const secrets = stringRecord(raw['secrets']);
-  if (env === null || secrets === null) return null;
+  const headers = raw['headers'] === undefined ? undefined : stringRecord(raw['headers']);
+  if (env === null || secrets === null || headers === null) return null;
   if (args !== undefined && !isStringList(args)) return null;
   return {
     name,
@@ -266,6 +267,7 @@ function hubServerFrom(value: unknown): HubServer | null {
     ...(typeof command === 'string' ? { command } : {}),
     ...(args === undefined ? {} : { args }),
     ...(typeof url === 'string' ? { url } : {}),
+    ...(headers === undefined ? {} : { headers }),
     env,
     secrets,
   };

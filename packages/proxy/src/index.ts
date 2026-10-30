@@ -8,6 +8,7 @@ export * from './local-gate-loader';
 export * from './live-gate';
 export * from './firewall-session';
 export * from './firewall';
+export * from './http-upstream';
 export * from './ledger';
 export * from './session-limits';
 export * from './duplicate-work';

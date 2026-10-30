@@ -1,8 +1,9 @@
 # @memnox/proxy
 
-A transparent proxy for stdio MCP servers. Every `tools/call` is ruled on in this
-process before it reaches the server, and `tools/list` responses are filtered so a
-denied tool is never advertised in the first place.
+A transparent proxy for MCP servers, started over stdio or reached over streamable
+HTTP. Every `tools/call` is ruled on in this process before it reaches the server,
+and `tools/list` responses are filtered so a denied tool is never advertised in the
+first place.
 
 Ships as the `memnox-mcp-proxy` binary. You do not normally run it by hand —
 `memnox mcp wrap` points your agent's config at it, and `memnox mcp unwrap` puts
@@ -10,7 +11,16 @@ the config back, byte for byte.
 
 ```sh
 memnox-mcp-proxy --name github -- npx -y @modelcontextprotocol/server-github
+memnox-mcp-proxy --name github --url https://api.githubcopilot.com/mcp/ \
+  --header "Authorization: Bearer memnox-secret:github"
 ```
+
+A remote server gets the same filter, rules and ledger rows as a local one. A header
+value may name a kept secret as `memnox-secret:<name>`; the proxy reads it from the
+OS store when it starts, so the agent's config holds only the name, and no header
+value is ever logged. Plain `http` is accepted only for a server on this machine.
+One answer is bounded to 8 MiB and five minutes, and a credential never follows a
+redirect. The MCP Hub writes every remote server it hands an agent this way.
 
 ## What it does, in order
 

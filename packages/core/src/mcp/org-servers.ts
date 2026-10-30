@@ -48,7 +48,8 @@ function orgServerOf(value: unknown): OrgMcpServer | null {
   if (!TRANSPORTS.includes(transport)) return null;
   const env = stringRecord(raw['env']);
   const secrets = stringRecord(raw['secrets']);
-  if (env === null || secrets === null) return null;
+  const headers = raw['headers'] === undefined ? undefined : stringRecord(raw['headers']);
+  if (env === null || secrets === null || headers === null) return null;
   if (args !== undefined && !isStringList(args)) return null;
   if (agents !== undefined && !isStringList(agents)) return null;
   return {
@@ -59,6 +60,7 @@ function orgServerOf(value: unknown): OrgMcpServer | null {
     ...(typeof command === 'string' ? { command } : {}),
     ...(args === undefined ? {} : { args }),
     ...(typeof url === 'string' ? { url } : {}),
+    ...(headers === undefined ? {} : { headers }),
     env,
     secrets,
     ...(agents === undefined ? {} : { agents: kindsOf(agents) }),

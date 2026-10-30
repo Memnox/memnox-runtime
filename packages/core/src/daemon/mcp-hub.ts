@@ -65,6 +65,8 @@ export interface McpHubServerView {
   url?: string;
   /** Plain variables by name only, so a value pasted where a secret belonged is never read back. */
   envNames: string[];
+  /** On http: the headers sent, by name only, for the same reason. */
+  headerNames?: string[];
   /** Behind the proxy, so every call is ruled on and recorded. */
   governed: boolean;
   toolCount: number;
@@ -118,7 +120,7 @@ export interface McpSyncSummary {
 }
 
 export interface McpHubRequestFields {
-  /** On SERVER_PUT: the server as the form filled it, secrets as names only. */
+  /** On SERVER_PUT: the server as the form filled it, secrets as names only, a header's as `memnox-secret:<name>`. */
   mcpServer?: HubServer;
   /** On SERVER_REMOVE, ASSIGN, IMPORT and TEST: the server, by name. */
   mcpServerName?: string;

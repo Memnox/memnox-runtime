@@ -1,5 +1,5 @@
 import type { DiscoveredAgentKind } from '../discovery/discovery.constants';
-import { isKeptSecretName } from './secret-ref';
+import { isKeptSecretName, secretNamesIn } from './secret-ref';
 
 /**
  * The MCP Hub: servers declared once on this machine and handed to the agents a person
@@ -25,6 +25,8 @@ export interface HubServer {
   args?: string[];
   /** On http: where the server answers. */
   url?: string;
+  /** On http: sent with every request; a credential is written as `memnox-secret:<name>` and resolved by the proxy. */
+  headers?: Record<string, string>;
   /** Plain values, written into the agent's config as they are. */
   env: Record<string, string>;
   /** Env name to secret name: only a reference reaches the config, the value stays in the OS store. */
@@ -62,6 +64,21 @@ const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const HTTP_SCHEMES: readonly string[] = ['http:', 'https:'];
 
+/** A header's name as HTTP spells a token. */
+const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
+
+/** Headers that carry a credential, which only ever reach a config as a reference. */
+const CREDENTIAL_HEADERS: readonly string[] = [
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'x-api-key',
+  'api-key',
+];
+
+/** Plain http is for a server on this machine only, since a header may carry a credential. */
+const LOOPBACK_HOSTS: readonly string[] = ['localhost', '127.0.0.1', '[::1]'];
+
 export function emptyHub(): Hub {
   return { version: HUB_VERSION, servers: [], assignments: [], written: [] };
 }
@@ -87,7 +104,43 @@ export function hubServerProblems(server: HubServer): string[] {
     if (!isKeptSecretName(secret))
       problems.push(`${secret} is not a secret name Memnox can keep.`);
   }
+  problems.push(...headerProblems(server.headers ?? {}));
   return problems;
+}
+
+function headerProblems(headers: Readonly<Record<string, string>>): string[] {
+  const problems: string[] = [];
+  for (const [name, value] of Object.entries(headers)) {
+    if (!HEADER_NAME.test(name)) problems.push(`${name} is not a header name.`);
+    else if (
+      CREDENTIAL_HEADERS.includes(name.toLowerCase()) &&
+      secretNamesIn(value).length === 0
+    )
+      problems.push(`${name} carries a credential, so keep its value as a secret.`);
+  }
+  return problems;
+}
+
+/** Why a remote server cannot be reached at this address, or undefined when it can. */
+export function remoteAddressProblem(url: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // An unparseable address is the person's to fix, so it is said rather than thrown.
+    return `${url} is not an address.`;
+  }
+  if (!HTTP_SCHEMES.includes(parsed.protocol))
+    return 'A remote server is reached over http or https.';
+  if (parsed.protocol === 'http:' && !LOOPBACK_HOSTS.includes(parsed.hostname))
+    return 'A remote server off this machine is reached over https.';
+  return undefined;
+}
+
+/** Every secret a server names, in its environment and inside its headers, each once. */
+export function secretsOfServer(server: HubServer): string[] {
+  const inHeaders = Object.values(server.headers ?? {}).flatMap(secretNamesIn);
+  return [...new Set([...Object.values(server.secrets), ...inHeaders])];
 }
 
 function transportProblems(server: HubServer): string[] {
@@ -99,15 +152,8 @@ function transportProblems(server: HubServer): string[] {
   }
   if (server.url === undefined)
     return ['A remote server needs the address it answers on.'];
-  try {
-    if (!HTTP_SCHEMES.includes(new URL(server.url).protocol)) {
-      return ['A remote server is reached over http or https.'];
-    }
-  } catch {
-    // An unparseable address is the person's to fix, so it is said rather than thrown.
-    return [`${server.url} is not an address.`];
-  }
-  return [];
+  const problem = remoteAddressProblem(server.url);
+  return problem === undefined ? [] : [problem];
 }
 
 /** The agents a server is given to, in the order they were chosen. */

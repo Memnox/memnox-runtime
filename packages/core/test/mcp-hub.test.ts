@@ -3,19 +3,27 @@ import {
   emptyHub,
   HUB_TRANSPORT,
   hubServerProblems,
+  remoteAddressProblem,
+  secretsOfServer,
   withAssignment,
   withoutServer,
   withServer,
   type Hub,
   type HubServer,
 } from '../src/mcp/registry';
-import { resolveSecretRefs, secretNameOf, secretRef } from '../src/mcp/secret-ref';
+import {
+  resolveHeaderRefs,
+  resolveSecretRefs,
+  secretNameOf,
+  secretRef,
+} from '../src/mcp/secret-ref';
 import {
   DRIFT,
   entryDigest,
   entryFor,
   HUB_MARKER,
   planSync,
+  proxiedRemoteOf,
   writtenAfter,
   type ConfigServers,
 } from '../src/mcp/sync-plan';
@@ -74,6 +82,23 @@ describe('a hub server', () => {
     });
     expect(hubServerProblems(remote)).toEqual([
       'A remote server is reached over http or https.',
+    ]);
+  });
+
+  it('takes plain http only on this machine, and a credential header only as a secret', () => {
+    expect(remoteAddressProblem('http://127.0.0.1:8080/mcp')).toBeUndefined();
+    expect(remoteAddressProblem('http://localhost/mcp')).toBeUndefined();
+    expect(remoteAddressProblem('http://mcp.example.com')).toBe(
+      'A remote server off this machine is reached over https.',
+    );
+    const pasted = github({
+      transport: HUB_TRANSPORT.HTTP,
+      url: 'https://mcp.example.com',
+      command: undefined,
+      headers: { authorization: 'Bearer pasted', 'X-Team': 'core' },
+    });
+    expect(hubServerProblems(pasted)).toEqual([
+      'authorization carries a credential, so keep its value as a secret.',
     ]);
   });
 
@@ -215,16 +240,32 @@ describe('a sync', () => {
     expect(plan.files[0]?.update).toEqual([]);
   });
 
-  it('skips a remote server for an agent whose format it cannot write yet', () => {
+  it('writes a remote server behind the proxy, even for an agent whose config is TOML', () => {
     const remote = github({
       transport: HUB_TRANSPORT.HTTP,
       url: 'https://mcp.example.com',
       command: undefined,
+      headers: { Authorization: 'Bearer memnox-secret:github-token' },
     });
     const plan = planSync(hubWith(remote, CODEX), [
       { path: CODEX_FILE, format: CONFIG_FORMAT.TOML, agent: CODEX, servers: {} },
     ]);
-    expect(plan.files[0]?.skipped.map((each) => each.name)).toEqual(['github']);
+    const entry = plan.files[0]?.add[0]?.entry as ServerLaunch;
+    expect(entry.command).toBe(PROXY_BINARY);
+    expect(entry.args).toEqual(
+      expect.arrayContaining([
+        HUB_MARKER,
+        '--url',
+        'https://mcp.example.com',
+        '--header',
+        'Authorization: Bearer memnox-secret:github-token',
+      ]),
+    );
+    expect(proxiedRemoteOf(entry)).toEqual({
+      url: 'https://mcp.example.com',
+      headers: { Authorization: 'Bearer memnox-secret:github-token' },
+    });
+    expect(secretsOfServer(remote)).toEqual(['github-token']);
   });
 
   it('only reports on a file several agents share', () => {
@@ -237,5 +278,17 @@ describe('a sync', () => {
       },
     ]);
     expect(plan.files[0]).toMatchObject({ add: [], remove: [], found: ['db'] });
+  });
+});
+
+describe('a header that names a secret', () => {
+  it('is sent with the value in place of each reference, and a missing one is named', async () => {
+    const held: Record<string, string> = { github: ['v', 'a', 'l'].join('') };
+    const resolved = await resolveHeaderRefs(
+      { Authorization: 'Bearer memnox-secret:github', 'X-Other': 'memnox-secret:gone' },
+      async (name) => held[name],
+    );
+    expect(resolved.headers['Authorization']).toBe('Bearer val');
+    expect(resolved.missing).toEqual([{ header: 'X-Other', secret: 'gone' }]);
   });
 });

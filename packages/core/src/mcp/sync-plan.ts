@@ -25,6 +25,10 @@ import { secretRef } from './secret-ref';
 /** Marks a line the hub wrote, beside the wrap marker the proxy already ignores. */
 export const HUB_MARKER = '--memnox-hub';
 
+/** The proxy's flags for a remote server: its address, and each header as `Name: value`. */
+export const URL_FLAG = '--url';
+export const HEADER_FLAG = '--header';
+
 /** A remote server as a JSON config declares it. */
 export interface UrlEntry {
   url: string;
@@ -69,9 +73,12 @@ export interface SyncPlan {
   files: FilePlan[];
 }
 
-/** The line one agent gets for one server: stdio behind the proxy, http as its address. */
+/**
+ * The line one agent gets for one server, always a command behind the proxy: a remote server is
+ * reached by the proxy, so every agent that starts a command has its calls ruled on and recorded.
+ */
 export function entryFor(server: HubServer, agent: DiscoveredAgentKind): HubEntry {
-  if (server.transport === HUB_TRANSPORT.HTTP) return { url: server.url ?? '' };
+  if (server.transport === HUB_TRANSPORT.HTTP) return remoteEntry(server, agent);
   const env: Record<string, string> = { ...server.env };
   for (const [variable, secret] of Object.entries(server.secrets))
     env[variable] = secretRef(secret);
@@ -90,6 +97,45 @@ export function entryFor(server: HubServer, agent: DiscoveredAgentKind): HubEntr
     ],
     ...(Object.keys(env).length === 0 ? {} : { env }),
   };
+}
+
+function remoteEntry(server: HubServer, agent: DiscoveredAgentKind): ServerLaunch {
+  const headers = Object.entries(server.headers ?? {}).flatMap(([name, value]) => [
+    HEADER_FLAG,
+    `${name}: ${value}`,
+  ]);
+  return {
+    command: PROXY_BINARY,
+    args: [
+      WRAP_MARKER,
+      HUB_MARKER,
+      '--name',
+      server.name,
+      AGENT_FLAG,
+      agent,
+      URL_FLAG,
+      server.url ?? '',
+      ...headers,
+    ],
+  };
+}
+
+/** The address and headers of a line that reaches a remote server through the proxy, or null for any other. */
+export function proxiedRemoteOf(
+  launch: Pick<ServerLaunch, 'command' | 'args'>,
+): { url: string; headers: Record<string, string> } | null {
+  if (launch.command !== PROXY_BINARY) return null;
+  const at = launch.args.indexOf(URL_FLAG);
+  const url = launch.args[at + 1];
+  if (at === -1 || url === undefined) return null;
+  const headers: Record<string, string> = {};
+  launch.args.forEach((arg, index) => {
+    const line = launch.args[index + 1];
+    if (arg !== HEADER_FLAG || line === undefined) return;
+    const split = line.indexOf(':');
+    if (split > 0) headers[line.slice(0, split)] = line.slice(split + 1).trim();
+  });
+  return { url, headers };
 }
 
 /**
@@ -170,10 +216,7 @@ function planMissing(plan: FilePlan, missing: Missing): void {
     plan.drifted.push({ name: server.name, kind: DRIFT.REMOVED });
     return;
   }
-  const reason = unwritable(server, plan.format);
-  if (reason === undefined)
-    plan.add.push({ name: server.name, entry: entryFor(server, agent) });
-  else plan.skipped.push({ name: server.name, reason });
+  plan.add.push({ name: server.name, entry: entryFor(server, agent) });
 }
 
 interface Existing {
@@ -207,14 +250,6 @@ function planExisting(plan: FilePlan, each: Existing): void {
   }
   const entry = entryFor(wanted, agent);
   if (entryDigest(entry, format) !== written.digest) plan.update.push({ name, entry });
-}
-
-/** Why this server cannot go into a file of this format yet, or undefined when it can. */
-function unwritable(server: HubServer, format: ConfigFormat): string | undefined {
-  if (server.transport === HUB_TRANSPORT.HTTP && format !== CONFIG_FORMAT.JSON) {
-    return 'This agent declares remote servers in a format Memnox does not write yet.';
-  }
-  return undefined;
 }
 
 /** The written record after a plan was applied, so the next sync knows what is ours. */

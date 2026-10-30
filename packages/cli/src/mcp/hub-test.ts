@@ -4,6 +4,7 @@ import {
   MCP_HEALTH,
   NodeMcpLister,
   readHubHealth,
+  resolveHeaderRefs,
   resolveSecretRefs,
   secretRef,
   writeHubHealth,
@@ -12,6 +13,7 @@ import {
   type McpServerHealth,
   type SecretStore,
 } from '@memnox/core';
+import { remoteToolsOf } from './remote-tools';
 
 /**
  * Asking one hub server for its tools, run when the person asks and never on a timer. Secrets
@@ -25,6 +27,8 @@ interface HubTestInput {
   secrets: SecretStore;
   now: Date;
   listerFor?: ListerFor;
+  /** How a remote server is reached; injected so a test needs no network. */
+  fetch?: typeof fetch;
 }
 
 function nodeListerFor(env: Record<string, string>): McpLister {
@@ -52,16 +56,13 @@ export async function testHubServer(
 
 async function healthOf(
   server: HubServer,
-  { secrets, now, listerFor = nodeListerFor }: HubTestInput,
+  input: HubTestInput,
 ): Promise<McpServerHealth> {
+  const { secrets, now, listerFor = nodeListerFor } = input;
   const checkedAt = now.toISOString();
-  if (server.transport === HUB_TRANSPORT.HTTP || server.command === undefined) {
-    return {
-      state: MCP_HEALTH.UNKNOWN,
-      checkedAt,
-      error: 'Testing a remote server is not built yet.',
-    };
-  }
+  if (server.transport === HUB_TRANSPORT.HTTP) return remoteHealth(server, input);
+  if (server.command === undefined)
+    return { state: MCP_HEALTH.ERROR, checkedAt, error: 'No command starts it.' };
   const refs: Record<string, string> = { ...server.env };
   for (const [variable, secret] of Object.entries(server.secrets))
     refs[variable] = secretRef(secret);
@@ -90,4 +91,30 @@ async function healthOf(
       ...(tool.description === undefined ? {} : { description: tool.description }),
     })),
   };
+}
+
+/** A remote server asked the way the proxy reaches it, with each header's secret read here and dropped after. */
+async function remoteHealth(
+  server: HubServer,
+  { secrets, now, fetch }: HubTestInput,
+): Promise<McpServerHealth> {
+  const checkedAt = now.toISOString();
+  const { headers, missing } = await resolveHeaderRefs(server.headers ?? {}, (name) =>
+    secrets.get(name),
+  );
+  if (missing.length > 0) {
+    const names = missing.map((each) => each.secret).join(', ');
+    return { state: MCP_HEALTH.ERROR, checkedAt, error: `Not held yet: ${names}.` };
+  }
+  const listed = await remoteToolsOf({
+    name: server.name,
+    url: server.url ?? '',
+    headers,
+    ...(fetch === undefined ? {} : { fetch }),
+  });
+  if ('error' in listed)
+    return { state: MCP_HEALTH.ERROR, checkedAt, error: listed.error };
+  if (listed.tools.length === 0)
+    return { state: MCP_HEALTH.ERROR, checkedAt, error: 'It listed no tools.' };
+  return { state: MCP_HEALTH.HEALTHY, checkedAt, tools: listed.tools };
 }

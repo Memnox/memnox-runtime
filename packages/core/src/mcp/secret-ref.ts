@@ -53,3 +53,39 @@ export async function resolveSecretRefs(
   }
   return { env: resolved, missing };
 }
+
+/** A reference anywhere in a value, so a header can read `Bearer memnox-secret:github`. */
+const EMBEDDED_REF = /memnox-secret:([A-Za-z0-9][A-Za-z0-9._-]{0,63})/g;
+
+/** Every secret a value names, wherever in the value it sits. */
+export function secretNamesIn(value: string): string[] {
+  return [...value.matchAll(EMBEDDED_REF)].map((match) => match[1] ?? '');
+}
+
+export interface ResolvedHeaders {
+  headers: Record<string, string>;
+  /** Headers whose secret is not held, so the caller can say which and refuse to start. */
+  missing: { header: string; secret: string }[];
+}
+
+/** Each reference inside each header value swapped for the secret it names; a missing one is named, never sent. */
+export async function resolveHeaderRefs(
+  headers: Readonly<Record<string, string>>,
+  lookup: SecretLookup,
+): Promise<ResolvedHeaders> {
+  const resolved: Record<string, string> = {};
+  const missing: ResolvedHeaders['missing'] = [];
+  for (const [header, value] of Object.entries(headers)) {
+    const held = new Map<string, string>();
+    for (const secret of new Set(secretNamesIn(value))) {
+      const found = await lookup(secret);
+      if (found === undefined) missing.push({ header, secret });
+      else held.set(secret, found);
+    }
+    resolved[header] = value.replace(
+      EMBEDDED_REF,
+      (ref, secret: string) => held.get(secret) ?? ref,
+    );
+  }
+  return { headers: resolved, missing };
+}

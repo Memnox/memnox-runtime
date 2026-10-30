@@ -2,7 +2,6 @@ import {
   agentsOf,
   daysToMs,
   EVENT_SURFACE,
-  HUB_TRANSPORT,
   LEDGER_SCAN_LIMIT,
   MCP_HEALTH,
   MCP_SCOPE,
@@ -10,6 +9,7 @@ import {
   readHub,
   readHubHealth,
   readOrgServers,
+  secretsOfServer,
   withOrganization,
   type HubHealth,
   type Hub,
@@ -111,8 +111,9 @@ function serverFields(server: HubServer, health: HubHealth): ServerFields {
     ...(server.args === undefined ? {} : { args: [...server.args] }),
     ...(server.url === undefined ? {} : { url: server.url }),
     envNames: Object.keys(server.env),
-    // A remote server is written as its address, which no proxy stands in front of yet.
-    governed: server.transport === HUB_TRANSPORT.STDIO,
+    ...(server.headers === undefined ? {} : { headerNames: Object.keys(server.headers) }),
+    // Every server the hub writes is behind the proxy, a remote one reached by it over HTTP.
+    governed: true,
     toolCount: tools.length,
     ...(tools.length === 0 ? {} : { tools }),
     health: {
@@ -129,7 +130,7 @@ async function heldOf(
   secrets: SecretStore,
 ): Promise<Record<string, boolean>> {
   const held: Record<string, boolean> = {};
-  for (const name of Object.values(server.secrets))
+  for (const name of secretsOfServer(server))
     // A store that cannot be read holds nothing as far as the screen can tell, which is what it shows.
     held[name] = (await secrets.get(name).catch(() => undefined)) !== undefined;
   return held;
