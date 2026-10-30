@@ -190,7 +190,7 @@ describe('the local memory store', () => {
 
 describe('the memory record rules', () => {
   it('reads opposites, restatements, keys and evidence refs', () => {
-    const base = {
+    const base: Omit<MemoryItem, 'id' | 'statement'> = {
       kind: MEMORY_KIND.FACT,
       subject: 'deploys',
       status: MEMORY_STATUS.VERIFIED,
@@ -199,7 +199,7 @@ describe('the memory record rules', () => {
       tainted: false,
       createdAt: AT,
       evidence: [],
-    } as const;
+    };
     expect(
       disagrees(
         { ...base, id: 'a', statement: 'Deploy on Fridays.' },
