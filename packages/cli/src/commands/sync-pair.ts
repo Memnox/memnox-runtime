@@ -16,7 +16,7 @@ import type { DaemonDial } from '../remote/daemon-dial';
  * methods raise, which the person signs in the Memnox app; nothing here moves the key itself.
  */
 
-export interface SyncPairDeps {
+interface SyncPairDeps {
   home: () => string;
   dial: (home: string) => DaemonDial;
 }

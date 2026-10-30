@@ -346,7 +346,7 @@ async function givesWay(deps: KeyDeps): Promise<string | null> {
 }
 
 /** Something was sealed under the key made here, so it stays the person's key from now on. */
-export async function keyWentOut(home: string): Promise<void> {
+async function keyWentOut(home: string): Promise<void> {
   const state = await readSyncState(home);
   if (state.keyMadeHere !== true) return;
   delete state.keyMadeHere;
