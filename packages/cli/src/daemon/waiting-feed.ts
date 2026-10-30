@@ -420,6 +420,7 @@ function proposalEvent(
     summary: each.rationale,
     at: each.proposedAt,
     expiresAt: each.expiresAt,
+    proposalKind: each.change.kind,
     ...(rule === undefined ? {} : { rule }),
     ...(within ? { withinSession: true } : {}),
     ...teamAnswerOf(each),

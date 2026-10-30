@@ -44,6 +44,11 @@ interface TeamEventFields {
   teamAnswer?: TeamAnswerBrief;
 }
 
+interface ProposalEventFields {
+  /** On a PROPOSAL, what kind of change it is, a PROPOSAL_KIND value, so a surface words each kind its own way. */
+  proposalKind?: string;
+}
+
 interface WorkRequestFields {
   /** On CONFIRM of a draft: the words the person rewrote on its card, which the signature then covers. */
   edited?: string;
@@ -133,4 +138,5 @@ export interface ExtensionEventFields
     TeamEventFields,
     WorkEventFields,
     QuestionEventFields,
-    HeldActionEventFields {}
+    HeldActionEventFields,
+    ProposalEventFields {}
