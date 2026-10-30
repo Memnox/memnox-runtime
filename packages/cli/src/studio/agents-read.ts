@@ -14,6 +14,7 @@ import {
   overlaysInForce,
   readHub,
   readOrgServers,
+  readSkillsHub,
   startableKindOf,
   withOrganization,
   type AgentSessions,
@@ -48,6 +49,7 @@ interface Facts {
   dormant: ReadonlySet<string>;
   freezes: readonly Overlay[];
   hub: Awaited<ReturnType<typeof readHub>>;
+  skills: Awaited<ReturnType<typeof readSkillsHub>>;
   configs: Awaited<ReturnType<typeof readHubConfigs>>;
   cards: readonly SessionCard[];
   today: readonly MemnoxEvent[];
@@ -72,8 +74,8 @@ async function factsOf(
   input: { now: Date; cards: () => Promise<SessionCard[]>; snapshots: NodeSnapshotStore },
 ): Promise<Facts> {
   const at = input.now.toISOString();
-  const [names, kept, dormant, overlays, hub, configs, cards, ledger] = await Promise.all(
-    [
+  const [names, kept, dormant, overlays, hub, skills, configs, cards, ledger] =
+    await Promise.all([
       readNames(home),
       readKept(home),
       // A keeper record that will not read claims no agent is dormant, which is the honest answer.
@@ -82,12 +84,12 @@ async function factsOf(
       readHub(home).then(async (hub) =>
         withOrganization(hub, await readOrgServers(home)),
       ),
+      readSkillsHub(home),
       readHubConfigs(home, home),
       // Sessions that will not list leave every count at none rather than failing the cards.
       input.cards().catch((): SessionCard[] => []),
       ledgerOf(home, input.now),
-    ],
-  );
+    ]);
   return {
     names,
     hooked:
@@ -95,6 +97,7 @@ async function factsOf(
     dormant: new Set(dormant.map((each) => each.kind)),
     freezes: inForce(overlays, at).filter((each) => each.kind === OVERLAY_KIND.FREEZE),
     hub,
+    skills,
     configs,
     cards,
     ...ledger,
@@ -133,6 +136,9 @@ function agentView(agent: SnapshotAgent, facts: Facts): AgentView {
     mcpServers: facts.hub.servers
       .filter((server) => agentsOf(facts.hub, server.name).some((each) => mine(each)))
       .map((server) => server.name),
+    skills: facts.skills.skills
+      .filter((skill) => skill.assignments.some((each) => each.agent === agent.kind))
+      .map((skill) => skill.name),
     today: {
       actions: today.length,
       asked: today.filter((event) => saidOf(event) === DECISION_EFFECT.ASK).length,

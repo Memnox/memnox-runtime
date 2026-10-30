@@ -65,6 +65,8 @@ export interface AgentView {
   sessions: AgentSessions;
   /** The hub's servers given to it, by name. */
   mcpServers: string[];
+  /** The Skills Hub's skills given to it, by name, whether or not they are enabled. */
+  skills: string[];
   today: AgentToday;
   /** The last five, newest first. */
   recent: AgentAction[];
