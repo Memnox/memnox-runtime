@@ -12,6 +12,7 @@ import type { CheckedAccount, PersonalTools } from '../sync/personal-work';
 import { workAccountOf } from '../sync/personal-work';
 import { OPERATOR_AGENT } from './propose-tools';
 import { proposedReply } from './work-sent';
+import { MACHINE } from '../this-machine';
 
 export { sentTool } from './work-sent';
 import { PendingSignIns } from '../sync/sign-ins';
@@ -32,8 +33,7 @@ const WORK_PROPOSAL_TTL_MS = minutesToMs(5);
 const NO_SESSION = 'all';
 const SIGN_IN_TITLE = 'Sign in to use';
 
-const NO_SEAM =
-  "This Mac cannot reach the person's own accounts. Say so in a sentence; never pretend it was done.";
+const NO_SEAM = `This ${MACHINE} cannot reach the person's own accounts. Say so in a sentence; never pretend it was done.`;
 
 /** How a card and a read back name each tool, which the slug alone says badly. */
 const TOOL_NAMES: Readonly<Record<string, string>> = {

@@ -9,6 +9,7 @@ import {
   type VoiceBrainKind,
   type VoiceBrainSpec,
 } from './voice-brains';
+import { MACHINE } from '../this-machine';
 
 /**
  * Which of the person's agents the voice thinks with. Nothing here is asked of a person in
@@ -62,7 +63,7 @@ export class VoiceAgents {
     const spec = voiceBrainSpec(kind);
     if (spec === null) return `the voice knows no agent called ${kind}`;
     if (!this.installed().some((each) => each.kind === spec.kind)) {
-      return `${spec.label} is not installed on this Mac`;
+      return `${spec.label} is not installed on this ${MACHINE}`;
     }
     await this.keepChoice(spec.kind);
     return this.roster();

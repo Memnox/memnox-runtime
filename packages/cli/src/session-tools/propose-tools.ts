@@ -30,6 +30,7 @@ import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import { knownRepositories, repositoryNamed } from './known-repositories';
 import { teamCallsNow } from '../daemon/team-calls-store';
 import { proposeSpokenRuleTool } from './spoken-rule-tool';
+import { MACHINE } from '../this-machine';
 
 /**
  * What the operator may do with what a person said: write it down as a proposal. A refusal
@@ -210,7 +211,7 @@ export async function proposeRuleTool(
     proposed: proposal.id,
     rule: { name: rule.name, action: verb, effect, file, branches, targets },
     places: scopes.map((scope) => scope.label),
-    said: `The rule is on a card on the Mac with where it could hold, ${suggested.label} picked for now. Ask in one short sentence whether it should hold on the whole Mac or only in ${offered[0] === undefined ? 'one repository' : basename(named ?? offered[0])}; they pick on the card and confirm with Touch ID. It is not in force until they do.`,
+    said: `The rule is on a card on the Mac with where it could hold, ${suggested.label} picked for now. Ask in one short sentence whether it should hold on the whole ${MACHINE} or only in ${offered[0] === undefined ? 'one repository' : basename(named ?? offered[0])}; they pick on the card and confirm with Touch ID. It is not in force until they do.`,
   };
 }
 
@@ -295,7 +296,7 @@ async function repositoryFor(
     // Refused now rather than after the Touch ID, and never created: a misheard path is not a project.
     return isDirectory(project)
       ? project
-      : { refused: `${project} is not a folder on this Mac` };
+      : { refused: `${project} is not a folder on this ${MACHINE}` };
   }
   const written = await writtenFolders(deps.home);
   const byFolder = written.filter(

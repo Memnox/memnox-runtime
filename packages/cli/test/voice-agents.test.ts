@@ -6,6 +6,7 @@ import type { Brain } from '../src/operator/brain';
 import type { BrainCheck } from '../src/operator/brain-check';
 import { VoiceAgents } from '../src/operator/voice-agents';
 import { voiceBrainSpec, type VoiceBrainSpec } from '../src/operator/voice-brains';
+import { MACHINE } from '../src/this-machine';
 
 function spec(kind: string): VoiceBrainSpec {
   const found = voiceBrainSpec(kind);
@@ -175,7 +176,9 @@ describe('VoiceAgents', () => {
       working: ['cursor'],
     });
 
-    expect(await roster.choose('codex')).toBe('Codex is not installed on this Mac');
+    expect(await roster.choose('codex')).toBe(
+      `Codex is not installed on this ${MACHINE}`,
+    );
     expect(await roster.choose('gpt')).toBe('the voice knows no agent called gpt');
   });
 

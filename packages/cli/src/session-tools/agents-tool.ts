@@ -28,6 +28,7 @@ import {
 import { displayName, readNames } from '../agents/names';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import { sessionsTool } from './sessions-tool';
+import { MACHINE } from '../this-machine';
 
 /**
  * "Scan my computer and show me my agents" on the whole screen. It starts nothing and counts from
@@ -75,7 +76,7 @@ export async function showAgentsTool(
     seams.lists(deps.home).catch((): ToolLists => ({})),
   ]);
   if (report === null || report.agents.length === 0) {
-    return { shown: false, said: 'The scan found no agents on this Mac.' };
+    return { shown: false, said: `The scan found no agents on this ${MACHINE}.` };
   }
   const counted = unaskedServers(report.surfaces, lists, snapshot).length === 0;
   const title = textArg(args, 'title') ?? 'Your agents';

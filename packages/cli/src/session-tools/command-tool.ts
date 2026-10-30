@@ -10,6 +10,7 @@ import {
   VOICE_RUN,
   voiceCommand,
 } from './voice-commands';
+import { MACHINE } from '../this-machine';
 
 /**
  * `memnox_command`: any memnox command, said out loud. What reads runs now and comes back to be
@@ -87,11 +88,9 @@ function named(argv: readonly string[], machine: () => string): string[] {
   return [...argv, '--name', machine()];
 }
 
-const PROPOSED_ON_ITS_OWN =
-  'Nothing has run. Read back in a sentence what it will do, and that it needs their Touch ID. For login, say that once they touch the sensor a page opens in their browser to approve this Mac, and nothing else is needed; an onboarding needs only the touch. It then runs on its own with no terminal, and you are told when it finishes, so do not ask them to wait or check.';
+const PROPOSED_ON_ITS_OWN = `Nothing has run. Read back in a sentence what it will do, and that it needs their Touch ID. For login, say that once they touch the sensor a page opens in their browser to approve this ${MACHINE}, and nothing else is needed; an onboarding needs only the touch. It then runs on its own with no terminal, and you are told when it finishes, so do not ask them to wait or check.`;
 
-const STILL_RUNNING =
-  'It is still running on its own: a login or an onboarding is waiting for them to approve this Mac in the browser page that opened. Say so in a sentence; they will be told when it is done.';
+const STILL_RUNNING = `It is still running on its own: a login or an onboarding is waiting for them to approve this ${MACHINE} in the browser page that opened. Say so in a sentence; they will be told when it is done.`;
 
 export async function commandOutputTool(
   deps: SessionToolDeps,

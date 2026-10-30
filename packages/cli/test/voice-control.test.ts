@@ -39,6 +39,7 @@ import type { RewindSeams } from '../src/session-tools/rewind-tool';
 import { showAgentsTool } from '../src/session-tools/agents-tool';
 import { repositoryNamed } from '../src/session-tools/known-repositories';
 import { callTool } from '../src/session-tools/session-tools';
+import { MACHINE } from '../src/this-machine';
 
 /**
  * The voice doing things rather than reading them: watching for news, putting work back,
@@ -1085,7 +1086,7 @@ describe('work from the workspace', () => {
     ).toMatchObject({
       sources: [SAID, TICKET],
       total: 2,
-      withheld: '1 more this Mac is not cleared to read',
+      withheld: `1 more this ${MACHINE} is not cleared to read`,
     });
     const offline = { ...deps, sources: async () => null };
     expect(await callOperatorTool(offline, SEAMS, 'sources', {})).toMatchObject({

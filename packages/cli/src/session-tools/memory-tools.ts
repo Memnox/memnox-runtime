@@ -21,6 +21,7 @@ import {
 
 import { readSessionMemory, type SessionMemory } from './local-memory';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
+import { MACHINE } from '../this-machine';
 
 const NOT_CONNECTED =
   'This machine holds no workspace memory: it is not connected to a workspace, or has not pulled one yet. "memnox login" connects it.';
@@ -166,8 +167,8 @@ function candidateRow(candidate: WorkspaceCandidate): Record<string, unknown> {
  * stale one, so both are named with the step that moves each, rather than calling this Mac the wrong one.
  */
 export function twoWorkspaces(machineWorkspace: string | null): string {
-  const here = machineWorkspace ?? 'the workspace this Mac is in';
-  return `This Mac is in ${here}, and their own sign in, which their accounts and tools go through, is in a different workspace. Say both plainly. When ${here} is theirs, running memnox signin and approving it there moves their sign in to it; otherwise memnox login, approved in their own workspace, moves this Mac. Never say which one is wrong unless they told you.`;
+  const here = machineWorkspace ?? `the workspace this ${MACHINE} is in`;
+  return `This ${MACHINE} is in ${here}, and their own sign in, which their accounts and tools go through, is in a different workspace. Say both plainly. When ${here} is theirs, running memnox signin and approving it there moves their sign in to it; otherwise memnox login, approved in their own workspace, moves this ${MACHINE}. Never say which one is wrong unless they told you.`;
 }
 
 /** The settled facts with the workspace's name, and a word when this Mac is enrolled in another one. */

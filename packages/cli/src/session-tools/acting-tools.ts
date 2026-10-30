@@ -1,6 +1,7 @@
 import { AGENT_ARG, proposeTool, SAID_ARG } from './operator-args';
 import { readTool, SESSION_ARG, type ToolDefinition } from './session-tools';
 import { APP_ACTION, TOOL_ARG } from './session-tools.constants';
+import { MACHINE } from '../this-machine';
 
 /**
  * The tools that act on the person's behalf beyond reading: running memnox commands, tracing,
@@ -50,8 +51,7 @@ export const ACTING_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'show_agents',
-    description:
-      'Scan this Mac live and put every agent on the whole screen, each with its logo, its MCP servers, what else it reaches and its sessions now. Use it when they ask to scan their computer, or to list, see or show all their agents. Never for their sessions: all their sessions is show with display all. It reads and starts nothing.',
+    description: `Scan this ${MACHINE} live and put every agent on the whole screen, each with its logo, its MCP servers, what else it reaches and its sessions now. Use it when they ask to scan their computer, or to list, see or show all their agents. Never for their sessions: all their sessions is show with display all. It reads and starts nothing.`,
     inputSchema: { type: 'object', properties: {} },
     // It writes a request to draw on the person's screen, which changes nothing an agent can do.
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -167,8 +167,7 @@ export const ACTING_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'type_in_app',
-    description:
-      'Type a message into the chat the person has open in an agent\'s desktop app, Claude desktop, the Codex app, Cursor or Hermes, or any other app on this Mac they name, such as Windsurf, Zed, ChatGPT, Perplexity or Warp, and send it, the way they would type it, so they watch it go in. Use it for "type in Claude desktop and ask it to discuss Memnox", "ask the Codex app to run the tests", "in Windsurf, ask Cascade to fix the build" or "in this chat, tell it to continue". For a new chat in the app on a repository, use propose_start with app "true" instead.',
+    description: `Type a message into the chat the person has open in an agent's desktop app, Claude desktop, the Codex app, Cursor or Hermes, or any other app on this ${MACHINE} they name, such as Windsurf, Zed, ChatGPT, Perplexity or Warp, and send it, the way they would type it, so they watch it go in. Use it for "type in Claude desktop and ask it to discuss Memnox", "ask the Codex app to run the tests", "in Windsurf, ask Cascade to fix the build" or "in this chat, tell it to continue". For a new chat in the app on a repository, use propose_start with app "true" instead.`,
     inputSchema: {
       type: 'object',
       properties: {

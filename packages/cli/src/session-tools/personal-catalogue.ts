@@ -18,6 +18,7 @@ import {
 import type { SessionToolDeps, ToolArgs } from './read-tools';
 import { openLinkTool, searchWebTool, showListTool } from './link-tools';
 import { withdrawTool } from './withdraw-tool';
+import { MACHINE } from '../this-machine';
 
 /** Done at once when the person asks and never by a guess made while they pause, since each one shows or closes something. */
 function onAsking(
@@ -37,7 +38,7 @@ function onAsking(
 export const PERSONAL_TOOLS: readonly ToolDefinition[] = [
   readTool(
     'find_tool',
-    "Find what the person's own tools can do: the MCP servers their agents use and the command line tools they are signed in to on this Mac, such as gh, stripe or psql, which need nothing connected and no Memnox account, and Slack, Gmail, Google Docs, Notion, Linear, GitHub and whatever else they connected under their own name: read a channel or a DM, list unread mail, open a document, list review comments on a pull request, reply to one, send a DM or an email, move a ticket. Answers each tool's slug, what it does, its inputs, and workClass: read runs at once with run_tool, act is written down with propose_tool. Use it before either, whenever the person asks to read or do something in one of their tools, even one they never mentioned signing in to. It opens the sign in of any tool they still have to sign in to by itself, and the request carries on once they have, so never ask them to sign in anywhere else. When they name the tool, as in 'comment on the GitHub pull request' or 'add it to Airtable', pass it as toolkit and go straight to it with what they gave you: that tool is used and no other, whichever tool it is, not only the ones named here. Who they work with in a tool, such as the people in their Slack, comes from people first, which holds each person's id in every tool the workspace connects, and from that tool's own user lookup found here when people does not have them; an account still marked unverified reads and drafts like any other.",
+    `Find what the person's own tools can do: the MCP servers their agents use and the command line tools they are signed in to on this ${MACHINE}, such as gh, stripe or psql, which need nothing connected and no Memnox account, and Slack, Gmail, Google Docs, Notion, Linear, GitHub and whatever else they connected under their own name: read a channel or a DM, list unread mail, open a document, list review comments on a pull request, reply to one, send a DM or an email, move a ticket. Answers each tool's slug, what it does, its inputs, and workClass: read runs at once with run_tool, act is written down with propose_tool. Use it before either, whenever the person asks to read or do something in one of their tools, even one they never mentioned signing in to. It opens the sign in of any tool they still have to sign in to by itself, and the request carries on once they have, so never ask them to sign in anywhere else. When they name the tool, as in 'comment on the GitHub pull request' or 'add it to Airtable', pass it as toolkit and go straight to it with what they gave you: that tool is used and no other, whichever tool it is, not only the ones named here. Who they work with in a tool, such as the people in their Slack, comes from people first, which holds each person's id in every tool the workspace connects, and from that tool's own user lookup found here when people does not have them; an account still marked unverified reads and drafts like any other.`,
     {
       said: SAID_ARG,
       what: {
@@ -84,7 +85,7 @@ export const PERSONAL_TOOLS: readonly ToolDefinition[] = [
   // Read only here: it opens an approval page, and nothing is signed in until the person approves it there.
   readTool(
     'memnox_sign_in',
-    'Sign the person in to Memnox and Memnox Cloud as themselves, at once, when they ask to log in, sign in or connect to Memnox, Memnox Cloud, their team or their workspace. Their own tools need no Memnox account, so never call this to read or act in them. It opens the approval page in their browser, the same sign in as the Account row in the Memnox app, and the one approval connects this Mac too. Never send them to the Account row or a terminal instead.',
+    `Sign the person in to Memnox and Memnox Cloud as themselves, at once, when they ask to log in, sign in or connect to Memnox, Memnox Cloud, their team or their workspace. Their own tools need no Memnox account, so never call this to read or act in them. It opens the approval page in their browser, the same sign in as the Account row in the Memnox app, and the one approval connects this ${MACHINE} too. Never send them to the Account row or a terminal instead.`,
   ),
   proposeTool(
     'propose_tool',

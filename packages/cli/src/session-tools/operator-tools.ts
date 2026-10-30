@@ -54,6 +54,7 @@ import { PROFILE_CALLS, PROFILE_TOOLS } from './profile-tools';
 import { AGENT_ARG, proposeTool, SAID_ARG } from './operator-args';
 import { readTool, SESSION_ARG, type ToolDefinition } from './session-tools';
 import { TOOL_ARG } from './session-tools.constants';
+import { MACHINE } from '../this-machine';
 
 /**
  * The tools the voice's brain is given, and the one rule over them: it reads everything and
@@ -141,7 +142,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ),
   readTool(
     'memory',
-    'What the person\'s Memnox Cloud workspace has settled, as this Mac last pulled it: decisions, policies, who approves what and who owns what, each with who confirmed it, when and where it came from, and how many facts the workspace holds. Answer "what is in my workspace", "what does the cloud know", "summarise our memory" and "who owns billing" from here, never from the console. Pass about with the key words of their question; leave it out for the newest.',
+    `What the person's Memnox Cloud workspace has settled, as this ${MACHINE} last pulled it: decisions, policies, who approves what and who owns what, each with who confirmed it, when and where it came from, and how many facts the workspace holds. Answer "what is in my workspace", "what does the cloud know", "summarise our memory" and "who owns billing" from here, never from the console. Pass about with the key words of their question; leave it out for the newest.`,
     {
       about: {
         type: 'string',
@@ -152,7 +153,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ),
   readTool(
     'sources',
-    'What people actually said, filed or wrote in the systems the workspace connects: Slack and Discord messages, Linear, Jira and GitHub issues, and documents, each with its title, a short excerpt, who wrote it, when and a link, as far as this Mac is cleared to read. Each ticket opens with its status, priority and who it is assigned to. Answer "what did we say in Slack", "who said this", "what does Priya have to work on", "what tickets do I have", "how many tickets" and "what is the ticket about" from here, and find a ticket here before an agent works on it.',
+    `What people actually said, filed or wrote in the systems the workspace connects: Slack and Discord messages, Linear, Jira and GitHub issues, and documents, each with its title, a short excerpt, who wrote it, when and a link, as far as this ${MACHINE} is cleared to read. Each ticket opens with its status, priority and who it is assigned to. Answer "what did we say in Slack", "who said this", "what does Priya have to work on", "what tickets do I have", "how many tickets" and "what is the ticket about" from here, and find a ticket here before an agent works on it.`,
     {
       about: {
         type: 'string',
@@ -177,7 +178,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   PEOPLE_TOOL,
   readTool(
     'brief',
-    'Ask the workspace, live, about paths, services or a repository: the decisions that bear on them, who owns them, which agent holds them and what landed there lately. Falls back to what this Mac pulled when the cloud cannot be reached, and says so.',
+    `Ask the workspace, live, about paths, services or a repository: the decisions that bear on them, who owns them, which agent holds them and what landed there lately. Falls back to what this ${MACHINE} pulled when the cloud cannot be reached, and says so.`,
     {
       paths: {
         type: 'string',

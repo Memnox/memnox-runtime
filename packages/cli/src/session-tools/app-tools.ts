@@ -31,6 +31,7 @@ import {
   SAID,
   TOOL_ARG,
 } from './session-tools.constants';
+import { MACHINE } from '../this-machine';
 
 /**
  * The agents' own desktop apps, Claude, Codex, Cursor and Hermes: opened on a repository with a
@@ -392,7 +393,7 @@ function spoken(name: string): string {
 }
 
 function noSuchApp(name: string): string {
-  return `No app called ${name} is installed on this Mac, so nothing was typed. Say so in a sentence and ask which app they meant.`;
+  return `No app called ${name} is installed on this ${MACHINE}, so nothing was typed. Say so in a sentence and ask which app they meant.`;
 }
 
 /** What to say when the agent has no desktop app on this Mac, with the agents that do. */
@@ -406,7 +407,7 @@ export function noApp(
   return {
     missing: `the ${DESKTOP_APPS[agent].name} app`,
     installed,
-    said: `The ${DESKTOP_APPS[agent].name} desktop app is not installed on this Mac. Say so plainly, and offer its terminal agent instead, or another app from installed.`,
+    said: `The ${DESKTOP_APPS[agent].name} desktop app is not installed on this ${MACHINE}. Say so plainly, and offer its terminal agent instead, or another app from installed.`,
   };
 }
 
