@@ -34,6 +34,8 @@ export interface HubServer {
 export interface HubAssignment {
   server: string;
   agent: DiscoveredAgentKind;
+  /** The repository it is given in, as an absolute path, written to the agent's project config; absent is every project. */
+  project?: string;
 }
 
 /** What the hub last wrote into one config, so a later hand edit reads as drift rather than ours. */
@@ -41,6 +43,8 @@ export interface HubWritten {
   path: string;
   server: string;
   digest: string;
+  /** The repository whose config this is, so the line is taken back once nothing is given there. */
+  project?: string;
 }
 
 export interface Hub {
@@ -113,12 +117,39 @@ export function agentsOf(hub: Hub, server: string): DiscoveredAgentKind[] {
     .map((each) => each.agent);
 }
 
-/** The servers one agent is given. */
-export function serversFor(hub: Hub, agent: DiscoveredAgentKind): HubServer[] {
+/**
+ * The servers one agent is given in its own config, or with a repository, in that repository's
+ * config only: a server given in one project is never written where every project reads it.
+ */
+export function serversFor(
+  hub: Hub,
+  agent: DiscoveredAgentKind,
+  project?: string,
+): HubServer[] {
   const names = new Set(
-    hub.assignments.filter((each) => each.agent === agent).map((each) => each.server),
+    hub.assignments
+      .filter((each) => each.agent === agent && each.project === project)
+      .map((each) => each.server),
   );
   return hub.servers.filter((server) => names.has(server.name));
+}
+
+/** Whether an agent has the server in this repository, given there or in every project. */
+export function hasServerIn(hub: Hub, assignment: Required<HubAssignment>): boolean {
+  return hub.assignments.some(
+    (each) =>
+      each.server === assignment.server &&
+      each.agent === assignment.agent &&
+      (each.project === undefined || each.project === assignment.project),
+  );
+}
+
+/** Every repository the hub gives a server in or still has a line in, so each project config is kept in step. */
+export function projectsOf(hub: Hub): string[] {
+  const roots = [...hub.assignments, ...hub.written].flatMap((each) =>
+    each.project === undefined ? [] : [each.project],
+  );
+  return [...new Set(roots)];
 }
 
 /** The hub with this server added or replaced by name, leaving its assignments as they were. */
@@ -139,7 +170,12 @@ export function withoutServer(hub: Hub, name: string): Hub {
 /** The hub with one assignment turned on or off; turning on twice is the same as once. */
 export function withAssignment(hub: Hub, assignment: HubAssignment, on: boolean): Hub {
   const others = hub.assignments.filter(
-    (each) => !(each.server === assignment.server && each.agent === assignment.agent),
+    (each) =>
+      !(
+        each.server === assignment.server &&
+        each.agent === assignment.agent &&
+        each.project === assignment.project
+      ),
   );
   return { ...hub, assignments: on ? [...others, assignment] : others };
 }

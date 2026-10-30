@@ -1,6 +1,6 @@
 import {
-  agentsOf,
   DISCOVERED_AGENT_KIND,
+  hasServerIn,
   skillNamed,
   takesSkills,
   type DiscoveredAgentKind,
@@ -12,6 +12,7 @@ import {
   type SkillAssignment,
   type SkillsHub,
 } from '@memnox/core';
+import { takesProjectServers } from '../mcp/project-servers';
 
 /**
  * What a project's servers and skills come to for its agents: what each agent has already, and
@@ -59,9 +60,11 @@ export function grantsWanted(
       grants.missing.push(server);
       continue;
     }
-    const given = agentsOf(hub, server);
-    for (const agent of agents.filter((each) => !given.includes(each)))
-      grants.servers.push({ server, agent });
+    // Given in this repository alone; an agent that reads no per repository config is not given it at all.
+    for (const agent of agents.filter(takesProjectServers)) {
+      const grant = { server, agent, project: input.root };
+      if (!hasServerIn(hub, grant)) grants.servers.push(grant);
+    }
   }
   for (const name of input.manifest.skills) {
     const skill = skillNamed(skillsHub, name);
@@ -79,11 +82,12 @@ export function grantsWanted(
 /** Each server the project names, and which of its agents already have it. */
 export function serverGrantViews(hub: Hub, input: GrantInput): ProjectGrantView[] {
   return input.manifest.servers.map((name) => {
-    const given = agentsOf(hub, name);
     return {
       name,
       inHub: hub.servers.some((each) => each.name === name),
-      agents: input.agents.filter((agent) => given.some((each) => each === agent)),
+      agents: agentKinds(input.agents).filter((agent) =>
+        hasServerIn(hub, { server: name, agent, project: input.root }),
+      ),
     };
   });
 }

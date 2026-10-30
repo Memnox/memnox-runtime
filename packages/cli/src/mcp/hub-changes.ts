@@ -15,7 +15,8 @@ import {
   type HubServer,
   type ServerLaunch,
 } from '@memnox/core';
-import { applyFilePlan, readHubConfigs, syncHub, type HubSynced } from './hub-writer';
+import { applyFilePlan } from './hub-files';
+import { readHubConfigs, syncHub, type HubSynced } from './hub-writer';
 
 /**
  * Changes to the hub that end in a sync: a signed proposal carried out, and a server the person

@@ -11,6 +11,7 @@ import {
   type ProposedChange,
 } from '@memnox/core';
 import { syncHub } from '../mcp/hub-writer';
+import { takesProjectServers } from '../mcp/project-servers';
 import { describeCount } from '../plural';
 import { registerPolicyFile } from '../policy-registry';
 import { isInside } from '../projects/project-changes';
@@ -55,12 +56,16 @@ export async function applyProjectProposal(
     : { ok: true, outcome: `${done}; not given: ${refused.join(' ')}` };
 }
 
-/** Each server still in the hub given to its agent, written into every config in one pass. */
+/**
+ * Each server still in the hub given to its agent in this repository alone, written into that
+ * agent's config for the repository; one an agent cannot be given there is never given machine-wide.
+ */
 async function giveServers(home: string, project: ProjectChange): Promise<number> {
   let hub = await readHub(home);
-  const known = project.servers.filter((each) =>
-    hub.servers.some((server) => server.name === each.server),
-  );
+  const known = project.servers
+    .filter((each) => hub.servers.some((server) => server.name === each.server))
+    .filter((each) => takesProjectServers(each.agent))
+    .map((each) => ({ ...each, project: project.root }));
   if (known.length === 0) return 0;
   for (const assignment of known) hub = withAssignment(hub, assignment, true);
   await syncHub(home, hub);
