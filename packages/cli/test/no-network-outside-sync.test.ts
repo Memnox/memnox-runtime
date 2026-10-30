@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import * as proxy from '@memnox/proxy';
 import { describe, expect, it } from 'vitest';
 import { ollamaEmbedder } from '../src/memory/ollama-embedding';
 import { insecureRelayUrl } from '../src/remote/relay-link';
@@ -19,10 +20,10 @@ import { insecureRelayUrl } from '../src/remote/relay-link';
 const ROOT = join(__dirname, '..', 'src');
 
 /**
- * Every file allowed to name a socket, and why. Eight entries, each deliberate.
+ * Every file allowed to name a socket, and why, each one deliberate.
  *
  * `node:net` is in the pattern rather than excluded from it, because the same
- * import opens a unix socket and a TCP one — so the daemon is named here and
+ * import opens a unix socket and a TCP one, so the daemon is named here and
  * pinned to the unix side by the test below.
  */
 const ALLOWED: Record<string, string> = {
@@ -40,11 +41,42 @@ const ALLOWED: Record<string, string> = {
     'the Bonjour announcement beside that listener, a random name and nothing more, on the local network only',
   'memory/ollama-embedding.ts':
     'a local embedding model on this machine, off until the person names one, and refusing any other address, pinned below',
+  'mcp/remote-tools.ts':
+    "lists a remote MCP server's tools through the proxy's upstream, only when the person asks to test that server",
+  'bin/mcp-proxy.ts':
+    'the proxy bin, which reaches a remote MCP server only when the person wrapped one',
+  'daemon/workspace-stream.ts':
+    "the person's own workspace stream, held open only once `memnox login` has left a credential",
+  'edit-watcher.ts':
+    'hands fetch to the cloud lease register, which names a held path only once `memnox login` has left a credential',
+  'memory/memory-reach.ts':
+    'hands fetch to a memory source, which calls only an API the person added themselves',
+  'trace/otlp.ts':
+    'sends spans only when the person asks, to the OpenTelemetry address they name',
 };
 
-/** Anything that opens a socket or resolves a name. */
-const OUTBOUND =
-  /\bfetch\s*\(|node:https?['"]|node:dgram|node:net|\bWebSocket\b|XMLHttpRequest/;
+/** What `@memnox/proxy` exports that dials a server, since importing one reaches the network as surely as fetch. */
+const PROXY_NETWORK_EXPORTS = ['HttpUpstream', 'McpFirewall'] as const;
+
+/** Node's socket and name modules, imported with or without the `node:` prefix. */
+const NODE_NETWORK_MODULES = 'https?|http2|net|tls|dgram|dns';
+
+/** Anything that opens a socket or resolves a name: a fetch called or handed on, a socket module, undici, or the proxy's upstream. */
+const OUTBOUND = new RegExp(
+  [
+    String.raw`\bfetch\s*\(`,
+    String.raw`(?:=|\?\?|\|\|)\s*fetch\b`,
+    String.raw`globalThis\.fetch\b`,
+    String.raw`['"]node:(?:${NODE_NETWORK_MODULES})(?:/promises)?['"]`,
+    String.raw`(?:from|import|require)\s*\(?\s*['"](?:${NODE_NETWORK_MODULES})(?:/promises)?['"]`,
+    String.raw`['"]undici(?:/[^'"]*)?['"]`,
+    String.raw`\bWebSocket\b`,
+    String.raw`\bXMLHttpRequest\b`,
+    String.raw`\bEventSource\b`,
+    String.raw`['"]@memnox/proxy/cli['"]`,
+    ...PROXY_NETWORK_EXPORTS.map((name) => String.raw`\b${name}\b`),
+  ].join('|'),
+);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -65,6 +97,11 @@ describe('nothing reaches the network but the sync client', () => {
       offenders,
       'route it through callCloud in src/sync/client.ts rather than widening this list',
     ).toEqual([]);
+  });
+
+  // A renamed proxy export would leave the pattern looking for a name nothing imports any more.
+  it('names exports the proxy still has', () => {
+    for (const name of PROXY_NETWORK_EXPORTS) expect(proxy).toHaveProperty(name);
   });
 
   /* The daemon listens on a unix socket, which is not a network — but a change
