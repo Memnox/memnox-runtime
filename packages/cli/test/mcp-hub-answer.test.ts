@@ -9,6 +9,7 @@ import {
   DAEMON_METHOD,
   DISCOVERED_AGENT_KIND,
   HUB_TRANSPORT,
+  HUB_VERSION,
   MCP_HEALTH,
   PROPOSAL_ANSWER,
   PROPOSAL_KIND,
@@ -17,6 +18,7 @@ import {
   readHub,
   REMOTE_CAPABILITY,
   remoteCapabilityFor,
+  writeHub,
   type DaemonRequest,
   type DaemonResponse,
   type HubServer,
@@ -201,6 +203,31 @@ describe('the MCP Hub methods', () => {
     });
     expect(off.mcpSynced).toMatchObject({ removed: 1 });
     expect(off.mcpHub?.servers[0]?.agents).toEqual([]);
+  });
+
+  it('names the repository an agent was given a server in, and leaves an everywhere one unnamed', async () => {
+    const at = await fixture();
+    const repo = await mkdtemp(join(tmpdir(), 'memnox-hub-project-'));
+    await writeHub(at.home, {
+      version: HUB_VERSION,
+      servers: [GITHUB],
+      assignments: [
+        { server: 'github', agent: CLAUDE },
+        { server: 'github', agent: CLAUDE, project: repo },
+      ],
+      written: [],
+    });
+    const answer = await at.ask({});
+    expect(answer.mcpHub?.servers[0]?.projects).toEqual([
+      { agent: CLAUDE, project: repo },
+    ]);
+    await writeHub(at.home, {
+      version: HUB_VERSION,
+      servers: [GITHUB],
+      assignments: [{ server: 'github', agent: CLAUDE }],
+      written: [],
+    });
+    expect((await at.ask({})).mcpHub?.servers[0]).not.toHaveProperty('projects');
   });
 
   it('keeps a secret typed at this computer, reports it held, and never returns its value', async () => {

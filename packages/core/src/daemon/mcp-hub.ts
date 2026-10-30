@@ -71,9 +71,17 @@ export interface McpHubServerView {
   tools?: McpToolSummary[];
   health: McpServerHealth;
   agents: string[];
+  /** The agents given it in one repository only, each with that repository, so a screen names the project. */
+  projects?: McpProjectAssignment[];
   /** Each secret the server names, and whether the OS store holds it. Never the value. */
   secretsHeld: Record<string, boolean>;
   callsThisWeek: number;
+}
+
+/** One agent given a server in one repository, by its absolute path. */
+export interface McpProjectAssignment {
+  agent: string;
+  project: string;
 }
 
 /** An agent with an MCP config on this machine, and where it lives. */

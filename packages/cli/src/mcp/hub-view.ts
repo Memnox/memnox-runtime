@@ -17,6 +17,7 @@ import {
   type McpHubEntryView,
   type McpHubServerView,
   type McpHubView,
+  type McpProjectAssignment,
   type MemnoxEvent,
   type SecretStore,
   type SyncPlan,
@@ -55,10 +56,15 @@ export async function readHubView(
   const servers: McpHubServerView[] = [];
   for (const server of hub.servers) {
     const personal = own.servers.includes(server);
+    const given = personal
+      ? agentsOf(hub, server.name)
+      : orgAgentsOf(hub, server, agents);
+    const projects = projectsOf(hub, server.name, given);
     servers.push({
       ...serverFields(server, health),
       scope: personal ? MCP_SCOPE.PERSONAL : MCP_SCOPE.ORGANIZATION,
-      agents: personal ? agentsOf(hub, server.name) : orgAgentsOf(hub, server, agents),
+      agents: given,
+      ...(projects.length === 0 ? {} : { projects }),
       secretsHeld: await heldOf(server, secrets),
       callsThisWeek: calls.get(server.name) ?? 0,
     });
@@ -76,9 +82,22 @@ function orgAgentsOf(
   return agentsOf(hub, server.name).filter((agent) => present.has(agent));
 }
 
+/** Each assignment held to one repository, for the agents the server is shown on. */
+function projectsOf(
+  hub: Hub,
+  server: string,
+  shown: readonly string[],
+): McpProjectAssignment[] {
+  return hub.assignments.flatMap((each) =>
+    each.server !== server || each.project === undefined || !shown.includes(each.agent)
+      ? []
+      : [{ agent: each.agent, project: each.project }],
+  );
+}
+
 type ServerFields = Omit<
   McpHubServerView,
-  'scope' | 'agents' | 'secretsHeld' | 'callsThisWeek'
+  'scope' | 'agents' | 'projects' | 'secretsHeld' | 'callsThisWeek'
 >;
 
 function serverFields(server: HubServer, health: HubHealth): ServerFields {
