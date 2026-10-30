@@ -55,6 +55,8 @@ export interface FirewallOptions {
   denyPattern?: string;
   /** Groups this proxy's calls in the audit timeline. */
   sessionId?: string;
+  /** The project of the folder the proxy runs in, so a rule scoped to that project decides. */
+  projectId?: string;
   /** Loading is the caller's job because it reads files; see loadLocalGate. */
   gate?: LocalGate;
   /** Read again on every call, so a pause or a pulled bundle bites at once; wins over `gate`. */
@@ -398,6 +400,7 @@ export class McpFirewall {
         command: this.options.command,
         ...(this.options.env === undefined ? {} : { env: this.options.env }),
       },
+      this.options.projectId,
     );
   }
 

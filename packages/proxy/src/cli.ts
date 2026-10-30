@@ -16,6 +16,7 @@ import {
   PROBATION_KIND,
   ProbationRegister,
   probationOf,
+  projectIdAt,
   protectionStopped,
   SESSION_VAR,
   trustCommandFor,
@@ -104,6 +105,8 @@ async function firewallOptionsFor(
   const ledger = openLedger(home);
   const session = process.env[SESSION_VAR];
   const mode = (await loadOrCreateConfig(home).catch(() => null))?.mode;
+  // An agent starts its servers in the folder it works in, which names the project.
+  const projectId = await projectIdAt(home, process.cwd());
 
   return {
     command: args.command,
@@ -112,6 +115,7 @@ async function firewallOptionsFor(
     env: process.env,
     ...(ledger === null ? {} : { ledger }),
     ...(session === undefined ? {} : { sessionId: session }),
+    ...(projectId === undefined ? {} : { projectId }),
     ...(agent === undefined ? {} : { agent }),
     limits: sessionLimitsFor({ home }),
     stopped: () => protectionStopped(home),

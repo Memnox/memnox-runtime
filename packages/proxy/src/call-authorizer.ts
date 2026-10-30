@@ -107,6 +107,8 @@ export class LocalGateAuthorizer implements CallAuthorizer {
       command?: readonly string[];
       env?: NodeJS.ProcessEnv;
     } = {},
+    /** The project of the folder the proxy was started in, so a rule scoped to it decides its calls. */
+    private readonly projectId?: string,
   ) {
     this.gates = gate instanceof LocalGate ? fixedGate(gate) : gate;
   }
@@ -167,6 +169,7 @@ export class LocalGateAuthorizer implements CallAuthorizer {
       ).class,
       arguments: withStatement(call.arguments, database),
       ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
+      ...(this.projectId === undefined ? {} : { projectId: this.projectId }),
     };
   }
 
@@ -179,6 +182,7 @@ export class LocalGateAuthorizer implements CallAuthorizer {
       ...(database.target === undefined ? {} : { target: database.target }),
       toolClass: database.class,
       ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }),
+      ...(this.projectId === undefined ? {} : { projectId: this.projectId }),
     };
   }
 }
