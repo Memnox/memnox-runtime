@@ -3,9 +3,9 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MEMNOX_HOME } from '../config/config';
 import { readJsonFile, writeJsonFile } from '../store/json-records';
-import { confirmationMessage } from './confirm-message';
+import { actionConfirmationMessage, confirmationMessage } from './confirm-message';
 
-export { confirmationMessage };
+export { actionConfirmationMessage, confirmationMessage };
 
 /**
  * The public half of a key only a person's fingerprint can use. The Mac app keeps the private

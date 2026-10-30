@@ -20,6 +20,7 @@ export * from './plain-ask';
 export * from './protected-paths';
 export * from './proposals';
 export * from './confirm-key';
+export * from './action-digest';
 export * from './capabilities';
 export * from './devices';
 export * from './answer-row';

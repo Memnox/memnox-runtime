@@ -249,6 +249,7 @@ export class ShellSeam {
       fingerprint: digest(line),
       reason: ruling.verdict.reason,
       command: line,
+      cwd: this.deps.workingDirectory ?? process.cwd(),
       class: ruling.class,
       ...(ruling.verdict.rule === undefined ? {} : { rule: ruling.verdict.rule }),
     };
@@ -256,8 +257,7 @@ export class ShellSeam {
     // One yes covered the whole line, so everything it asked about is learned.
     if (holdAllowed(result)) return this.allowedByPerson();
 
-    // What actually happened: a refusal, a late
-    // answer and nobody to ask each read differently.
+    // A refusal, a late answer and nobody to ask each read differently.
     const what = describeHold(result, request);
     const alternative = ruling.verdict.alternative;
     return {

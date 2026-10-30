@@ -32,6 +32,7 @@ export async function answerWaiting(
     ...(request.edited === undefined ? {} : { edited: request.edited }),
     ...(request.editedTo === undefined ? {} : { editedTo: request.editedTo }),
     ...(request.reason === undefined ? {} : { reason: request.reason }),
+    ...(request.actionDigest === undefined ? {} : { actionDigest: request.actionDigest }),
     ...(principal === undefined ? {} : { principal }),
   };
   return isAgentQuestionId(input.subject)

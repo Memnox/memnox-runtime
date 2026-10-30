@@ -1,9 +1,12 @@
 import {
+  actionConfirmationMessage,
+  actionDigestOf,
   answeredBy,
   Devices,
   holds,
   verifiesSigned,
   type DeviceRecord,
+  type HoldRequest,
   type RemoteCapability,
 } from '@memnox/core';
 import type { ConfirmInput } from './confirm';
@@ -31,6 +34,27 @@ export interface Needs {
   withinSession: boolean;
   /** A Mac proposal from the device driving the Mac now, which runs without Face ID. */
   driven: boolean;
+  /** On a held call: the call as held here, whose digest a v4 signature must cover. */
+  heldCall?: HoldRequest;
+}
+
+/** A yes signed over a call that is no longer the call held, which is never taken as a yes to the new one. */
+const CHANGED_SINCE_SHOWN =
+  'this call changed after it was shown, so the yes signed for it does not cover it';
+
+/**
+ * The digest a held call's yes must cover, worked out again from the call held here and never taken
+ * from the screen, or why the yes no longer covers it. Only a yes is asked this, since a no widens nothing.
+ */
+function boundAction(
+  request: HoldRequest | undefined,
+  input: Pick<ConfirmInput, 'actionDigest'>,
+): { actionDigest?: string } | { refused: string } {
+  if (request === undefined) return {};
+  const actionDigest = actionDigestOf(request);
+  if (input.actionDigest !== undefined && input.actionDigest !== actionDigest)
+    return { refused: CHANGED_SINCE_SHOWN };
+  return { actionDigest };
 }
 
 /** Who answered, in the ledger's words, or why the answer does not count. */
@@ -48,7 +72,9 @@ export async function consentFor(
   }
   if (needs.refusing)
     return { by: principal === undefined ? BY_VOICE : `person (${principal.name})` };
-  const signer = await signerOf(home, input);
+  const bound = boundAction(needs.heldCall, input);
+  if ('refused' in bound) return bound;
+  const signer = await signerOf(home, input, bound.actionDigest);
   if (signer !== null) {
     const lacks = needs.capability !== null && !holds(signer, needs.capability);
     return lacks
@@ -66,13 +92,30 @@ export async function consentFor(
 }
 
 /** The device whose key signed this answer: only the phone it came from, or any trusted device at the Mac. */
-async function signerOf(home: string, input: ConfirmInput): Promise<DeviceRecord | null> {
-  if (input.signature === undefined) return null;
-  const message = signedMessage(input);
+async function signerOf(
+  home: string,
+  input: ConfirmInput,
+  actionDigest: string | undefined,
+): Promise<DeviceRecord | null> {
+  const signature = input.signature;
+  if (signature === undefined) return null;
   const principal = input.principal?.device;
-  if (principal === undefined)
-    return new Devices(home).signerOf(message, input.signature);
-  return verifiesSigned(principal.signingPoint, message, input.signature)
-    ? principal
-    : null;
+  for (const message of messagesOf(input, actionDigest)) {
+    const signer =
+      principal === undefined
+        ? await new Devices(home).signerOf(message, signature)
+        : verifiesSigned(principal.signingPoint, message, signature)
+          ? principal
+          : null;
+    if (signer !== null) return signer;
+  }
+  return null;
+}
+
+/** The v4 words bound to the call first, then the older words a screen not yet moved to v4 still signs. */
+function messagesOf(input: ConfirmInput, actionDigest: string | undefined): string[] {
+  const older = signedMessage(input);
+  return actionDigest === undefined
+    ? [older]
+    : [actionConfirmationMessage(input.subject, input.answer, actionDigest), older];
 }

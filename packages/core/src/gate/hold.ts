@@ -48,6 +48,8 @@ export interface HoldRequest {
   evidence?: readonly string[];
   /** The command as typed, when there is one. `[e]` edits this and nothing else. */
   command?: string;
+  /** The folder it runs in, where the seam knows it, so a yes is bound to that place too. */
+  cwd?: string;
   /** What the action does, so a yes to a delete is only ever a yes to that delete. */
   class?: string;
   /**

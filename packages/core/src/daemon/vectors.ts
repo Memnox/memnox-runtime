@@ -2,7 +2,8 @@ import { DEVICE_KIND } from '../gate/devices';
 import { REMOTE_CAPABILITY } from '../gate/capabilities';
 import { HOLD_ANSWER } from '../gate/hold';
 import { PROPOSAL_ANSWER } from '../gate/proposals';
-import { confirmationMessage } from '../gate/confirm-key';
+import { actionConfirmationMessage, confirmationMessage } from '../gate/confirm-key';
+import { actionDigestOf, canonicalAction } from '../gate/action-digest';
 import { ASK_ENDS, DAEMON_EVENT, DAEMON_METHOD, encode } from './protocol';
 import {
   deviceProofMessage,
@@ -87,6 +88,29 @@ function confirmVectors(): MessageVector[] {
       confirmationMessage('prp_3', PROPOSAL_ANSWER.CONFIRMED, ''),
     ),
     readdressedVector(draft),
+    ...actionVectors(),
+  ];
+}
+
+/** A held call's yes bound to the call itself: its canonical form, its digest, and the v4 words over it. */
+function actionVectors(): MessageVector[] {
+  const call = {
+    operation: 'git.push',
+    target: 'origin/main',
+    command: 'git push origin main',
+    fingerprint: 'fp_push',
+    cwd: '/Users/bo/acme',
+    agent: 'claude-code',
+  };
+  const actionDigest = actionDigestOf(call);
+  return [
+    message('action-canonical', { ...call }, canonicalAction(call)),
+    message('action-digest', { canonical: canonicalAction(call) }, actionDigest),
+    message(
+      'confirm-action',
+      { subject: 'apr_5', answer: HOLD_ANSWER.ONCE, actionDigest },
+      actionConfirmationMessage('apr_5', HOLD_ANSWER.ONCE, actionDigest),
+    ),
   ];
 }
 

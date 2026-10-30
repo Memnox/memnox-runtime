@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import {
+  actionDigestOf,
   AGENT_ID_PREFIX,
   AgentQuestions,
   DAEMON_EVENT,
@@ -290,6 +291,8 @@ export class WaitingFeed {
       ...(task?.latestAsk === undefined ? {} : { lastAsk: task.latestAsk }),
       ...(host?.cwd === undefined ? {} : { place: basename(host.cwd) }),
       ...(request.withinSession === true ? { withinSession: true } : {}),
+      // What a v4 yes signs, so the answer covers this exact call and no later edit of it.
+      actionDigest: actionDigestOf(request),
       ...answerOnOf(answeringPhone(devices, REMOTE_CAPABILITY.ANSWER)),
     };
   }

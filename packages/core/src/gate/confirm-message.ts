@@ -14,3 +14,15 @@ export function confirmationMessage(
   if (edited === undefined) return `memnox-confirm:v1:${subject}:${answer}`;
   return `memnox-confirm:v2:${subject}:${answer}:${edited}`;
 }
+
+/**
+ * A yes to a held call bound to the exact call the person saw: the daemon works the digest out again from
+ * the call it holds, so a call changed after it was shown no longer matches what was signed.
+ */
+export function actionConfirmationMessage(
+  subject: string,
+  answer: string,
+  actionDigest: string,
+): string {
+  return `memnox-confirm:v4:${subject}:${answer}:${actionDigest}`;
+}

@@ -285,6 +285,8 @@ async function askPerson(
     reason: input.reason,
     evidence: input.evidence,
     command: input.command.join(' '),
+    // Where the command runs, so a yes signed for it covers this folder only.
+    cwd: process.cwd(),
     ...(verdict.target === undefined ? {} : { target: verdict.target }),
   };
 

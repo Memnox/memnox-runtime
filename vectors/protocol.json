@@ -48,6 +48,34 @@
       "message": "memnox-confirm:v3:prp_4:confirmed:moise@memnox.com,bo@acme.test:Shipped: the deploy is out.\nThanks, Bo 🎉"
     },
     {
+      "name": "action-canonical",
+      "inputs": {
+        "operation": "git.push",
+        "target": "origin/main",
+        "command": "git push origin main",
+        "fingerprint": "fp_push",
+        "cwd": "/Users/bo/acme",
+        "agent": "claude-code"
+      },
+      "message": "{\"operation\":\"git.push\",\"target\":\"origin/main\",\"argumentDigest\":\"8cc0b09e4085b9a0a6957e39083490b9c050581f217a6f9dfd285c5c47b4fbfd\",\"cwd\":\"/Users/bo/acme\",\"agent\":\"claude-code\"}"
+    },
+    {
+      "name": "action-digest",
+      "inputs": {
+        "canonical": "{\"operation\":\"git.push\",\"target\":\"origin/main\",\"argumentDigest\":\"8cc0b09e4085b9a0a6957e39083490b9c050581f217a6f9dfd285c5c47b4fbfd\",\"cwd\":\"/Users/bo/acme\",\"agent\":\"claude-code\"}"
+      },
+      "message": "e1b4144bcf3b8340503b96f0cf573b01cd858d316dc269af938455b3be817ceb"
+    },
+    {
+      "name": "confirm-action",
+      "inputs": {
+        "subject": "apr_5",
+        "answer": "once",
+        "actionDigest": "e1b4144bcf3b8340503b96f0cf573b01cd858d316dc269af938455b3be817ceb"
+      },
+      "message": "memnox-confirm:v4:apr_5:once:e1b4144bcf3b8340503b96f0cf573b01cd858d316dc269af938455b3be817ceb"
+    },
+    {
       "name": "pair",
       "inputs": {
         "pairingId": "pr_1",

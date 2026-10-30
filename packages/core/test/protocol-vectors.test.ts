@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -28,6 +29,18 @@ describe('protocol vectors', () => {
       (each) => each.name === 'confirm-rewritten-empty',
     );
     expect(empty?.message).toBe('memnox-confirm:v2:prp_3:confirmed:');
+  });
+
+  it('bind a held call yes to the call as v4, its digest worked out from the canonical call', () => {
+    const messages = protocolVectors().messages;
+    const named = (name: string): string =>
+      messages.find((each) => each.name === name)?.message ?? '';
+    expect(named('action-digest')).toBe(
+      createHash('sha256').update(named('action-canonical')).digest('hex'),
+    );
+    expect(named('confirm-action')).toBe(
+      `memnox-confirm:v4:apr_5:once:${named('action-digest')}`,
+    );
   });
 
   it('write a mail sent to rewritten addresses as v3, the addresses before the words', () => {

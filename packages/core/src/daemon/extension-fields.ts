@@ -8,6 +8,7 @@ import type { PolicyRequestFields, PolicyResponseFields } from './policies';
 import type { ActivityRequestFields, ActivityResponseFields } from './activity';
 import type { AgentsRequestFields, AgentsResponseFields } from './agents-view';
 import type { SkillsRequestFields, SkillsResponseFields } from './skills-hub';
+import type { HeldActionEventFields, HeldActionRequestFields } from './held-action';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -84,7 +85,8 @@ export interface ExtensionRequestFields
     PolicyRequestFields,
     ActivityRequestFields,
     AgentsRequestFields,
-    SkillsRequestFields {}
+    SkillsRequestFields,
+    HeldActionRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -102,4 +104,9 @@ export interface ExtensionResponseFields
     SkillsResponseFields {}
 
 export interface ExtensionEventFields
-  extends RemoteEventFields, TeamEventFields, WorkEventFields, QuestionEventFields {}
+  extends
+    RemoteEventFields,
+    TeamEventFields,
+    WorkEventFields,
+    QuestionEventFields,
+    HeldActionEventFields {}

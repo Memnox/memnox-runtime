@@ -20,6 +20,7 @@ export * from './daemon/policies';
 export * from './daemon/activity';
 export * from './daemon/agents-view';
 export * from './daemon/skills-hub';
+export * from './daemon/held-action';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,
@@ -33,4 +34,4 @@ export {
   type HoldAnswer,
   type ProposalAnswer,
 } from './gate/answers';
-export { confirmationMessage } from './gate/confirm-message';
+export { actionConfirmationMessage, confirmationMessage } from './gate/confirm-message';

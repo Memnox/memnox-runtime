@@ -70,6 +70,8 @@ export interface ConfirmInput {
   editedTo?: string;
   /** What the person said with a no, which the agent hears beside the rule's way forward; a yes drops it. */
   reason?: string;
+  /** On a held call: the digest the screen signed, so a call that changed since it was shown is refused by name. */
+  actionDigest?: string;
   at: string;
   /** How a confirmed memnox command is run; memnox itself unless a test hands in another. */
   run?: CommandRunner;
@@ -130,6 +132,7 @@ async function answerHeld(home: string, input: ConfirmInput): Promise<ConfirmRes
     capability: REMOTE_CAPABILITY.ANSWER,
     withinSession: held?.request.withinSession === true,
     driven: false,
+    ...(held === null ? {} : { heldCall: held.request }),
   });
   if ('refused' in consent) return { ok: false, error: consent.refused, refused: true };
   const by = consent.by;
