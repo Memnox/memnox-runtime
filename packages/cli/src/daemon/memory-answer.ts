@@ -5,8 +5,11 @@ import {
   MEMORY_STATUSES,
   nodeSecretStore,
   OPEN_STATUSES,
+  searchMemory,
   SqliteMemoryStore,
+  SqliteMemoryVectors,
   type DaemonRequest,
+  type EmbeddingPort,
   type DaemonResponse,
   type ItemFilter,
   type MemoryScope,
@@ -27,6 +30,7 @@ import { readSourceOnce } from '../memory/memory-reads';
 import { addSource } from '../memory/memory-source-change';
 import { itemsView, itemView, sourcesView } from '../memory/memory-views';
 import { rewatchMemory } from '../memory/memory-watch';
+import { embedderFor } from '../memory/ollama-embedding';
 
 /**
  * The memory methods. Reads come from the local store; a confirm of a fact verifies it, a confirm
@@ -45,6 +49,8 @@ interface MemoryDeps {
   reach?: SourceReach;
   extract?: ExtractRun;
   secrets?: SecretStore;
+  /** The embedding model search also ranks by; read from the config when absent, null when it is off. */
+  embedder?: EmbeddingPort | null;
 }
 
 type Answered = Omit<DaemonResponse, 'id'>;
@@ -85,7 +91,7 @@ async function answerOf(
       return learn(home, store, request.memoryScope, deps.now);
     case MEMORY_METHOD.MEMORY_SEARCH:
     case MEMORY_METHOD.MEMORY_FACTS:
-      return facts(store, request);
+      return facts(home, store, request, deps);
     default:
       return answerChange(home, store, request, deps);
   }
@@ -216,8 +222,13 @@ async function learned(
   };
 }
 
-/** Verified by default; SEARCH reads the keyword index over every status unless one is named. */
-function facts(store: SqliteMemoryStore, request: DaemonRequest): Answered {
+/** Verified by default; SEARCH reads every status unless one is named, by keyword and by meaning where that is on. */
+async function facts(
+  home: string,
+  store: SqliteMemoryStore,
+  request: DaemonRequest,
+  deps: MemoryDeps,
+): Promise<Answered> {
   const scope = scopeOf(request.memoryScope);
   const status = statusOf(request.memoryStatus);
   const search = request.method === MEMORY_METHOD.MEMORY_SEARCH;
@@ -232,8 +243,19 @@ function facts(store: SqliteMemoryStore, request: DaemonRequest): Answered {
   if (!search) return { ok: true, memoryFacts: listed(store, filter) };
   const query = (request.memoryQuery ?? '').trim();
   if (query === '') return refused('Say what to look for.');
-  const found = store.search(query, filter);
-  return { ok: true, memoryFacts: itemsView(store, found, found.length) };
+  const embedder = deps.embedder === undefined ? await embedderFor(home) : deps.embedder;
+  const vectors = SqliteMemoryVectors.forHome(home);
+  try {
+    const found = await searchMemory({ store, vectors, query, filter, embedder });
+    return {
+      ok: true,
+      memoryFacts: itemsView(store, found.items, found.items.length),
+      memorySearchMode: found.mode,
+      ...(found.note === undefined ? {} : { memorySearchNote: found.note }),
+    };
+  } finally {
+    vectors.close();
+  }
 }
 
 /** A page and the count behind it, so a cut list says how much more there is. */

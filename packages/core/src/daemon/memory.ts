@@ -27,7 +27,7 @@ export const MEMORY_METHOD = {
   MEMORY_REJECT: 'memory-reject',
   /** A candidate's words or its rule changed before it is confirmed. */
   MEMORY_EDIT: 'memory-edit',
-  /** Keyword search over what was learned. */
+  /** Search over what was learned: keyword, and by meaning too where a local embedding model is turned on. */
   MEMORY_SEARCH: 'memory-search',
   /** What was learned, by status and scope; verified by default. */
   MEMORY_FACTS: 'memory-facts',
@@ -172,6 +172,15 @@ export interface MemoryEditInput {
   rule?: RuleDraftInput;
 }
 
+/** How a search was answered, so a screen says keyword only rather than letting it pass as both. */
+export const MEMORY_SEARCH_MODE = {
+  KEYWORD: 'keyword',
+  SEMANTIC: 'semantic',
+} as const;
+
+export type MemorySearchMode =
+  (typeof MEMORY_SEARCH_MODE)[keyof typeof MEMORY_SEARCH_MODE];
+
 export interface MemoryRequestFields {
   /** On MEMORY_SOURCE_ADD. */
   memorySource?: MemorySourceInput;
@@ -198,6 +207,10 @@ export interface MemoryResponseFields {
   memoryLearn?: MemoryItemsView;
   /** On MEMORY_FACTS and MEMORY_SEARCH. */
   memoryFacts?: MemoryItemsView;
+  /** On MEMORY_SEARCH: keyword alone, or keyword fused with a local embedding model the person turned on. */
+  memorySearchMode?: MemorySearchMode;
+  /** On MEMORY_SEARCH: why it was keyword only although semantic search is on, such as the model not answering. */
+  memorySearchNote?: string;
   /** On CONFIRM and EDIT: the item as it now stands. */
   memoryItem?: MemoryItemView;
 }

@@ -385,6 +385,7 @@ export class SqliteMemoryStore {
 
   private deleteItemRow(id: string): boolean {
     this.db.prepare('DELETE FROM items_fts WHERE id = ?').run(id);
+    this.db.prepare('DELETE FROM item_vectors WHERE itemId = ?').run(id);
     return this.db.prepare('DELETE FROM items WHERE id = ?').run(id).changes > 0;
   }
 
@@ -421,7 +422,7 @@ export class SqliteMemoryStore {
 }
 
 /** Named parameters only, so nothing a filter carries is spliced into the SQL. */
-function whereOf(
+export function whereOf(
   filter: ItemFilter,
   prefix = '',
 ): { clause: string; params: Record<string, string> } {

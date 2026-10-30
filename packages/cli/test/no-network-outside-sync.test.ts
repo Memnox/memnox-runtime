@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ollamaEmbedder } from '../src/memory/ollama-embedding';
 import { insecureRelayUrl } from '../src/remote/relay-link';
 
 /**
@@ -18,7 +19,7 @@ import { insecureRelayUrl } from '../src/remote/relay-link';
 const ROOT = join(__dirname, '..', 'src');
 
 /**
- * Every file allowed to name a socket, and why. Seven entries, each deliberate.
+ * Every file allowed to name a socket, and why. Eight entries, each deliberate.
  *
  * `node:net` is in the pattern rather than excluded from it, because the same
  * import opens a unix socket and a TCP one — so the daemon is named here and
@@ -37,6 +38,8 @@ const ALLOWED: Record<string, string> = {
     'a listener for paired phones on private addresses only, opened only once the person signs it on, pinned below',
   'remote/mdns.ts':
     'the Bonjour announcement beside that listener, a random name and nothing more, on the local network only',
+  'memory/ollama-embedding.ts':
+    'a local embedding model on this machine, off until the person names one, and refusing any other address, pinned below',
 };
 
 /** Anything that opens a socket or resolves a name. */
@@ -110,5 +113,14 @@ describe('nothing reaches the network but the sync client', () => {
     );
 
     expect(hosts).toEqual(['127.0.0.1']);
+  });
+
+  // Memory's words are embedded on this machine or not at all, so any other address is refused before a request.
+  it('keeps the embedding model on this machine', () => {
+    const model = 'nomic-embed-text';
+    expect(ollamaEmbedder({ model, url: 'http://127.0.0.1:11434' })).not.toBeNull();
+    expect(ollamaEmbedder({ model, url: 'http://localhost:11434' })).not.toBeNull();
+    expect(ollamaEmbedder({ model, url: 'https://embed.example.com' })).toBeNull();
+    expect(ollamaEmbedder({ model, url: 'http://10.0.0.5:11434' })).toBeNull();
   });
 });

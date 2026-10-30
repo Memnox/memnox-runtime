@@ -4,6 +4,7 @@ import {
   type EnforcementMode,
 } from '../constants/enforcement.constants';
 import { isEnforcementMode } from '../domain/enforcement';
+import { isLoopbackUrl } from '../memory/embedding';
 import { DEFAULT_NOTICE_WARMUP_DAYS } from '../notice/notice.constants';
 import {
   APPROVAL_ROUTE,
@@ -61,9 +62,19 @@ export interface MemnoxConfig {
    * since it widens who reaches this machine and so is turned on only by a proposal the Mac signs.
    */
   lan?: true;
+  /**
+   * The local embedding model memory search also ranks by, such as `nomic-embed-text` in Ollama.
+   * Absent means off, and search is keyword only.
+   */
+  embeddingModel?: string;
+  /** Where that model answers, on this machine only; absent means Ollama's own address. */
+  embeddingUrl?: string;
 }
 
 export const UPLOAD_PATHS = { FULL: 'full', HASHED: 'hashed' } as const;
+
+/** Letters, digits and the separators Ollama's model names use, a tag included. */
+const EMBEDDING_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 
 export type UploadPaths = (typeof UPLOAD_PATHS)[keyof typeof UPLOAD_PATHS];
 
@@ -96,6 +107,8 @@ const KEYS = [
   'approvals',
   'uploadPaths',
   'autopilot',
+  'embeddingModel',
+  'embeddingUrl',
 ] as const;
 export type ConfigKey = (typeof KEYS)[number];
 
@@ -140,8 +153,15 @@ export function parseConfig(raw: string): MemnoxConfig {
     }
     if (key === 'approvals')
       config.approvals = approvalRouteOf(value) ?? config.approvals;
+    readEmbedding(config, key, value);
   }
   return config;
+}
+
+/** The embedding settings, each kept only when set and the address only when it is on this machine. */
+function readEmbedding(config: MemnoxConfig, key: string, value: string): void {
+  if (key === 'embeddingModel' && value !== '') config.embeddingModel = value;
+  if (key === 'embeddingUrl' && isLoopbackUrl(value)) config.embeddingUrl = value;
 }
 
 /** Zero is allowed: somebody who wants questions from the first minute can have them. */
@@ -211,6 +231,11 @@ function renderRouting(config: MemnoxConfig): string[] {
     '# Turned on from the Mac, signed with Touch ID, since it widens who can reach this machine.',
     `lan = ${config.lan === true}`,
     '',
+    '# Memory search ranks by meaning as well as by keyword with a local embedding model,',
+    '# such as nomic-embed-text in Ollama. Empty is off. Nothing is sent off this machine.',
+    `embeddingModel = "${config.embeddingModel ?? ''}"`,
+    `embeddingUrl = "${config.embeddingUrl ?? ''}"`,
+    '',
   ];
 }
 
@@ -226,6 +251,24 @@ function validUploadPaths(value: string): ConfigParse {
     : {
         value,
         error: `uploadPaths must be one of ${Object.values(UPLOAD_PATHS).join(', ')}`,
+      };
+}
+
+/** A model name as Ollama spells one, and an address on this machine; empty turns either back to its default. */
+function validEmbedding(
+  key: 'embeddingModel' | 'embeddingUrl',
+  value: string,
+): ConfigParse {
+  if (value === '') return { value };
+  if (key === 'embeddingModel')
+    return EMBEDDING_MODEL.test(value)
+      ? { value }
+      : { value, error: 'embeddingModel is a model name such as nomic-embed-text' };
+  return isLoopbackUrl(value)
+    ? { value }
+    : {
+        value,
+        error: 'embeddingUrl must be on this machine, such as http://127.0.0.1:11434',
       };
 }
 
@@ -256,6 +299,8 @@ export function validateConfigValue(key: ConfigKey, value: string): ConfigParse 
         };
   }
   if (key === 'uploadPaths') return validUploadPaths(value);
+  if (key === 'embeddingModel' || key === 'embeddingUrl')
+    return validEmbedding(key, value);
   if (key === 'noticeWarmupDays') {
     return isWholeDays(value)
       ? { value }
@@ -284,11 +329,16 @@ export function applyConfigValue(
     return { ...config, approvals: approvalRouteOf(value) ?? config.approvals };
   if (key === 'uploadPaths')
     return { ...config, uploadPaths: isUploadPaths(value) ? value : config.uploadPaths };
+  if (key === 'embeddingModel' || key === 'embeddingUrl') {
+    const { [key]: _cleared, ...rest } = config;
+    return value === '' ? rest : { ...rest, [key]: value };
+  }
   return { ...config, telemetry: value === 'true' };
 }
 
 export function readConfigValue(config: MemnoxConfig, key: ConfigKey): string {
   const value = config[key];
+  if (value === undefined) return '';
   return Array.isArray(value) ? value.join(', ') : String(value);
 }
 

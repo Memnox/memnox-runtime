@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS evidence (
 CREATE INDEX IF NOT EXISTS evidence_item ON evidence (itemId);
 CREATE INDEX IF NOT EXISTS evidence_source ON evidence (sourceId);
 CREATE TABLE IF NOT EXISTS rejections (key TEXT PRIMARY KEY, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS item_vectors (
+  itemId TEXT NOT NULL, model TEXT NOT NULL, text TEXT NOT NULL, vector BLOB NOT NULL,
+  PRIMARY KEY (itemId, model)
+);
 CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(
   id UNINDEXED, statement, subject, tokenize = 'porter unicode61'
 );
