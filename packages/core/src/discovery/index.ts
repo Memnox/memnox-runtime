@@ -32,6 +32,7 @@ export * from './fail-on';
 export * from './sarif';
 export * from './wrap';
 export * from './wrap-text';
+export * from './text-server-entries';
 export * from './coverage';
 export * from './enforcement';
 export * from './alerts';

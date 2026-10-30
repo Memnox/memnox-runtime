@@ -190,7 +190,7 @@ function yamlRegions(raw: string): ServerRegion[] {
 }
 
 /** A table ends at the next header, sub-tables included: `command` sits under its own. */
-function tableEnd(lines: readonly string[], header: number): number {
+export function tableEnd(lines: readonly string[], header: number): number {
   for (let at = header + 1; at < lines.length; at += 1) {
     if ((lines[at] as string).trim().startsWith('[')) return at - 1;
   }
@@ -198,7 +198,7 @@ function tableEnd(lines: readonly string[], header: number): number {
 }
 
 /** A YAML entry ends at the next line indented no deeper than its key, blanks aside. */
-function entryEnd(lines: readonly string[], start: number): number {
+export function entryEnd(lines: readonly string[], start: number): number {
   const indent = indentOf(lines[start] as string).length;
   for (let at = start + 1; at < lines.length; at += 1) {
     const line = lines[at] as string;
@@ -311,7 +311,7 @@ function quoteOf(value: string): QuoteStyle {
 }
 
 /** The line declaring `[a.b]`, quoted or bare, ignoring anything inside a comment. */
-function headerLine(lines: readonly string[], path: string): number {
+export function headerLine(lines: readonly string[], path: string): number {
   const segments = path.split('.');
   for (let at = 0; at < lines.length; at += 1) {
     const text = (lines[at] as string).trim();
