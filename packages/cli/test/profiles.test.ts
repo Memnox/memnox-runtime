@@ -1,10 +1,11 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DAEMON_METHOD,
   emptyHub,
+  PROPOSAL_ANSWER,
   HUB_TRANSPORT,
   PROPOSAL_KIND,
   Proposals,
@@ -20,6 +21,9 @@ import { agentsAnswer } from '../src/daemon/agents-answer';
 import { profilesAnswer } from '../src/daemon/profiles-answer';
 import { skillsHubAnswer } from '../src/daemon/skills-hub-answer';
 import { isVoiceMethod } from '../src/daemon/voice-methods';
+import { machinePolicyPath } from '../src/protect/machine-rules';
+import { mergeRules } from '../src/protect/merge-rules';
+import { fileForScope, scopeAnswered, scopedRules } from '../src/protect/rule-scope';
 
 /**
  * A profile bundles servers, skills and a rule pack under one name, and applying it to an agent in
@@ -163,10 +167,40 @@ describe('profiles', () => {
     const places = await rulePlaces(at.home);
     expect(places.length).toBeGreaterThan(0);
     for (const place of places) {
-      expect(place.file).toBe(join(at.project, 'memnox.policies.toml'));
-      expect(place.scopes).toEqual([RULE_SCOPE.REPOSITORY]);
+      // This Mac's own file, narrowed by folder, so the repository is never dirtied.
+      expect(place.file).toBe(machinePolicyPath(at.home));
+      expect(place.scopes).toEqual([RULE_SCOPE.MACHINE]);
       expect(place.folders).toContain(at.project);
     }
+  });
+
+  it("writes a confirmed pack rule into this Mac's file, held to the folder, and leaves the repository's own file alone", async () => {
+    const at = await machine();
+    await backend(at);
+    const theirs = join(at.project, 'memnox.policies.toml');
+    const before = '# OURS: written by Memnox earlier\n';
+    await writeFile(theirs, before);
+    await at.ask({
+      method: DAEMON_METHOD.PROFILE_APPLY,
+      profileName: 'Backend Engineering',
+      profileAgent: 'claude-code',
+      profileProject: at.project,
+    });
+    const [proposal] = (await new Proposals(at.home).open(NOW.toISOString())).filter(
+      (each) => each.change.kind === PROPOSAL_KIND.RULES,
+    );
+    if (proposal === undefined || proposal.change.kind !== PROPOSAL_KIND.RULES)
+      throw new Error('no rule was proposed');
+
+    // The same resolution the daemon's confirm makes of a plain yes.
+    const scope = scopeAnswered(proposal.change.scopes ?? [], PROPOSAL_ANSWER.CONFIRMED);
+    if (scope === undefined) throw new Error('no scope was offered');
+    const file = fileForScope(at.home, scope);
+    await mergeRules(file, scopedRules(proposal.change.rules, scope), at.home);
+
+    expect(file).toBe(machinePolicyPath(at.home));
+    expect(await readFile(file, 'utf8')).toContain(at.project);
+    expect(await readFile(theirs, 'utf8')).toBe(before);
   });
 
   it("keeps the pack's rules the person's own when no repository is named", async () => {
@@ -256,7 +290,8 @@ describe('profiles', () => {
     expect(launched.proposed).toBe(launched.profileApplied?.proposed[0]);
     expect(await kindsProposed(at.home)).toContain(PROPOSAL_KIND.MCP_HUB);
     for (const place of await rulePlaces(at.home)) {
-      expect(place.scopes).toEqual([RULE_SCOPE.REPOSITORY]);
+      expect(place.scopes).toEqual([RULE_SCOPE.MACHINE]);
+      expect(place.folders).toContain(at.project);
     }
   });
 

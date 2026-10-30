@@ -19,6 +19,7 @@ import {
 import {
   fileForScope,
   machineScope,
+  machineScopeIn,
   repositoryScope,
   scopedRules,
 } from '../protect/rule-scope';
@@ -115,7 +116,7 @@ export async function exportRules(home: string): Promise<string> {
 
 /**
  * Every rule in the pack as its own proposal, so each is read and signed and none arrives silently.
- * Given a repository, each holds only inside it and is written to its rule file, never the machine's.
+ * Given a repository, each holds only inside it, kept in this Mac's own file so the checkout stays clean.
  */
 export async function importPack(
   home: string,
@@ -155,14 +156,18 @@ async function proposeRules(
   rules: readonly Policy[],
   { summary, at, offerTeam, repository }: Proposing,
 ): Promise<string> {
-  // The only place offered, so a plain yes can never put a repository's rule on the whole machine.
+  // The only place offered, and the rules narrowed before they are signed, so a plain yes can never put them machine wide.
   const scope =
-    repository === undefined ? machineScope(true) : repositoryScope(repository, 0, true);
+    repository === undefined ? machineScope(true) : machineScopeIn(repository);
+  const held =
+    repository === undefined
+      ? [...rules]
+      : scopedRules(rules, repositoryScope(repository, 0, true));
   const proposal = await new Proposals(home).propose({
     change: {
       kind: PROPOSAL_KIND.RULES,
       file: fileForScope(home, scope),
-      rules: scopedRules(rules, scope),
+      rules: held,
       scopes: [scope],
       ...(offerTeam ? { offerTeam: true } : {}),
     },

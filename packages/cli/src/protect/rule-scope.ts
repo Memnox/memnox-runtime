@@ -32,6 +32,14 @@ export function machineScope(suggested: boolean): RuleScope {
   };
 }
 
+/**
+ * A repository's rules kept in this Mac's own file rather than the repository's, so the checkout
+ * stays clean; the rules carry the folder in their match, which is what holds them there.
+ */
+export function machineScopeIn(folder: string): RuleScope {
+  return { ...machineScope(true), label: `This Mac, in ${basename(folder)} only` };
+}
+
 /** The workspace, for a machine that is enrolled in one; nothing is written here, it is offered on the next sync. */
 export function teamScope(): RuleScope {
   return { id: RULE_SCOPE.TEAM, kind: RULE_SCOPE.TEAM, label: 'The team' };
