@@ -3,6 +3,8 @@ import { homedir } from 'node:os';
 import {
   FileToolPins,
   loadOrCreateConfig,
+  nodeSecretStore,
+  resolveSecretRefs,
   CloudActions,
   CloudNotes,
   ENV_AGENT_NAME,
@@ -68,7 +70,27 @@ async function main(): Promise<void> {
     process.exit(EXIT.FAILED);
   }
 
+  await resolveSecrets(homedir());
   new McpFirewall(await firewallOptionsFor(args, homedir())).start();
+}
+
+/**
+ * Swaps each secret reference the hub wrote for its value from the OS store, here and in no
+ * other process, so the server gets the credential and the agent's config never held it.
+ */
+async function resolveSecrets(home: string): Promise<void> {
+  const store = nodeSecretStore(home);
+  const resolved = await resolveSecretRefs(process.env, (name) => store.get(name));
+  if (resolved.missing.length > 0) {
+    // Starting with the reference in place of the value would fail later and less clearly.
+    for (const each of resolved.missing)
+      warn(
+        `${each.variable} needs the secret ${each.secret}, which this machine does not hold`,
+      );
+    process.exit(EXIT.FAILED);
+  }
+  for (const [variable, value] of Object.entries(resolved.env))
+    process.env[variable] = value;
 }
 
 /** Everything the proxy is wired to on this machine, read once where it starts. */
