@@ -11,6 +11,7 @@ import {
   type ProposedChange,
 } from '@memnox/core';
 import { syncHub } from '../mcp/hub-writer';
+import { describeCount } from '../plural';
 import { registerPolicyFile } from '../policy-registry';
 import { isInside } from '../projects/project-changes';
 import { applySkillsProposal } from './skills-hub-confirm';
@@ -46,7 +47,9 @@ export async function applyProjectProposal(
   const state = await readProjectState(home, project.projectId);
   if (state !== null)
     await writeProjectState(home, { ...state, appliedAt: now.toISOString() });
-  const done = `${PROPOSAL_ANSWER.CONFIRMED}: ${servers} server grant${servers === 1 ? '' : 's'}, ${project.skills.length - refused.length} skill grant${project.skills.length - refused.length === 1 ? '' : 's'}${policy ? ', and its rule file in force' : ''}`;
+  const given = describeCount(project.skills.length - refused.length, 'skill grant');
+  const rules = policy ? ', and its rule file in force' : '';
+  const done = `${PROPOSAL_ANSWER.CONFIRMED}: ${describeCount(servers, 'server grant')}, ${given}${rules}`;
   return refused.length === 0
     ? { ok: true, outcome: done }
     : { ok: true, outcome: `${done}; not given: ${refused.join(' ')}` };

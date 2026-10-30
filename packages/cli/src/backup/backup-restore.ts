@@ -18,6 +18,7 @@ import {
 } from '@memnox/core';
 import { CONFIG_RULE, recordConfigChanges, RESTORES_DIR } from '../keeper/config-events';
 import { syncHub } from '../mcp/hub-writer';
+import { describeCount } from '../plural';
 import { syncSkills } from '../skills/skills-writer';
 import { backupAllowed } from './backup-set';
 
@@ -63,7 +64,7 @@ export async function proposeRestore(
   const summary = summaryOf(contents);
   const proposal = await new Proposals(home).propose({
     change: { kind: PROPOSAL_KIND.BACKUP_RESTORE, staged, ...summary },
-    rationale: `Put back the backup made ${summary.createdAt}: ${summary.files.length} file${summary.files.length === 1 ? '' : 's'} of rules, hubs, skills, projects and memory`,
+    rationale: `Put back the backup made ${summary.createdAt}: ${describeCount(summary.files.length, 'file')} of rules, hubs, skills, projects and memory`,
     proposedBy: PROPOSED_BY,
     at: now.toISOString(),
     ttlMs: PROPOSAL_TTL_MS,
@@ -119,7 +120,7 @@ export async function putBackupBack(
       ? ', and the ledger here kept as it was'
       : '';
   return {
-    outcome: `${written.length} file${written.length === 1 ? '' : 's'} put back${kept}`,
+    outcome: `${describeCount(written.length, 'file')} put back${kept}`,
   };
 }
 
