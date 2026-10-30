@@ -10,6 +10,7 @@ import type { AgentsRequestFields, AgentsResponseFields } from './agents-view';
 import type { SkillsRequestFields, SkillsResponseFields } from './skills-hub';
 import type { HeldActionEventFields, HeldActionRequestFields } from './held-action';
 import type { ProjectsRequestFields, ProjectsResponseFields } from './projects';
+import type { MemoryRequestFields, MemoryResponseFields } from './memory';
 import type { BackupRequestFields, BackupResponseFields } from './backup';
 import type {
   RemoteEventFields,
@@ -90,7 +91,8 @@ export interface ExtensionRequestFields
     SkillsRequestFields,
     HeldActionRequestFields,
     ProjectsRequestFields,
-    BackupRequestFields {}
+    BackupRequestFields,
+    MemoryRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -107,7 +109,8 @@ export interface ExtensionResponseFields
     AgentsResponseFields,
     SkillsResponseFields,
     ProjectsResponseFields,
-    BackupResponseFields {}
+    BackupResponseFields,
+    MemoryResponseFields {}
 
 export interface ExtensionEventFields
   extends

@@ -218,7 +218,18 @@
       "project-put",
       "project-apply",
       "backup-create",
-      "backup-restore"
+      "backup-restore",
+      "memory-sources",
+      "memory-source-add",
+      "memory-source-remove",
+      "memory-source-read",
+      "memory-learn",
+      "memory-confirm",
+      "memory-reject",
+      "memory-edit",
+      "memory-search",
+      "memory-facts",
+      "memory-forget"
     ],
     "events": [
       "held",

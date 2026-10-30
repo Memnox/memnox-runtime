@@ -27,5 +27,6 @@ export * from './agents-view';
 export * from './skills-hub';
 export * from './held-action';
 export * from './projects';
+export * from './memory';
 export * from './backup';
 export * from './vectors';

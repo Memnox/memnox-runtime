@@ -1,0 +1,203 @@
+import type { DecisionEffect } from '../constants/decision.constants';
+import type { MemoryKind, MemoryOrigin, MemoryStatus } from '../memory/memory-record';
+import type { MemorySourceKind, SourceTrust } from '../memory-sources/memory-source';
+import type { MemoryScope } from '../projects/project';
+import type { RuleDraftInput } from './policies';
+
+/**
+ * Memory as every screen reads and changes it: the sources a person pointed Memnox at, the Learn
+ * queue of what was read out of them, and the facts a person confirmed. A model only proposes;
+ * a fact is verified by a person's confirm, and a rule holds only once its proposal is signed.
+ */
+
+export const MEMORY_METHOD = {
+  /** Every source with where it is, its trust, when it was last read and what it taught. */
+  MEMORY_SOURCES: 'memory-sources',
+  /** Adds a folder, a repository's instruction files, an export, Supermemory or a hub server. */
+  MEMORY_SOURCE_ADD: 'memory-source-add',
+  /** Takes a source away; what it taught goes outdated rather than vanishing. */
+  MEMORY_SOURCE_REMOVE: 'memory-source-remove',
+  /** Reads a source again now and extracts what changed, with the person's own agent CLI. */
+  MEMORY_SOURCE_READ: 'memory-source-read',
+  /** The Learn queue: candidates and conflicts waiting on a person. */
+  MEMORY_LEARN: 'memory-learn',
+  /** A fact becomes verified; a rule candidate raises a signed rule proposal. */
+  MEMORY_CONFIRM: 'memory-confirm',
+  /** Rejected, and remembered so the same words are never proposed again. */
+  MEMORY_REJECT: 'memory-reject',
+  /** A candidate's words or its rule changed before it is confirmed. */
+  MEMORY_EDIT: 'memory-edit',
+  /** Keyword search over what was learned. */
+  MEMORY_SEARCH: 'memory-search',
+  /** What was learned, by status and scope; verified by default. */
+  MEMORY_FACTS: 'memory-facts',
+  /** Deletes one item and its evidence. */
+  MEMORY_FORGET: 'memory-forget',
+} as const;
+
+/** A source as a form adds it; a key is named, never sent, and kept with the hub's secrets. */
+export interface MemorySourceInput {
+  kind: MemorySourceKind;
+  /** A folder, absolute, or a repository for instruction files, or an API's base URL. */
+  location?: string;
+  name?: string;
+  scope?: MemoryScope;
+  /** The OS store entry holding an API key. */
+  secret?: string;
+  /** For an MCP source: the hub server, and the tool that reads it. */
+  server?: string;
+  tool?: string;
+}
+
+/** How many items a source taught, by where each stands now. */
+export interface MemorySourceCounts {
+  candidate: number;
+  verified: number;
+  conflicting: number;
+  outdated: number;
+  rejected: number;
+}
+
+export interface MemorySourceView {
+  id: string;
+  kind: MemorySourceKind;
+  name: string;
+  /** The folder, or the API's base URL. */
+  location: string;
+  trust: SourceTrust;
+  scope: MemoryScope;
+  project?: string;
+  /** Re-read when a file in it changes; false for an API, which is read on request only. */
+  watched: boolean;
+  /** For a source that needs a key: whether the OS store holds it. Never the value. */
+  keyHeld?: boolean;
+  lastReadAt?: string;
+  /** Why the last read failed, when it did. */
+  lastError?: string;
+  counts: MemorySourceCounts;
+}
+
+export interface MemoryEvidenceView {
+  /** As a person reads it: `notes/ops.md#Releases`, or the link. */
+  ref: string;
+  document: string;
+  heading?: string;
+  url?: string;
+  /** The source's name, or the source id when it was removed. */
+  source: string;
+  /** The passage changed or went away since it was read. */
+  stale: boolean;
+}
+
+export interface MemoryRuleView {
+  effect: DecisionEffect;
+  actions: string[];
+  targets?: string[];
+  agents?: string[];
+  reason: string;
+  /** The rule read back in one plain sentence, before any field. */
+  sentence: string;
+}
+
+export interface MemoryItemView {
+  id: string;
+  kind: MemoryKind;
+  /** Verbatim as it was read or suggested. */
+  statement: string;
+  subject: string;
+  status: MemoryStatus;
+  scope: MemoryScope;
+  project?: string;
+  origin: MemoryOrigin;
+  /** Read from a source outside the person's trust. */
+  tainted: boolean;
+  /** The extractor's own confidence, from 0 to 1, never a person's. */
+  extractorConfidence?: number;
+  /** The agent that suggested it. */
+  suggestedBy?: string;
+  rule?: MemoryRuleView;
+  /** The earlier item it restates, so the queue says so rather than offering it as news. */
+  duplicateOf?: { id: string; statement: string };
+  /** The rule proposal waiting on the person's signature. */
+  proposalId?: string;
+  evidence: MemoryEvidenceView[];
+  createdAt: string;
+  decidedAt?: string;
+  decidedBy?: string;
+}
+
+export interface MemoryItemsView {
+  items: MemoryItemView[];
+  /** Matching items past the ones listed, so a cut list never reads as whole. */
+  more: number;
+}
+
+/** Whether the person's agent CLI read the passages a read found. */
+export const EXTRACTOR_STATE = {
+  ANSWERED: 'answered',
+  /** No agent CLI could be asked, so the new passages wait for the next read. */
+  UNAVAILABLE: 'unavailable',
+  /** It answered in no shape that could be read. */
+  UNREADABLE: 'unreadable',
+  /** Nothing new to read. */
+  IDLE: 'idle',
+} as const;
+
+export type ExtractorState = (typeof EXTRACTOR_STATE)[keyof typeof EXTRACTOR_STATE];
+
+/** What one read came to, so an empty read and a failed one are told apart. */
+export interface MemoryReadSummary {
+  sourceId: string;
+  documents: number;
+  passages: number;
+  added: number;
+  /** Said again by another passage, which only added evidence. */
+  merged: number;
+  /** Words a person rejected before, not proposed again. */
+  rejectedBefore: number;
+  /** Citations naming no passage shown, dropped and never repaired. */
+  droppedCitations: number;
+  /** Candidates that did not survive validation. */
+  discarded: number;
+  outdated: number;
+  /** Whether the person's agent CLI answered, so passages left unread are said as such. */
+  extractor: ExtractorState;
+  error?: string;
+}
+
+/** An edit before confirming; a rule goes through the same draft as any other rule. */
+export interface MemoryEditInput {
+  statement?: string;
+  subject?: string;
+  rule?: RuleDraftInput;
+}
+
+export interface MemoryRequestFields {
+  /** On MEMORY_SOURCE_ADD. */
+  memorySource?: MemorySourceInput;
+  /** On MEMORY_SOURCE_REMOVE and MEMORY_SOURCE_READ. */
+  memorySourceId?: string;
+  /** On CONFIRM, REJECT, EDIT and FORGET. */
+  memoryItemId?: string;
+  /** On MEMORY_EDIT. */
+  memoryEdit?: MemoryEditInput;
+  /** On MEMORY_SEARCH. */
+  memoryQuery?: string;
+  /** On SEARCH, FACTS and LEARN: personal or project. */
+  memoryScope?: MemoryScope;
+  /** On MEMORY_FACTS. */
+  memoryStatus?: MemoryStatus;
+}
+
+export interface MemoryResponseFields {
+  /** On every source method, so a screen redraws from one answer. */
+  memorySources?: MemorySourceView[];
+  /** On MEMORY_SOURCE_READ, and on ADD, which reads the source once. */
+  memoryRead?: MemoryReadSummary;
+  /** On LEARN, and after CONFIRM, REJECT and EDIT. */
+  memoryLearn?: MemoryItemsView;
+  /** On MEMORY_FACTS and MEMORY_SEARCH. */
+  memoryFacts?: MemoryItemsView;
+  /** On CONFIRM and EDIT: the item as it now stands. */
+  memoryItem?: MemoryItemView;
+}

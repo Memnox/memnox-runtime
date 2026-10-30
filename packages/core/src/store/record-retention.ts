@@ -5,6 +5,7 @@ import { processAlive } from '../coordination/lease-store';
 import { RunTerminals } from '../discovery/run-terminal';
 import { GRANTS_DIR } from '../gate/session-grants';
 import { PENDING_DIR, PendingApprovals, type PendingApproval } from '../gate/pending';
+import { dropOldMemory, MEMORY_RECORDS } from '../memory/memory-retention';
 import { MISSION_DIR, type Mission } from '../session/mission';
 import { PAUSE_DIR, type SessionPause } from '../session/pause';
 import { POSTS_DIR, type SessionPost } from '../session/posts';
@@ -75,6 +76,7 @@ export async function dropOldRecords(input: RetentionInput): Promise<RecordsDrop
   }
   dropped[GRANTS_DIR] = await dropUntouched(GRANTS_DIR, input);
   dropped[TRANSCRIPTS_DIR] = await dropTranscripts(input);
+  dropped[MEMORY_RECORDS] = dropOldMemory(input);
   return dropped;
 }
 

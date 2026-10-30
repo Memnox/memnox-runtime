@@ -44,6 +44,8 @@ export const RULE_SOURCE = {
   ALLOWANCE: 'allowance',
   /** A pause or a freeze in force, which ends on its own. */
   FREEZE: 'freeze',
+  /** Read out of the person's notes, confirmed in Learn and signed; it names where it was read. */
+  EXTRACTED: 'extracted',
 } as const;
 
 export type RuleSource = (typeof RULE_SOURCE)[keyof typeof RULE_SOURCE];
@@ -71,6 +73,8 @@ export interface PolicyRuleView {
   /** On a workspace rule: who decided it, and when. */
   decidedBy?: string;
   decidedAt?: string;
+  /** On an extracted rule: where it was read, as `path#heading` or a link. */
+  evidenceRefs?: string[];
   /** When it ends on its own, for a grant, an allowance or a freeze. */
   until?: string;
   /** Only a rule a person added on this machine, which is the only kind a screen removes. */

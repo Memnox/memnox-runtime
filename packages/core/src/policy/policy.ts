@@ -118,6 +118,8 @@ export interface Policy {
   /** Who in the workspace approved it and when, so the reason an agent is given names a person and a day. */
   decidedBy?: string;
   decidedAt?: string;
+  /** Where a rule learned from the person's notes was read, as `path#heading` or a link, so a stop cites it. */
+  learnedFrom?: string[];
 }
 
 export interface PolicyDocument {

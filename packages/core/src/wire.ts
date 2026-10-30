@@ -22,6 +22,7 @@ export * from './daemon/agents-view';
 export * from './daemon/skills-hub';
 export * from './daemon/held-action';
 export * from './daemon/projects';
+export * from './daemon/memory';
 export * from './daemon/backup';
 export {
   MOST_PRESSED_KEYS,
