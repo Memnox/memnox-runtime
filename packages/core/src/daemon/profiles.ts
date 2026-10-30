@@ -66,7 +66,7 @@ export interface ProfilesRequestFields {
   profileName?: string;
   /** On PROFILE_APPLY: the agent, by kind. */
   profileAgent?: string;
-  /** On PROFILE_APPLY: the repository its skills are written into, as an absolute path; absent is the home folder. */
+  /** On PROFILE_APPLY: the repository its skills are written into and its rules hold in, as an absolute path; absent is the home folder and the whole machine. */
   profileProject?: string;
 }
 

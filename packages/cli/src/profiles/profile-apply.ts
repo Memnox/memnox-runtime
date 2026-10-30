@@ -32,7 +32,7 @@ const AGENT_KINDS: readonly string[] = Object.values(DISCOVERED_AGENT_KIND);
 interface ApplyInput {
   profile: string;
   agent: string;
-  /** The repository its skills are written into; absent is the home folder. */
+  /** The repository its skills are written into and its rules hold in; absent is the home folder and the whole machine. */
   project?: string;
 }
 
@@ -59,7 +59,7 @@ export async function applyProfile(
   };
   await proposeServers(home, { profile, agent, now }, applied);
   await proposeSkills(home, { profile, agent, now, project: input.project }, applied);
-  await proposePack(home, { profile, now }, applied);
+  await proposePack(home, { profile, now, project: input.project }, applied);
   return applied;
 }
 
@@ -123,14 +123,15 @@ async function proposeSkills(
   }
 }
 
+/** Named a repository, the pack's rules hold only there; with none they are the person's own, as before. */
 async function proposePack(
   home: string,
-  { profile, now }: Omit<Applying, 'agent'>,
+  { profile, now, project }: Omit<Applying, 'agent'> & { project: string | undefined },
   applied: ProfileApplied,
 ): Promise<void> {
   const pack = profile.rulePack;
   if (pack === undefined) return;
-  const imported = await importPack(home, pack.toml, now.toISOString());
+  const imported = await importPack(home, pack.toml, now.toISOString(), project);
   if ('refused' in imported) applied.skipped.push(`${pack.name}: ${imported.refused}`);
   else applied.proposed.push(...imported.proposed);
 }

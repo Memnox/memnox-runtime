@@ -16,8 +16,12 @@ import {
   type RuleDraft,
   type RuleDraftInput,
 } from '@memnox/core';
-import { machinePolicyPath } from '../protect/machine-rules';
-import { machineScope } from '../protect/rule-scope';
+import {
+  fileForScope,
+  machineScope,
+  repositoryScope,
+  scopedRules,
+} from '../protect/rule-scope';
 import { editableRule, editableRules } from './rules-in-force';
 
 /**
@@ -109,11 +113,15 @@ export async function exportRules(home: string): Promise<string> {
   return rulePackToml(await editableRules(home));
 }
 
-/** Every rule in the pack as its own proposal, so each is read and signed and none arrives silently. */
+/**
+ * Every rule in the pack as its own proposal, so each is read and signed and none arrives silently.
+ * Given a repository, each holds only inside it and is written to its rule file, never the machine's.
+ */
 export async function importPack(
   home: string,
   toml: string,
   at: string,
+  repository?: string,
 ): Promise<Changed<{ proposed: string[] }>> {
   const read = rulesOfPack(toml);
   if ('problems' in read)
@@ -122,22 +130,40 @@ export async function importPack(
   for (const rule of read.rules) {
     // Never offered to the team: a pack is somebody else's rules, taken onto this machine only.
     const summary = sentenceOfRule(rule);
-    proposed.push(await proposeRules(home, [rule], { summary, at, offerTeam: false }));
+    proposed.push(
+      await proposeRules(home, [rule], {
+        summary,
+        at,
+        offerTeam: false,
+        ...(repository === undefined ? {} : { repository }),
+      }),
+    );
   }
   return { proposed };
+}
+
+interface Proposing {
+  summary: string;
+  at: string;
+  offerTeam: boolean;
+  /** The one folder the rules hold in; absent is the whole machine. */
+  repository?: string;
 }
 
 async function proposeRules(
   home: string,
   rules: readonly Policy[],
-  { summary, at, offerTeam }: { summary: string; at: string; offerTeam: boolean },
+  { summary, at, offerTeam, repository }: Proposing,
 ): Promise<string> {
+  // The only place offered, so a plain yes can never put a repository's rule on the whole machine.
+  const scope =
+    repository === undefined ? machineScope(true) : repositoryScope(repository, 0, true);
   const proposal = await new Proposals(home).propose({
     change: {
       kind: PROPOSAL_KIND.RULES,
-      file: machinePolicyPath(home),
-      rules,
-      scopes: [machineScope(true)],
+      file: fileForScope(home, scope),
+      rules: scopedRules(rules, scope),
+      scopes: [scope],
       ...(offerTeam ? { offerTeam: true } : {}),
     },
     rationale: summary,

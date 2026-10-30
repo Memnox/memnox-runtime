@@ -8,6 +8,7 @@ import {
   HUB_TRANSPORT,
   PROPOSAL_KIND,
   Proposals,
+  RULE_SCOPE,
   SKILL_SCOPE,
   withAssignment,
   withServer,
@@ -87,6 +88,23 @@ async function backend(at: Machine): Promise<DaemonResponse> {
   });
 }
 
+/** Where each rule card would put its rules: the file, the one place offered and the folders matched. */
+async function rulePlaces(
+  home: string,
+): Promise<{ file: string; scopes: string[]; folders: string[] }[]> {
+  return (await new Proposals(home).open(NOW.toISOString())).flatMap((each) => {
+    const change = each.change;
+    if (change.kind !== PROPOSAL_KIND.RULES) return [];
+    return [
+      {
+        file: change.file,
+        scopes: (change.scopes ?? []).map((scope) => scope.kind),
+        folders: change.rules.flatMap((rule) => rule.match.workingDirectories ?? []),
+      },
+    ];
+  });
+}
+
 async function kindsProposed(home: string): Promise<string[]> {
   return (await new Proposals(home).open(NOW.toISOString())).map(
     (each) => each.change.kind,
@@ -131,6 +149,40 @@ describe('profiles', () => {
       0,
     );
     expect(done?.proposed).toHaveLength(kinds.length);
+  });
+
+  it("holds the pack's rules only in the repository it was applied to", async () => {
+    const at = await machine();
+    await backend(at);
+    await at.ask({
+      method: DAEMON_METHOD.PROFILE_APPLY,
+      profileName: 'Backend Engineering',
+      profileAgent: 'claude-code',
+      profileProject: at.project,
+    });
+    const places = await rulePlaces(at.home);
+    expect(places.length).toBeGreaterThan(0);
+    for (const place of places) {
+      expect(place.file).toBe(join(at.project, 'memnox.policies.toml'));
+      expect(place.scopes).toEqual([RULE_SCOPE.REPOSITORY]);
+      expect(place.folders).toContain(at.project);
+    }
+  });
+
+  it("keeps the pack's rules the person's own when no repository is named", async () => {
+    const at = await machine();
+    await backend(at);
+    await at.ask({
+      method: DAEMON_METHOD.PROFILE_APPLY,
+      profileName: 'Backend Engineering',
+      profileAgent: 'claude-code',
+    });
+    const places = await rulePlaces(at.home);
+    expect(places.length).toBeGreaterThan(0);
+    for (const place of places) {
+      expect(place.scopes).toEqual([RULE_SCOPE.MACHINE]);
+      expect(place.folders).toEqual([]);
+    }
   });
 
   it('raises nothing for a server the agent already has', async () => {
@@ -203,6 +255,9 @@ describe('profiles', () => {
     expect(launched.profileApplied?.agent).toBe('claude-code');
     expect(launched.proposed).toBe(launched.profileApplied?.proposed[0]);
     expect(await kindsProposed(at.home)).toContain(PROPOSAL_KIND.MCP_HUB);
+    for (const place of await rulePlaces(at.home)) {
+      expect(place.scopes).toEqual([RULE_SCOPE.REPOSITORY]);
+    }
   });
 
   it('raises nothing for a launch that is refused, so no card is left to expire', async () => {
