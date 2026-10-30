@@ -1,10 +1,13 @@
 import {
+  AGENT_ID,
   AGENTS_METHOD,
   BREAKER_SIGNAL,
+  DISCOVERED_AGENT_KIND,
   minutesToMs,
   PROPOSAL_KIND,
   Proposals,
   SessionPauses,
+  startableKindOf,
   type DaemonRequest,
   type DaemonResponse,
   type SessionCard,
@@ -12,6 +15,7 @@ import {
 } from '@memnox/core';
 import { agentNamed, pauseAgent } from '../agents/agent-pause';
 import { launchAgent } from '../agents/agent-launch';
+import { applyProfile } from '../profiles/profile-apply';
 import { readAgentsView } from '../studio/agents-read';
 
 /**
@@ -125,6 +129,8 @@ async function launch(
   request: DaemonRequest,
   deps: AgentsDeps,
 ): Promise<Answered> {
+  const profiled = await profileFirst(home, request, deps.now);
+  if ('refused' in profiled) return refused(profiled.refused);
   const launched = await launchAgent(home, {
     agent: request.agentKind,
     workingDirectory: request.workingDirectory,
@@ -132,7 +138,38 @@ async function launch(
     ...(deps.resolveCommand === undefined ? {} : { resolve: deps.resolveCommand }),
   });
   if ('refused' in launched) return refused(launched.refused);
-  return { ok: true, agentLaunched: launched };
+  return { ok: true, agentLaunched: launched, ...profiled };
+}
+
+/** The hub's name for an agent a terminal opens, where the two differ. */
+const HUB_KIND: Readonly<Record<string, string>> = {
+  [AGENT_ID.CODEX]: DISCOVERED_AGENT_KIND.CODEX_CLI,
+};
+
+/** A profile named on a launch, applied to the agent in that folder before it opens. */
+async function profileFirst(
+  home: string,
+  request: DaemonRequest,
+  now: Date,
+): Promise<Pick<Answered, 'profileApplied' | 'proposed'> | { refused: string }> {
+  const { profileName, agentKind, workingDirectory } = request;
+  if (profileName === undefined) return {};
+  const startable = agentKind === undefined ? null : startableKindOf(agentKind);
+  if (startable === null)
+    return { refused: 'Name an agent Memnox can open in a terminal.' };
+  const applied = await applyProfile(
+    home,
+    {
+      profile: profileName,
+      agent: HUB_KIND[startable] ?? startable,
+      ...(workingDirectory === undefined ? {} : { project: workingDirectory }),
+    },
+    now,
+  );
+  if ('refused' in applied) return applied;
+  // The first card to sign, so a screen opens it as the agent opens; the rest follow on the cards.
+  const [first] = applied.proposed;
+  return { profileApplied: applied, ...(first === undefined ? {} : { proposed: first }) };
 }
 
 /** The same hold a voice pause puts on a session: its next action waits until a person resumes it. */
