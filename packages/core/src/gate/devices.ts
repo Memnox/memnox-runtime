@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { platform } from 'node:os';
 import { join } from 'node:path';
 import { MEMNOX_HOME } from '../config/config';
+import { machineWord } from '../constants/machine-word.constants';
 import type { DeviceWire } from '../daemon/remote';
 import { readJsonFile, writeJsonFile } from '../store/json-records';
 import {
@@ -110,16 +112,19 @@ export async function pairedCanAnswer(home: string): Promise<boolean> {
 export class Devices {
   private readonly path: string;
   private readonly keys: ConfirmKeys;
+  private readonly ownName: string;
 
-  constructor(home: string) {
+  /** The platform is a seam so a test can name the machine as Windows or Linux would. */
+  constructor(home: string, os: string = platform()) {
     this.path = devicesPathFor(home);
     this.keys = new ConfirmKeys(home);
+    this.ownName = `this ${machineWord(os)}`;
   }
 
   /** Every device, the Mac first, after bringing its entry in line with the key on file. */
   async all(): Promise<DeviceRecord[]> {
     const registry = await this.read();
-    const synced = withMac(registry.devices, await this.keys.read());
+    const synced = withMac(registry.devices, await this.keys.read(), this.ownName);
     if (JSON.stringify(synced) !== JSON.stringify(registry.devices)) {
       await this.write(synced);
     }
@@ -200,12 +205,13 @@ export class Devices {
 function withMac(
   devices: readonly DeviceRecord[],
   key: ConfirmKey | null,
+  name: string,
 ): DeviceRecord[] {
   const phones = devices.filter((each) => each.id !== THIS_MAC);
   if (key === null) return phones;
   const mac: DeviceRecord = {
     id: THIS_MAC,
-    name: 'this Mac',
+    name,
     kind: DEVICE_KIND.MAC,
     signingPoint: key.point,
     capabilities: [...ALL_REMOTE_CAPABILITIES],
