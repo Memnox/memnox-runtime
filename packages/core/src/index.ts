@@ -26,6 +26,7 @@ export * from './session/reversibility';
 export * from './domain/egress-inspector';
 export * from './domain/sensitive-data';
 export * from './discovery/index';
+export * from './mcp/index';
 export * from './policy/index';
 export * from './ledger/index';
 export * from './recovery/index';
