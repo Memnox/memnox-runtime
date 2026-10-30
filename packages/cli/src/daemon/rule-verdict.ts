@@ -12,7 +12,7 @@ import {
  * names, so a project's rules decide here exactly as they do at a hook.
  */
 
-export interface RuleVerdictInput {
+interface RuleVerdictInput {
   gate: LocalGate | undefined;
   violations: ViolationMemory;
   request: DaemonRequest;

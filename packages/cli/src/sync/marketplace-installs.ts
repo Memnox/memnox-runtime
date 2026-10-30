@@ -8,7 +8,7 @@ import { callCloud, sameControlPlane } from './client';
  */
 
 /** What was installed, from where, and how to say it went wrong. */
-export interface InstallCount {
+interface InstallCount {
   listingId: string;
   version: string;
   /** The index it was read from, so the credential only ever goes to this workspace's own plane. */

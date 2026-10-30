@@ -23,7 +23,7 @@ const PROPOSED_BY = 'agt_memnox-index';
 const PROPOSAL_TTL_MS = minutesToMs(5);
 
 /** What setting the source did: nothing waiting, or the proposal the person signs. */
-export type SourceSet = { refused: string } | { ok: true; proposed?: string };
+type SourceSet = { refused: string } | { ok: true; proposed?: string };
 
 export async function setSourceAnswer(
   home: string,

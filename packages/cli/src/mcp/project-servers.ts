@@ -60,7 +60,7 @@ function localScopeKey(home: string, root: string): string {
   return `${join(home, '.claude.json')}#${root}`;
 }
 
-export interface ProjectsSynced {
+interface ProjectsSynced {
   hub: Hub;
   plan: SyncPlan;
   files: string[];
