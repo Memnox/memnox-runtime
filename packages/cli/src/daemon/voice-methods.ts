@@ -4,6 +4,7 @@ import { isActivityMethod } from './activity-answer';
 import { isAgentsMethod } from './agents-answer';
 import { isMcpHubMethod } from './mcp-hub-answer';
 import { isPolicyMethod } from './policies-answer';
+import { isSkillsMethod } from './skills-hub-answer';
 
 /** What the Mac app and a paired phone may ask the daemon, as against what an interceptor asks. */
 const VOICE_METHODS: readonly string[] = [
@@ -48,6 +49,7 @@ export function isVoiceMethod(method: string): boolean {
     VOICE_METHODS.includes(method) ||
     isHomeMethod(method) ||
     isMcpHubMethod(method) ||
+    isSkillsMethod(method) ||
     isPolicyMethod(method) ||
     isActivityMethod(method) ||
     isAgentsMethod(method)

@@ -22,7 +22,7 @@ import {
  * version under `~/.memnox/skills/<name>/<version>`; a project skill is one folder in its repository.
  */
 
-const HUB_FILE = 'skills-hub.json';
+export const SKILLS_HUB_FILE = 'skills-hub.json';
 const SKILLS_DIR = 'skills';
 
 /** What a skill folder read as: the skill, and the digest of its folder as it is now. */
@@ -30,7 +30,7 @@ export type ReadSkill =
   { skill: CanonicalSkill; digest: string } | { problems: string[] };
 
 export function skillsHubPathFor(home: string): string {
-  return join(home, MEMNOX_HOME, HUB_FILE);
+  return join(home, MEMNOX_HOME, SKILLS_HUB_FILE);
 }
 
 /** The hub as last written; empty before anything was kept, or when the file will not read as one. */

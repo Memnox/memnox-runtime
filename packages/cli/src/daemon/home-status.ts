@@ -5,6 +5,7 @@ import { agentsAnswer, isAgentsMethod } from './agents-answer';
 import { homeAnswer, isHomeMethod } from './home-answer';
 import { isMcpHubMethod, mcpHubAnswer } from './mcp-hub-answer';
 import { isPolicyMethod, policiesAnswer } from './policies-answer';
+import { isSkillsMethod, skillsHubAnswer } from './skills-hub-answer';
 import type { SessionViews } from './session-view';
 
 /**
@@ -14,7 +15,12 @@ import type { SessionViews } from './session-view';
 
 /** The home and the hub, the two screens a window opens on before any session is chosen. */
 export function isScreenMethod(method: string): boolean {
-  return isHomeMethod(method) || isMcpHubMethod(method) || isStudioMethod(method);
+  return (
+    isHomeMethod(method) ||
+    isMcpHubMethod(method) ||
+    isSkillsMethod(method) ||
+    isStudioMethod(method)
+  );
 }
 
 /** The Policy Studio, the activity screen and the agent manager. */
@@ -31,6 +37,7 @@ export function answerHome(
 ): Promise<DaemonResponse> {
   if (isMcpHubMethod(request.method))
     return mcpHubAnswer(home, request, { now: new Date(), remote });
+  if (isSkillsMethod(request.method)) return skillsHubAnswer(home, request, new Date());
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);
   return homeAnswer(home, request, {
     views,

@@ -1,18 +1,19 @@
 import { createHash } from 'node:crypto';
-import { SKILL_INSTRUCTIONS, type CanonicalSkill } from './skill';
+import { manifestToml } from './manifest';
+import { SKILL_INSTRUCTIONS, SKILL_MANIFEST, type CanonicalSkill } from './skill';
 
 /**
- * One digest over every file of a skill, sorted by path, so a change to any file of it, a script as
- * much as the instructions, reads as a changed skill. The manifest is left out, since it states the digest.
+ * One digest over every file of a skill, sorted by path, so a change to any of it, a script or a
+ * tool added to its manifest, reads as a changed skill. The manifest is digested without the digest it states.
  */
 
 const DIGEST_PREFIX = 'sha256:';
 
-export function folderDigest(
-  skill: Pick<CanonicalSkill, 'instructions' | 'files'>,
-): string {
+export function folderDigest(skill: CanonicalSkill): string {
+  const manifest = manifestToml({ ...skill.manifest, digest: '' });
   const files = [
     { path: SKILL_INSTRUCTIONS, bytes: Buffer.from(skill.instructions, 'utf8') },
+    { path: SKILL_MANIFEST, bytes: Buffer.from(manifest, 'utf8') },
     ...skill.files,
   ].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   const hash = createHash('sha256');

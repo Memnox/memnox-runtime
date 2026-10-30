@@ -14,6 +14,7 @@ import {
   MEMNOX_HOME,
   newEventId,
   openLedger,
+  SKILLS_HUB_FILE,
   type MemnoxEvent,
   type ToolClass,
 } from '@memnox/core';
@@ -41,6 +42,8 @@ export const CONFIG_RULE = {
     name: 'autopilot: hand over what was earned',
     file: EARNED_ALLOWANCES_FILE,
   },
+  /** The Skills Hub wrote a skill into an agent's own folder, or took one of its own out. */
+  SKILLS: { name: 'skills hub: hand skills to agents', file: SKILLS_HUB_FILE },
 } as const;
 
 type ConfigRule = (typeof CONFIG_RULE)[keyof typeof CONFIG_RULE];

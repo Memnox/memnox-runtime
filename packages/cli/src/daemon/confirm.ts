@@ -29,6 +29,7 @@ import { decisionsOfRules, recordLocalDecisions } from '../sync/local-decisions'
 import { editedProposal, ranOf } from './confirm-edit';
 import { applyPersonal } from './confirm-work';
 import { applyHubProposal } from './mcp-hub-confirm';
+import { applySkillsProposal } from './skills-hub-confirm';
 import { applyStudioProposal } from './studio-confirm';
 import {
   FROM_NOW_ON,
@@ -325,6 +326,8 @@ async function apply(
     return applyHeldAnswer(home, proposal, change, { at, by });
   }
   if (change.kind === PROPOSAL_KIND.MCP_HUB) return applyHubProposal(home, change.hub);
+  if (change.kind === PROPOSAL_KIND.SKILLS_HUB)
+    return applySkillsProposal(home, change.skills, new Date(at));
   return (
     (await applyPersonal(home, proposal)) ??
     (await applyStudioProposal(home, change, new Date(at))) ?? {
