@@ -46,16 +46,24 @@ export interface HookAuthorizerDeps {
   gate?: LocalGate;
   /** True while `memnox stop` holds. Absent means never, which is right for a test. */
   stopped?: () => Promise<boolean>;
+  /** The project an action in a folder belongs to, so a rule scoped to one can decide it. */
+  projectAt?: (cwd: string) => Promise<string | undefined>;
+  /** Where this seam runs, for a request that names no folder of its own. */
+  workingDirectory?: string;
 }
 
 export class HookAuthorizer {
+  /** One lookup per folder, since a seam asks for every request of one call. */
+  private readonly projects = new Map<string, Promise<string | undefined>>();
+
   constructor(private readonly deps: HookAuthorizerDeps) {}
 
-  async authorize(request: ActionRequest): Promise<HookVerdict> {
+  async authorize(given: ActionRequest): Promise<HookVerdict> {
     // Asked per call, so a stop or a start reaches a long-lived proxy at its next request.
     if (this.deps.stopped !== undefined && (await this.deps.stopped())) {
       return { effect: DECISION_EFFECT.ALLOW, reason: PROTECTION_STOPPED_REASON };
     }
+    const request = await this.inProject(given);
     // Destination and payload both: an allowed host
     // carrying a credential is still a refusal.
     const leaking = this.egress(request);
@@ -66,6 +74,21 @@ export class HookAuthorizer {
         reason: 'no rules configured',
       }
     );
+  }
+
+  /** The request with the project of the folder it runs in, unless it named one already. */
+  private async inProject(request: ActionRequest): Promise<ActionRequest> {
+    const projectAt = this.deps.projectAt;
+    const cwd = request.workingDirectory ?? this.deps.workingDirectory;
+    if (request.projectId !== undefined || projectAt === undefined || cwd === undefined)
+      return request;
+    let found = this.projects.get(cwd);
+    if (found === undefined) {
+      found = projectAt(cwd);
+      this.projects.set(cwd, found);
+    }
+    const projectId = await found;
+    return projectId === undefined ? request : { ...request, projectId };
   }
 
   /** Marks the session wary of what it reads, where the gate has a session to mark. */

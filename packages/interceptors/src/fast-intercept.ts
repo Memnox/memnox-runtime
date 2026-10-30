@@ -11,6 +11,7 @@ import {
   isBrowserLauncher,
   overlaysInForce,
   pathValueOf,
+  projectIdAt,
   protectionStopped,
   provenanceOf,
   SESSION_VAR,
@@ -66,6 +67,8 @@ export interface FastInterceptDeps {
     scene: SeamScene,
     warn: (message: string) => void,
   ) => Promise<LocalGate | null>;
+  /** The project of a folder; injected, so a test names it rather than opening one. */
+  projectAt?: (home: string, cwd: string) => Promise<string | undefined>;
   now?: () => Date;
 }
 
@@ -192,6 +195,7 @@ async function rule(
     env,
     hold: terminal.hold,
     ...(sessionId === undefined ? {} : { sessionId }),
+    ...(await projectOf(deps, cwd)),
   });
   if (terminal.asked()) return 'a rule asks a person';
   const advice = adviceLine(outcome);
@@ -205,6 +209,15 @@ async function rule(
   }
   const session = sessionId === undefined ? {} : { sessionId };
   return { outcome, notes, base: { ...provenance, outcome, ...session }, started };
+}
+
+/** The project of the folder the command runs in, so a rule scoped to it decides here as in Node. */
+async function projectOf(
+  deps: FastInterceptDeps,
+  cwd: string,
+): Promise<{ projectId?: string }> {
+  const projectId = await (deps.projectAt ?? projectIdAt)(deps.home, cwd);
+  return projectId === undefined ? {} : { projectId };
 }
 
 /** Asking needs the agent's terminal, which only the Node interceptor has, so this only notes it. */

@@ -10,6 +10,7 @@ import {
   describeAlternative,
   MEMNOX_HOME,
   NodeSnapshotStore,
+  projectIdAt,
   openLedger,
   overlaysInForce,
   parseConfig,
@@ -465,7 +466,11 @@ export async function authorizerFor(
     },
     context.home,
   );
-  return new HookAuthorizer(gate === null ? {} : { gate });
+  return new HookAuthorizer({
+    ...(gate === null ? {} : { gate }),
+    // Each call names the folder it runs in, so a rule scoped to that project decides it.
+    projectAt: (cwd) => projectIdAt(context.home, cwd),
+  });
 }
 
 /** Best effort: the verdict has been reached, and a ledger that stops the agent is removed. */

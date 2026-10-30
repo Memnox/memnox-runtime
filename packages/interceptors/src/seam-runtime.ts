@@ -10,6 +10,7 @@ import {
   holdFor,
   LeaseGate,
   LeaseRegistry,
+  projectIdAt,
   protectionStopped,
   rememberRepository,
   SHARED_LEASE_TIMEOUT_MS,
@@ -50,6 +51,8 @@ export async function buildAuthorizer(): Promise<HookAuthorizer> {
   return new HookAuthorizer({
     ...(gate === null ? {} : { gate }),
     stopped: () => protectionStopped(homedir()),
+    projectAt: (cwd) => projectIdAt(homedir(), cwd),
+    workingDirectory: process.cwd(),
   });
 }
 

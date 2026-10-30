@@ -91,6 +91,8 @@ export interface InterceptDeps {
   overlays?: readonly Overlay[];
   sessionId?: string;
   agent?: string;
+  /** The project of the folder the command runs in, so a rule scoped to it decides it. */
+  projectId?: string;
   now?: () => Date;
 }
 
@@ -135,6 +137,7 @@ export async function ruleOnCommand(
     ...(verdict.dataClassification === undefined
       ? {}
       : { dataClassification: verdict.dataClassification }),
+    ...(deps.projectId === undefined ? {} : { projectId: deps.projectId }),
   };
   const decision = gate.evaluate(request);
   const ruled = { ...base, ...ruledFor(decision) };

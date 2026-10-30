@@ -15,6 +15,7 @@ import {
   isBrowserLauncher,
   openLedger,
   overlaysInForce,
+  projectIdAt,
   protectionStopped,
   provenanceOf,
   SESSION_VAR,
@@ -76,6 +77,8 @@ interface RunContext {
   provenance: Provenance;
   sink: EventSink | null;
   sessionId: string | undefined;
+  /** The project of the folder the command runs in, read once at arrival. */
+  projectId: string | undefined;
   started: number;
 }
 
@@ -133,6 +136,7 @@ async function readRunContext(
     provenance,
     sink: openLedger(home),
     sessionId,
+    projectId: await projectIdAt(home, process.cwd()),
     started: Date.now(),
   };
 }
@@ -146,6 +150,7 @@ function ruleOn(command: Command, context: RunContext): Promise<InterceptOutcome
     // Without a hold an `ask` rule denies instead of asking.
     hold: buildHold(),
     ...(context.sessionId === undefined ? {} : { sessionId: context.sessionId }),
+    ...(context.projectId === undefined ? {} : { projectId: context.projectId }),
   });
 }
 
