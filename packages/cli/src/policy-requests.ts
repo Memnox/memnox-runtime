@@ -24,6 +24,8 @@ interface DryRunOptions {
   /** What the action does, for an action named outright whose class nothing here knows. */
   class?: string;
   workingDirectory?: string;
+  /** The project of that folder, as a seam would find it, so a project's rules answer too. */
+  projectId?: string;
 }
 
 interface DryRun {
@@ -67,10 +69,7 @@ function requestsFor(
   options: DryRunOptions,
   env: NodeJS.ProcessEnv,
 ): ActionRequest[] {
-  const where =
-    options.workingDirectory === undefined
-      ? {}
-      : { workingDirectory: options.workingDirectory };
+  const where = placeOf(options);
   // Already a namespaced action, e.g. from a git hook.
   if (!input.includes(' ') && input.includes('.')) {
     const toolClass = options.class ?? classOfAction(input);
@@ -101,6 +100,18 @@ function requestsFor(
       ...(target === undefined ? {} : { target }),
     }));
   });
+}
+
+/** The folder and project a seam would send with the action. */
+function placeOf(
+  options: DryRunOptions,
+): Pick<ActionRequest, 'workingDirectory' | 'projectId'> {
+  return {
+    ...(options.workingDirectory === undefined
+      ? {}
+      : { workingDirectory: options.workingDirectory }),
+    ...(options.projectId === undefined ? {} : { projectId: options.projectId }),
+  };
 }
 
 /** The class a seam would send for an action named outright: its verb, or its tool name. */

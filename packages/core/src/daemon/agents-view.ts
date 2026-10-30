@@ -85,7 +85,7 @@ export interface AgentLaunched {
 export interface AgentsRequestFields {
   /** On AGENT_PAUSE, AGENT_RESUME and AGENT_LAUNCH: the agent, by kind or by the name it goes by. */
   agentKind?: string;
-  /** On AGENT_LAUNCH: the folder it opens in, as an absolute path. */
+  /** On AGENT_LAUNCH: the folder it opens in. On EVALUATE: the folder the action runs in, whose project the daemon finds. */
   workingDirectory?: string;
 }
 

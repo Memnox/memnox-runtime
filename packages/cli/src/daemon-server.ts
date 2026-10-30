@@ -27,6 +27,7 @@ import {
   type DaemonRequest,
   type DaemonResponse,
   type LocalGate,
+  type ProjectLookup,
   type SessionPause,
   UNNAMED_AGENT,
   UNNAMED_SESSION,
@@ -42,6 +43,7 @@ import { write } from './daemon/socket-write';
 import type { VoiceAgentRoster } from './daemon/voice-agent-calls';
 import { isVoiceMethod, VoiceSurface } from './daemon/voice-surface';
 import { accountSignIns } from './daemon/account-sign-ins';
+import { projectOfRequest, ruleVerdictFor } from './daemon/rule-verdict';
 import type { Brain } from './operator/brain';
 import { isRemoteMethod, RemoteEndpoint, type RemoteDeps } from './remote/endpoint';
 
@@ -107,6 +109,8 @@ function answers(address: string): Promise<boolean> {
 
 interface DaemonDeps {
   gate?: LocalGate;
+  /** The project of the folder an EVALUATE names, so a project's rules decide it here too. */
+  projectAt?: ProjectLookup;
   limits?: SessionLimits;
   violations?: ViolationMemory;
   breaker?: CircuitBreaker;
@@ -279,10 +283,10 @@ export class MemnoxDaemon {
       await this.voice.respond(socket, request);
       return;
     }
-    write(socket, this.answer(request));
+    write(socket, await this.answer(request));
   }
 
-  private answer(request: DaemonRequest): DaemonResponse {
+  private async answer(request: DaemonRequest): Promise<DaemonResponse> {
     if (request.method === DAEMON_METHOD.PING)
       return { id: request.id, ok: true, version: CLI_VERSION };
     if (request.method === DAEMON_METHOD.RECORD) return this.record(request);
@@ -396,7 +400,7 @@ export class MemnoxDaemon {
   }
 
   /** Pause, then budget, then limits, then rules: each stops the call before the next is asked. */
-  private evaluate(request: DaemonRequest): DaemonResponse {
+  private async evaluate(request: DaemonRequest): Promise<DaemonResponse> {
     const action = request.action;
     if (action === undefined) {
       return { id: request.id, ok: false, error: 'evaluate needs an action' };
@@ -450,35 +454,17 @@ export class MemnoxDaemon {
     };
   }
 
-  private ruleVerdict(call: EvaluatedCall): DaemonResponse {
-    const { request, action } = call;
-    const gate = this.deps.gate;
-    if (gate === undefined) {
-      return {
-        id: request.id,
-        ok: true,
-        effect: DECISION_EFFECT.ALLOW,
-        reason: 'no rules configured',
-      };
-    }
-    const target = request.target === undefined ? {} : { target: request.target };
-    const { dataClassification } = request;
-    const verdict = gate.evaluate({ action, ...target, dataClassification });
-    if (verdict.effect === DECISION_EFFECT.ALLOW) {
-      return { id: request.id, ok: true, effect: verdict.effect, reason: verdict.reason };
-    }
-
-    const seen = this.violations.record({ action, at: call.now, ...target });
-    const repeated = this.violations.isRepeated(action, request.target)
-      ? ` (asked ${seen} times now, so the rule may not match how this work is done)`
-      : '';
-    return {
-      id: request.id,
-      ok: true,
-      effect: verdict.effect,
-      reason: `${verdict.reason}${repeated}`,
-      ...(verdict.alternative === undefined ? {} : { alternative: verdict.alternative }),
-    };
+  /** The project is looked up last, so a held or spent session costs no lookup. */
+  private async ruleVerdict(call: EvaluatedCall): Promise<DaemonResponse> {
+    const projectId = await projectOfRequest(call.request, this.deps.projectAt);
+    return ruleVerdictFor({
+      gate: this.deps.gate,
+      violations: this.violations,
+      request: call.request,
+      action: call.action,
+      now: call.now,
+      ...(projectId === undefined ? {} : { projectId }),
+    });
   }
 }
 

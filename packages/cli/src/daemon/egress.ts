@@ -17,6 +17,7 @@ import {
 } from '@memnox/core';
 import {
   containmentFor,
+  egressPlaces,
   EgressSeam,
   HookAuthorizer,
   recordEgress,
@@ -50,6 +51,7 @@ export function egressSeamFor(input: EgressSeamInput): EgressSeam {
   const { home, fixed } = input;
   const now = input.now ?? ((): Date => new Date());
   const record = recordEgress(openLedger(home), new DestinationRecords(home), now);
+  const places = egressPlaces(home);
   return new EgressSeam({
     authorizer: new HookAuthorizer({
       ...(input.gate === undefined ? {} : { gate: input.gate }),
@@ -67,6 +69,9 @@ export function egressSeamFor(input: EgressSeamInput): EgressSeam {
       }),
     ruled: (ruling) =>
       record(fixed === undefined ? ruling : { ...ruling, caller: fixed }),
+    // A session's own proxy is that session's, whatever a client claims to be.
+    placeOf:
+      fixed === undefined ? places : (): ReturnType<typeof places> => places(fixed),
   });
 }
 

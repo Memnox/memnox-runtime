@@ -5,6 +5,7 @@ import type { Command } from 'commander';
 import {
   LEDGER_SCAN_LIMIT,
   LocalGate,
+  projectLookup,
   readAccount,
   readBudgets,
   readFleetSpend,
@@ -327,6 +328,7 @@ async function buildLoop(
   const later: LoopState['later'] = {};
   const daemon = new MemnoxDaemon({
     ...(gate === undefined ? {} : { gate }),
+    projectAt: projectLookup(home),
     ...spending,
     remote: { beats },
     pauses: new SessionPauses(home),

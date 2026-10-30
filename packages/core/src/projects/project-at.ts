@@ -69,3 +69,37 @@ async function declaredProjectAt(home: string, cwd: string): Promise<string | un
   );
   return document === null ? undefined : document.project;
 }
+
+/** Short, so a project opened while a long-lived seam runs decides its calls within seconds. */
+const PROJECT_LOOKUP_TTL_MS = secondsToMs(10);
+
+/** A folder's project as a long-lived seam asks for it: remembered briefly, per folder. */
+export type ProjectLookup = (cwd: string) => Promise<string | undefined>;
+
+interface ProjectLookupOptions {
+  /** Injected so a test needs no git and no opened project. */
+  find?: (home: string, cwd: string) => Promise<string | undefined>;
+  now?: () => number;
+}
+
+/**
+ * `projectIdAt` for a process that lives, such as the daemon or its egress proxy. A lookup
+ * that fails names no project, so only the machine's rules decide and never fewer of them.
+ */
+export function projectLookup(
+  home: string,
+  options: ProjectLookupOptions = {},
+): ProjectLookup {
+  const find =
+    options.find ?? ((at, cwd): Promise<string | undefined> => projectIdAt(at, cwd));
+  const now = options.now ?? Date.now;
+  const known = new Map<string, { at: number; project: Promise<string | undefined> }>();
+  return (cwd) => {
+    const kept = known.get(cwd);
+    if (kept !== undefined && now() - kept.at < PROJECT_LOOKUP_TTL_MS)
+      return kept.project;
+    const project = find(home, cwd).catch((): undefined => undefined);
+    known.set(cwd, { at: now(), project });
+    return project;
+  };
+}
