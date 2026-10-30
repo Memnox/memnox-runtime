@@ -13,6 +13,7 @@ import {
   OVERLAY_KIND,
   overlaysInForce,
   readHub,
+  startableKindOf,
   type AgentSessions,
   type AgentStatus,
   type AgentView,
@@ -134,6 +135,7 @@ function agentView(agent: SnapshotAgent, facts: Facts): AgentView {
       refused: today.filter((event) => saidOf(event) === DECISION_EFFECT.DENY).length,
     },
     recent: recentOf(facts.recent.filter((event) => mine(event.agent))),
+    launchable: startableKindOf(agent.kind) !== null,
   };
 }
 

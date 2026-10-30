@@ -14,6 +14,8 @@ export const AGENTS_METHOD = {
   AGENT_RESUME: 'agent-resume',
   /** Holds one session before its next action, at once. */
   SESSION_STOP: 'session-stop',
+  /** Opens the agent in a new terminal in a folder, for an agent with a known launch command. */
+  AGENT_LAUNCH: 'agent-launch',
 } as const;
 
 export const AGENT_STATUS = {
@@ -66,14 +68,28 @@ export interface AgentView {
   today: AgentToday;
   /** The last five, newest first. */
   recent: AgentAction[];
+  /** Whether AGENT_LAUNCH can open it, which only an agent with a known launch command can. */
+  launchable: boolean;
+}
+
+/** What AGENT_LAUNCH asked the Mac to type, in the folder it opens on. */
+export interface AgentLaunched {
+  agent: string;
+  workingDirectory: string;
+  /** The line typed into the new terminal. */
+  line: string;
 }
 
 export interface AgentsRequestFields {
-  /** On AGENT_PAUSE and AGENT_RESUME: the agent, by kind or by the name it goes by. */
+  /** On AGENT_PAUSE, AGENT_RESUME and AGENT_LAUNCH: the agent, by kind or by the name it goes by. */
   agentKind?: string;
+  /** On AGENT_LAUNCH: the folder it opens in, as an absolute path. */
+  workingDirectory?: string;
 }
 
 export interface AgentsResponseFields {
   /** On AGENTS, and after a pause or a stop. */
   agentsView?: AgentView[];
+  /** On AGENT_LAUNCH. */
+  agentLaunched?: AgentLaunched;
 }

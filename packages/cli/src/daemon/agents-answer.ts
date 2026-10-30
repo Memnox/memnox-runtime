@@ -8,8 +8,10 @@ import {
   type DaemonRequest,
   type DaemonResponse,
   type SessionCard,
+  type StartableAgent,
 } from '@memnox/core';
 import { agentNamed, pauseAgent } from '../agents/agent-pause';
+import { launchAgent } from '../agents/agent-launch';
 import { readAgentsView } from '../studio/agents-read';
 
 /**
@@ -30,6 +32,8 @@ export function isAgentsMethod(method: string): boolean {
 interface AgentsDeps {
   now: Date;
   cards: () => Promise<SessionCard[]>;
+  /** Where an agent's command is found; the login shell by default, a fixed answer in a test. */
+  resolveCommand?: (agent: StartableAgent) => string | null;
 }
 
 type Answered = Omit<DaemonResponse, 'id'>;
@@ -40,8 +44,8 @@ export async function agentsAnswer(
   request: DaemonRequest,
   deps: AgentsDeps,
 ): Promise<DaemonResponse> {
-  const answered = await answerOf(home, request, deps.now).catch(
-    (err: unknown): Answered => refused(err instanceof Error ? err.message : String(err)),
+  const answered = await answerOf(home, request, deps).catch((err: unknown): Answered =>
+    refused(err instanceof Error ? err.message : String(err)),
   );
   if (!answered.ok) return { id: request.id, ...answered };
   return { id: request.id, ...answered, agentsView: await readAgentsView(home, deps) };
@@ -50,8 +54,9 @@ export async function agentsAnswer(
 async function answerOf(
   home: string,
   request: DaemonRequest,
-  now: Date,
+  deps: AgentsDeps,
 ): Promise<Answered> {
+  const now = deps.now;
   switch (request.method) {
     case AGENTS_METHOD.AGENT_PAUSE:
       return pause(home, request.agentKind, now);
@@ -59,6 +64,8 @@ async function answerOf(
       return resume(home, request.agentKind, now);
     case AGENTS_METHOD.SESSION_STOP:
       return stopSession(home, request.sessionId, now);
+    case AGENTS_METHOD.AGENT_LAUNCH:
+      return launch(home, request, deps);
     default:
       return { ok: true };
   }
@@ -110,6 +117,22 @@ async function resume(
     ttlMs: PROPOSAL_TTL_MS,
   });
   return { ok: true, proposed: proposal.id };
+}
+
+/** Opening a terminal the person asked for from a screen; the agent then runs under Memnox as any run does. */
+async function launch(
+  home: string,
+  request: DaemonRequest,
+  deps: AgentsDeps,
+): Promise<Answered> {
+  const launched = await launchAgent(home, {
+    agent: request.agentKind,
+    workingDirectory: request.workingDirectory,
+    now: deps.now,
+    ...(deps.resolveCommand === undefined ? {} : { resolve: deps.resolveCommand }),
+  });
+  if ('refused' in launched) return refused(launched.refused);
+  return { ok: true, agentLaunched: launched };
 }
 
 /** The same hold a voice pause puts on a session: its next action waits until a person resumes it. */

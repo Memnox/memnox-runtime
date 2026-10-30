@@ -84,6 +84,8 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.AGENT_PAUSE]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.SESSION_STOP]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.AGENT_RESUME]: REMOTE_CAPABILITY.ASK,
+  // Opens a terminal on the Mac, which is something only the Mac does.
+  [DAEMON_METHOD.AGENT_LAUNCH]: REMOTE_CAPABILITY.MAC,
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */

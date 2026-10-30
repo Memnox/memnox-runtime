@@ -174,7 +174,8 @@
       "agents",
       "agent-pause",
       "agent-resume",
-      "session-stop"
+      "session-stop",
+      "agent-launch"
     ],
     "events": [
       "held",
