@@ -8,8 +8,8 @@ import type { MemnoxEvent } from '../event/event';
  */
 
 /** Interruptions as a share of all actions: above the first steered, below the second self-running. */
-const ASSIST_ASK_RATE = 0.2;
-const SUPERVISED_ASK_RATE = 0.02;
+export const ASSIST_ASK_RATE = 0.2;
+export const SUPERVISED_ASK_RATE = 0.02;
 
 export const AUTONOMY = {
   /** Watched, nothing enforced. Where every install starts. */
