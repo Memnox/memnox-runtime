@@ -14,7 +14,7 @@ import {
   type SecretStore,
   type SourceReach,
 } from '@memnox/core';
-import { claudeExtractor, type ExtractRun } from '../memory/memory-brain';
+import { ownExtractor, type ExtractRun } from '../memory/memory-brain';
 import {
   confirmItem,
   editItem,
@@ -180,7 +180,7 @@ function readDeps(
 } {
   return {
     reach: deps.reach ?? memoryReach(home, secretsOf(home, deps)),
-    extract: deps.extract ?? claudeExtractor(home),
+    extract: deps.extract ?? ownExtractor(home),
     now: () => new Date(),
   };
 }

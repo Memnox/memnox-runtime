@@ -90,6 +90,23 @@ export class VoiceAgents {
     return first;
   }
 
+  /**
+   * Every agent to try, without checking any: the one named in the env, the one chosen, then the
+   * rest installed in preference order, each once.
+   */
+  async preferred(): Promise<VoiceBrainSpec[]> {
+    const installed = this.installed();
+    const named = this.seams.env[VOICE_BRAIN_VAR];
+    const pinned = named === undefined ? null : voiceBrainSpec(named);
+    const chosen = await this.chosen(installed);
+    const first = [pinned, chosen].filter(
+      (spec): spec is VoiceBrainSpec => spec !== null,
+    );
+    return [...first, ...installed].filter(
+      (spec, index, all) => all.findIndex((other) => other.kind === spec.kind) === index,
+    );
+  }
+
   private checkAll(): Promise<VoiceAgentStatus[]> {
     this.checking ??= this.runChecks().finally(() => {
       this.checking = null;
