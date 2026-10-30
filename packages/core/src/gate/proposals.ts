@@ -54,6 +54,8 @@ export const PROPOSAL_KIND = {
   BACKUP_RESTORE: 'backup-restore',
   /** This machine listening on the local network, which widens who can reach it, so only the Mac signs it. */
   LAN: 'lan',
+  /** The personal sync key sealed to another of the person's machines, or taken from one, behind a fingerprint both show. */
+  PERSONAL_SYNC_KEY: 'personal-sync-key',
 } as const;
 
 export type ProposedChange =
@@ -115,7 +117,16 @@ export type ProposedChange =
       ledger: boolean;
       createdAt: string;
     }
-  | { kind: typeof PROPOSAL_KIND.LAN; on: true };
+  | { kind: typeof PROPOSAL_KIND.LAN; on: true }
+  | {
+      kind: typeof PROPOSAL_KIND.PERSONAL_SYNC_KEY;
+      /** What both machines showed, checked again before the key moves. */
+      fingerprint: string;
+      /** On the machine holding the key: seal it to this one. */
+      seal?: { machineId: string; publicKey: string };
+      /** On the machine waiting: take the key sealed to it. */
+      open?: { envelope: string; keyId: string };
+    };
 
 export interface Proposal {
   id: string;

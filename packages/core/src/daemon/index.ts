@@ -30,4 +30,5 @@ export * from './projects';
 export * from './memory';
 export * from './backup';
 export * from './lan';
+export * from './personal-sync';
 export * from './vectors';

@@ -116,6 +116,12 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   // backup-create and backup-restore are left out on purpose: a backup is the whole setup, so it never leaves by the relay.
   [DAEMON_METHOD.LAN_STATUS]: REMOTE_CAPABILITY.SEE,
   // lan-set is left out on purpose: who may reach this machine is decided at the machine, never from a phone.
+  [DAEMON_METHOD.PERSONAL_SYNC_STATUS]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.PERSONAL_SYNC_CONFLICTS]: REMOTE_CAPABILITY.SEE,
+  // Sends only ciphertext of what is here, and what it takes back lands unassigned or as a proposal.
+  [DAEMON_METHOD.PERSONAL_SYNC_NOW]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PERSONAL_SYNC_RESOLVE]: REMOTE_CAPABILITY.ASK,
+  // The key offer and accept are left out on purpose: the sync key moves only between machines, never from a phone.
 };
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
@@ -193,6 +199,8 @@ export function proposalCapability(change: ProposedChange): RemoteCapability | n
   if (change.kind === PROPOSAL_KIND.BACKUP_RESTORE) return null;
   // Opening the machine to the local network widens who reaches it, so only the Mac, with Touch ID, turns it on.
   if (change.kind === PROPOSAL_KIND.LAN) return null;
+  // The sync key opens everything the person syncs, so only the Mac, with Touch ID, moves it.
+  if (change.kind === PROPOSAL_KIND.PERSONAL_SYNC_KEY) return null;
   // A project's servers, skills and rule file reach as far as each of them does on its own.
   if (change.kind === PROPOSAL_KIND.PROJECT) return REMOTE_CAPABILITY.RULES;
   // Taking a deny or an ask away widens what agents may do, exactly as adding an allow does.

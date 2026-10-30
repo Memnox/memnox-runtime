@@ -231,7 +231,13 @@
       "memory-facts",
       "memory-forget",
       "lan-status",
-      "lan-set"
+      "lan-set",
+      "personal-sync-status",
+      "personal-sync-now",
+      "personal-sync-conflicts",
+      "personal-sync-resolve",
+      "personal-sync-key-offer",
+      "personal-sync-key-accept"
     ],
     "events": [
       "held",

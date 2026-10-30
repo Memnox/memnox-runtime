@@ -14,6 +14,10 @@ import type { MemoryRequestFields, MemoryResponseFields } from './memory';
 import type { BackupRequestFields, BackupResponseFields } from './backup';
 import type { LanRequestFields, LanResponseFields } from './lan';
 import type {
+  PersonalSyncRequestFields,
+  PersonalSyncResponseFields,
+} from './personal-sync';
+import type {
   RemoteEventFields,
   RemoteRequestFields,
   RemoteResponseFields,
@@ -94,7 +98,8 @@ export interface ExtensionRequestFields
     ProjectsRequestFields,
     BackupRequestFields,
     MemoryRequestFields,
-    LanRequestFields {}
+    LanRequestFields,
+    PersonalSyncRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -113,7 +118,8 @@ export interface ExtensionResponseFields
     ProjectsResponseFields,
     BackupResponseFields,
     MemoryResponseFields,
-    LanResponseFields {}
+    LanResponseFields,
+    PersonalSyncResponseFields {}
 
 export interface ExtensionEventFields
   extends
