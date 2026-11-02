@@ -240,6 +240,17 @@ export interface ToolConnection {
   connected: boolean;
   /** Reached on this machine itself, an MCP server or a signed in command line tool, so nothing is connected or disconnected here. */
   local?: true;
+  /** When its working sign in was made, as the cloud says, for a card's "Connected since". */
+  connectedAt?: string;
+  /** The agents that worked in it through Memnox lately, newest first, from this machine's ledger. */
+  usedBy?: AppUse[];
+}
+
+/** One agent's latest call into an app through Memnox: who, in which session, and when. */
+export interface AppUse {
+  agent: string;
+  sessionId?: string;
+  at: string;
 }
 
 /** A step the Mac timed, hung on the trace of the question it belongs to. */

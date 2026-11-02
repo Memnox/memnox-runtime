@@ -85,7 +85,7 @@ export const PERSONAL_TOOLS: readonly ToolDefinition[] = [
   // Read only here: it opens an approval page, and nothing is signed in until the person approves it there.
   readTool(
     'memnox_sign_in',
-    `Sign the person in to Memnox and Memnox Cloud as themselves, at once, when they ask to log in, sign in or connect to Memnox, Memnox Cloud, their team or their workspace. Their own tools need no Memnox account, so never call this to read or act in them. It opens the approval page in their browser, the same sign in as the Account row in the Memnox app, and the one approval connects this ${MACHINE} too. Never send them to the Account row or a terminal instead.`,
+    `Sign the person in to Memnox and Memnox Cloud as themselves, at once, when they ask to log in, sign in or connect to Memnox, Memnox Cloud, their team or their workspace. Connecting their apps and working in them needs it too, so call it as well once they agree after a tool answered that they must sign in to Memnox Cloud first; the command line tools and MCP servers on this ${MACHINE} need no account. It opens the approval page in their browser, the same sign in as the Account row in the Memnox app, and the one approval connects this ${MACHINE} too. Never send them to the Account row or a terminal instead.`,
   ),
   proposeTool(
     'propose_tool',

@@ -80,6 +80,8 @@ export interface SessionToolDeps {
     github?: (read: GithubRead) => Promise<PersonalAnswer<unknown>>;
     /** The apps the workspace connected to the person, the same list the Mac's Tools panel shows. */
     connections?: () => Promise<PersonalAnswer<ToolConnection[]>>;
+    /** Whether a person is signed in to Memnox Cloud here, which working in any app needs; absent reads as unknown. */
+    signedIn?: () => Promise<boolean>;
     /** Signs out of every sign in to one tool, answering how many were undone. */
     signOut: (toolkit: string) => Promise<PersonalAnswer<number>>;
     /** Opens the provider's one time sign in for any tool, which every person may connect as themselves. */
