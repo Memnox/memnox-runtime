@@ -45,6 +45,9 @@ import { displayName, readNames, type AgentNames } from '../agents/names';
 import { withEvents } from '../event-store';
 import { answerOnOf, answeringPhone } from '../remote/answer-on';
 import { NewsTold } from './news-told';
+import { briefFor } from './turn-brief';
+import { whichSession } from './which-session';
+import { OPERATOR_AGENT } from '../session-tools/propose-tools';
 
 /**
  * What is waiting on a person, read from the files other processes write, since a held
@@ -224,6 +227,8 @@ export class WaitingFeed {
         run: away.run,
         at: span.endedAt,
         sessionId: turn.sessionId,
+        ...(await whichSession(this.home, turn.sessionId)),
+        ...(await briefFor(this.home, turn.sessionId)),
       };
       this.summaries.set(subject, event);
       events.push(event);

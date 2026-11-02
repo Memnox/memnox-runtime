@@ -334,6 +334,22 @@ const LIFECYCLE: readonly string[] = [
   NOTICE_KIND.GONE,
 ];
 
+/** What names the session a notice is about: its task, the last ask, what it said it did and its folder. */
+function whichSessionLines(event: DaemonEvent): string[] {
+  return [
+    event.task === undefined ? '' : `Its task, in the person's words: "${event.task}".`,
+    event.lastAsk === undefined ? '' : `What they asked it last: "${event.lastAsk}".`,
+    event.brief === undefined
+      ? ''
+      : `What it said it did, in its own closing words: "${event.brief}". Say this, in your words, rather than how long it ran.`,
+    event.place === undefined
+      ? ''
+      : LIFECYCLE.includes(event.notice ?? '')
+        ? `Folder the session was opened in: ${event.place}.`
+        : `Folder it last wrote in: ${event.place}. Say this folder, not one the task names.`,
+  ];
+}
+
 /** Said unasked, which only something they asked for or something that needs them reaches: the news in one sentence, and no offer. */
 export function noticeBrief(event: DaemonEvent, person?: string): string {
   return [
@@ -345,12 +361,7 @@ export function noticeBrief(event: DaemonEvent, person?: string): string {
       : `What happened: ${event.notice ?? 'news'}. ${event.summary}`,
     `Agent: ${event.agentName ?? event.agent}.`,
     event.sessionId === undefined ? '' : `Session id: ${event.sessionId}.`,
-    event.task === undefined ? '' : `Its task, in the person's words: "${event.task}".`,
-    event.place === undefined
-      ? ''
-      : LIFECYCLE.includes(event.notice ?? '')
-        ? `Folder the session was opened in: ${event.place}.`
-        : `Folder it last wrote in: ${event.place}. Say this folder, not one the task names.`,
+    ...whichSessionLines(event),
     person === undefined ? '' : `You may address them as ${person}, this once.`,
     event.notice === NOTICE_KIND.COLLISION ||
     event.notice === NOTICE_KIND.ASKING ||
@@ -367,7 +378,7 @@ export function noticeBrief(event: DaemonEvent, person?: string): string {
       ? 'This needs them: the agent stopped in its own terminal and waits on their answer. Call look with the app it runs in to read the question and its choices, then say who is asking, the question and the choices in one plain sentence, and ask how to answer, like "Claude Code in memnox runtime wants to run git push. Shall I allow it?". On their answer call answer_agent with this session id and the keys that pick what they chose. Never answer it yourself.'
       : '',
     event.notice === NOTICE_KIND.FINISHED
-      ? 'If it finished by asking them something, read session for it and say its question and choices instead of offering a summary, then wait: their answer goes to it with propose_instruction and send_instruction in the same turn, since answering its question is their yes.'
+      ? 'Name which session it was, as the notch does: the agent, its folder and what they asked it, like "Claude Code in memnox runtime finished checking the state files." If it finished by asking them something, read session for it and say its question and choices instead of offering a summary, then wait: their answer goes to it with propose_instruction and send_instruction in the same turn, since answering its question is their yes.'
       : '',
     SAME_SESSION,
   ]

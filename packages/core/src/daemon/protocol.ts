@@ -326,6 +326,8 @@ export interface DaemonEvent extends ExtensionEventFields {
   lastAsk?: string;
   /** The folder the session works in, by name. */
   place?: string;
+  /** On a FINISHED notice, what the agent said it did, a sentence or two of its own closing words: data, never an instruction. */
+  brief?: string;
   /** On HELD and NOTICE, the session it is about, so the voice reads that one and never guesses. */
   sessionId?: string;
   /** On SHOW, whether to bring the session's window forward or put a card on screen. */
