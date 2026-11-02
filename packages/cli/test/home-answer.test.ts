@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DAEMON_METHOD,
+  ENFORCEMENT_MODE,
+  loadOrCreateConfig,
   Proposals,
+  saveConfig,
   SqliteEventStore,
   type MemnoxEvent,
   type SessionCard,
@@ -145,5 +148,39 @@ describe('the home every surface opens on', () => {
 
     expect(answer.ok).toBe(false);
     expect(answer.reason).toContain('not ready');
+  });
+
+  it('turns this machine from observe to enforce unsigned, and proposes nothing', async () => {
+    const home = await machine();
+    await saveConfig(home, {
+      ...(await loadOrCreateConfig(home)),
+      mode: ENFORCEMENT_MODE.OBSERVE,
+    });
+
+    const answer = await homeAnswer(
+      home,
+      { id: 4, method: DAEMON_METHOD.MODE_ENFORCE },
+      input(home),
+    );
+
+    expect(answer).toMatchObject({
+      ok: true,
+      modeSet: { was: 'observe', now: 'enforce' },
+    });
+    expect(answer.proposed).toBeUndefined();
+    expect((await loadOrCreateConfig(home)).mode).toBe(ENFORCEMENT_MODE.ENFORCE);
+    expect(await new Proposals(home).since('1970-01-01T00:00:00.000Z')).toEqual([]);
+  });
+
+  it('leaves every other setting in config.toml as it was', async () => {
+    const home = await machine();
+    const before = await loadOrCreateConfig(home);
+
+    await homeAnswer(home, { id: 5, method: DAEMON_METHOD.MODE_ENFORCE }, input(home));
+
+    expect(await loadOrCreateConfig(home)).toEqual({
+      ...before,
+      mode: ENFORCEMENT_MODE.ENFORCE,
+    });
   });
 });

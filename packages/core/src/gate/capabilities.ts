@@ -36,6 +36,7 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.VOICE_CHOICE]: REMOTE_CAPABILITY.SEE,
   [DAEMON_METHOD.FILES_LIST]: REMOTE_CAPABILITY.SEE,
   [DAEMON_METHOD.HOME]: REMOTE_CAPABILITY.SEE,
+  // mode-enforce is left out on purpose: whether this machine stops or watches is decided at the machine.
   // Which app accounts the person connected and whether each sign in still works; acting in one is a separate signed proposal.
   [DAEMON_METHOD.CONNECTIONS_LIST]: REMOTE_CAPABILITY.SEE,
   // Only names from the cloud's catalogue, which tells the phone no more than the list does.
