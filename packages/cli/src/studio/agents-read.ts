@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import {
+  AGENT_SEAM,
   AGENT_STATUS,
   agentFrozen,
   agentPatterns,
@@ -8,20 +9,24 @@ import {
   inForce,
   LEDGER_RECENT_LIMIT,
   LEDGER_SCAN_LIMIT,
+  MCP_CONFIG_LOCATIONS,
   MEMNOX_HOME,
   NodeSnapshotStore,
   OVERLAY_KIND,
   overlaysInForce,
+  planWrap,
   readHub,
   readOrgServers,
   readSkillsHub,
   startableKindOf,
   withOrganization,
+  type AgentSeam,
   type AgentSessions,
   type AgentStatus,
   type AgentView,
   type MemnoxEvent,
   type Overlay,
+  type ServerLaunch,
   type SessionCard,
   type SnapshotAgent,
 } from '@memnox/core';
@@ -125,10 +130,12 @@ function agentView(agent: SnapshotAgent, facts: Facts): AgentView {
   );
   const config = facts.configs.find((each) => each.agent === agent.kind);
   const today = facts.today.filter((event) => mine(event.agent));
+  const seam = seamOf(agent.kind);
   return {
     kind: agent.kind,
     name: displayName(facts.names, agent),
-    status: statusOf(agent.kind, freeze !== undefined, facts),
+    status: statusOf(agent.kind, seam, freeze !== undefined, facts),
+    ...(seam === undefined ? {} : { seam }),
     ...(agent.host === undefined ? {} : { installed: agent.host.location }),
     ...(config === undefined ? {} : { configPath: config.path }),
     ...(freeze === undefined ? {} : { pausedUntil: freeze.validUntil }),
@@ -154,14 +161,52 @@ function saidOf(event: MemnoxEvent): string {
   return event.shadowEffect ?? event.effect;
 }
 
-/** A pause wins, then a month of silence; otherwise whether its hook is in. */
-function statusOf(kind: string, paused: boolean, facts: Facts): AgentStatus {
+/** Its own hook where setup has one for it, else the servers it starts where it has an MCP config, else nothing. */
+function seamOf(kind: string): AgentSeam | undefined {
+  if (EDIT_HOOK_TARGETS.some((target) => target.agent === kind)) return AGENT_SEAM.HOOK;
+  if (MCP_CONFIG_LOCATIONS.some((location) => location.agent === kind))
+    return AGENT_SEAM.SERVERS;
+  return undefined;
+}
+
+/**
+ * A pause wins, then a month of silence; otherwise whether what holds it is in place: its hook, or for an
+ * agent with no hook, such as Claude Desktop, every server it starts going through the proxy.
+ */
+function statusOf(
+  kind: string,
+  seam: AgentSeam | undefined,
+  paused: boolean,
+  facts: Facts,
+): AgentStatus {
   if (paused) return AGENT_STATUS.PAUSED;
   if (facts.dormant.has(kind)) return AGENT_STATUS.DORMANT;
-  const hooked = EDIT_HOOK_TARGETS.some(
-    (target) => target.agent === kind && facts.hooked.includes(target.name),
+  const held =
+    seam === AGENT_SEAM.HOOK
+      ? EDIT_HOOK_TARGETS.some(
+          (target) => target.agent === kind && facts.hooked.includes(target.name),
+        )
+      : seam === AGENT_SEAM.SERVERS && serversHeld(kind, facts.configs);
+  return held ? AGENT_STATUS.PROTECTED : AGENT_STATUS.UNPROTECTED;
+}
+
+/**
+ * Whether no server this agent starts would still be wrapped, the same plan setup wraps by, so a press of
+ * Protect is what turns it. A server named by URL has no command to stand in front of and is not counted.
+ */
+function serversHeld(
+  kind: string,
+  configs: readonly { agent?: string; servers: Readonly<Record<string, unknown>> }[],
+): boolean {
+  return (
+    configs
+      .filter((config) => config.agent === kind)
+      // Cast is safe: planWrap checks each entry is a launch line before it reads one.
+      .every(
+        (config) =>
+          planWrap(config.servers as Record<string, ServerLaunch>).wrap.length === 0,
+      )
   );
-  return hooked ? AGENT_STATUS.PROTECTED : AGENT_STATUS.UNPROTECTED;
 }
 
 function sessionsOf(cards: readonly SessionCard[]): AgentSessions {

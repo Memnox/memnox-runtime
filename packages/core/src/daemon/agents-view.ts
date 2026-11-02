@@ -19,7 +19,7 @@ export const AGENTS_METHOD = {
 } as const;
 
 export const AGENT_STATUS = {
-  /** Its hook is in, so every action is ruled on. */
+  /** Its hook is in, or every server it starts runs through Memnox, so whatever Memnox can see of it is ruled on. */
   PROTECTED: 'protected',
   /** Found here and running outside Memnox. */
   UNPROTECTED: 'unprotected',
@@ -30,6 +30,19 @@ export const AGENT_STATUS = {
 } as const;
 
 export type AgentStatus = (typeof AGENT_STATUS)[keyof typeof AGENT_STATUS];
+
+/** What Memnox holds an agent through, which says what Protect changes for it and when that takes hold. */
+export const AGENT_SEAM = {
+  /** Its own hook, which every action passes. */
+  HOOK: 'hook',
+  /**
+   * Only the MCP servers it starts, as for Claude Desktop, which has no hook. It reads its config when it
+   * opens, so servers put behind Memnox reach it once it is quit and opened again.
+   */
+  SERVERS: 'servers',
+} as const;
+
+export type AgentSeam = (typeof AGENT_SEAM)[keyof typeof AGENT_SEAM];
 
 export interface AgentSessions {
   running: number;
@@ -56,6 +69,8 @@ export interface AgentView {
   kind: string;
   name: string;
   status: AgentStatus;
+  /** What Memnox holds it through; absent for an agent it has no way into, which stays unprotected. */
+  seam?: AgentSeam;
   /** Where its binary sits: installed, or somewhere unusual. Never the path, which names the user. */
   installed?: string;
   /** Its MCP config file, where the hub found one. */

@@ -1,8 +1,9 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  AGENT_SEAM,
   AGENT_STATUS,
   DAEMON_METHOD,
   MEMNOX_HOME,
@@ -151,4 +152,69 @@ describe('the agent manager methods', () => {
     const home = await mkdtemp(join(tmpdir(), 'memnox-agents-'));
     expect((await ask(home, {})).agentsView).toEqual([]);
   });
+
+  it('counts Claude Desktop protected once every server it starts goes through the proxy', async () => {
+    const wrapped = {
+      command: 'memnox-mcp-proxy',
+      args: ['--memnox-wrapped', '--name', 'files', '--', 'npx', 'files-server'],
+    };
+    const raw = { command: 'npx', args: ['files-server'] };
+    expect((await desktop({ files: wrapped })).status).toBe(AGENT_STATUS.PROTECTED);
+    expect((await desktop({ files: raw })).status).toBe(AGENT_STATUS.UNPROTECTED);
+    expect((await desktop({ files: raw })).seam).toBe(AGENT_SEAM.SERVERS);
+  });
+
+  it('counts Claude Desktop protected with remote servers the hub governs beside the workspace by URL', async () => {
+    // The shape of a real Claude Desktop config: the workspace bridge by URL, and remote servers the hub put behind the proxy.
+    const governed = (name: string, url: string) => ({
+      command: 'memnox-mcp-proxy',
+      args: [
+        '--memnox-wrapped',
+        '--memnox-hub',
+        '--name',
+        name,
+        '--agent',
+        'claude-desktop',
+        '--url',
+        url,
+      ],
+    });
+    const card = await desktop({
+      memnox: {
+        type: 'http',
+        url: 'https://api.memnox.com/v1/workspaces/w1/mcp',
+        headers: { Authorization: 'x' },
+      },
+      'comfy-cloud': governed('comfy-cloud', 'https://cloud.comfy.org/mcp'),
+      ImagineArt: governed('ImagineArt', 'https://mcp.imagine.art'),
+    });
+    expect(card.status).toBe(AGENT_STATUS.PROTECTED);
+    expect(card.seam).toBe(AGENT_SEAM.SERVERS);
+  });
+
+  it('holds an agent with a hook by its hook, whatever its servers', async () => {
+    const answer = await ask(await fixture(), {});
+    expect(answer.agentsView?.[0]?.seam).toBe(AGENT_SEAM.HOOK);
+  });
 });
+
+/** Claude Desktop's card, drawn from a config holding these servers. */
+async function desktop(servers: Record<string, unknown>) {
+  const home = await mkdtemp(join(tmpdir(), 'memnox-agents-'));
+  await new NodeSnapshotStore(join(home, MEMNOX_HOME)).save({
+    takenAt: '2026-10-30T10:00:00.000Z',
+    agents: [{ id: 'agt_claude-desktop', kind: 'claude-desktop', surfaces: [] }],
+    servers: [],
+    resources: [],
+  });
+  const folder = join(home, 'Library/Application Support/Claude');
+  await mkdir(folder, { recursive: true });
+  await writeFile(
+    join(folder, 'claude_desktop_config.json'),
+    JSON.stringify({ mcpServers: servers }),
+  );
+  const answer = await ask(home, {});
+  const card = answer.agentsView?.[0];
+  if (card === undefined) throw new Error('no card for Claude Desktop');
+  return card;
+}
