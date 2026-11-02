@@ -751,6 +751,9 @@ Your code and your secrets never leave your machine.
 
 ## Contributing
 
+Setting up a machine for the first time? [CONTRIBUTING.md](CONTRIBUTING.md#getting-set-up) lists
+what to install on macOS, Linux and Windows, and `pnpm check-setup` names whatever is still missing.
+
 [ARCHITECTURE.md](ARCHITECTURE.md) is the map: the packages, one direction of dependency, and
 one path every decision travels down. It ends with a table of where to make each kind of
 change. [CONTRIBUTING.md](CONTRIBUTING.md) is how a change lands: every change ships with a
