@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import {
   allProjectStates,
+  isCallSource,
   manifestToml,
   MEMORY_SCOPE,
   MEMORY_STATUS,
@@ -22,9 +23,9 @@ import { originUrlOf } from '@memnox/interceptors';
 import { editableRules } from '../studio/rules-in-force';
 
 /**
- * What this machine carries of the person's own, as sync items: hub servers with secret names
- * only, personal skills at the version accepted, projects opened by repository, the rules they set
- * here, and the personal memory facts they verified. Nothing organizational and nothing unconfirmed.
+ * What this machine carries of the person's own, as sync items: hub servers with secret names only, personal
+ * skills at the version accepted, projects by repository, the rules they set here, and the personal facts they
+ * verified, none read out of an agent's calls, which stay here. Nothing organizational and nothing unconfirmed.
  */
 
 /** A skill as it travels: the version, its manifest as written, its instructions and every other file. */
@@ -122,8 +123,16 @@ function memoryItems(home: string): SyncItem[] {
   if (!existsSync(memoryDatabasePathFor(home))) return [];
   const store = SqliteMemoryStore.forHome(home);
   try {
+    // What agents read through their tools stays on this machine, even sealed for the person's own others.
+    const calls = new Set(
+      store
+        .sources()
+        .filter((each) => isCallSource(each.kind))
+        .map((each) => each.id),
+    );
     return store
       .items({ statuses: [MEMORY_STATUS.VERIFIED], scope: MEMORY_SCOPE.PERSONAL })
+      .filter((item) => item.sourceId === undefined || !calls.has(item.sourceId))
       .map((item) => ({
         kind: SYNC_KIND.MEMORY,
         name: memoryNameOf(item),

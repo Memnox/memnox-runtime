@@ -51,6 +51,9 @@ export const SESSION_TOOL_ANNOTATIONS: Readonly<Record<string, McpToolAnnotation
   fingerprint: WRITES,
   // Adds to the Learn queue, which only a person answers.
   memnox_suggest: WRITES,
+  apps: READS,
+  // Rules on the app call it carries, and every act waits on the person's signature.
+  app_run: WRITES,
   rewind: DESTROYS,
 };
 
@@ -68,8 +71,15 @@ export function isWorkspaceTool(
 ): boolean {
   // A project file naming a server `memnox` is anybody's, and its tools are ruled on like any.
   if (projectNamesServer(server)) return false;
+  if (server === SESSION_SERVER_NAME) return SELF_RULED_SESSION_TOOLS.includes(tool);
   return server === WORKSPACE_SERVER_NAME && tool.startsWith(WORKSPACE_TOOL_PREFIX);
 }
+
+/**
+ * The session server's tools that rule on the call they carry, as `app.<toolkit>.<tool>`, so the hook
+ * asking about the wrapper as well would put one write to the person twice.
+ */
+const SELF_RULED_SESSION_TOOLS: readonly string[] = ['apps', 'app_run'];
 
 /** A tool's declaration where one is known, for a seam that only sees the tool's name. */
 export type ToolDeclarations = (

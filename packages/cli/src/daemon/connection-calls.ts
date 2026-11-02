@@ -1,10 +1,13 @@
 import {
+  CONNECT_STATE,
   DAEMON_METHOD,
+  type AppUse,
   type DaemonRequest,
   type DaemonResponse,
   type ToolConnection,
 } from '@memnox/core';
 import { localConnections } from '../local-tools/local-tools';
+import { appUsesSince, withUses } from './app-uses';
 import { openBrowser, OPEN_BROWSER_VAR } from '../sync/browser';
 import {
   connectedAlready,
@@ -14,12 +17,15 @@ import {
   toolkitSlug,
   toolkitTitle,
 } from '../sync/connection-work';
+import { readPerson } from '../sync/person';
+import { ACCOUNT_REQUIRED } from '../sync/cloud-account';
 import { connectionsOf } from '../sync/personal-work';
 import { MACHINE } from '../this-machine';
 
 /**
  * The person's own tools from the Mac, Windows, Linux or a paired phone: which are connected, connecting
- * any tool as themselves with nobody else asked, disconnecting one, and finding one in the catalogue.
+ * any tool as themselves with nobody else asked once they are signed in to Memnox Cloud, disconnecting
+ * one, and finding one in the catalogue, which anybody may browse signed in or not.
  */
 
 /** Said when the list failed in a way nobody planned for, since the menu bar only ever shows words. */
@@ -48,6 +54,10 @@ export interface ConnectionSeams {
   open: (url: string) => Promise<boolean>;
   signOut: typeof disconnect;
   search: typeof searchToolkits;
+  /** Whether a person is signed in to Memnox Cloud here, which connecting any app needs. */
+  signedIn: (home: string) => Promise<boolean>;
+  /** Which agents used each app through Memnox lately, by toolkit, from this machine's ledger. */
+  uses: (home: string) => Promise<Map<string, AppUse[]>>;
 }
 
 const LIVE: ConnectionSeams = {
@@ -58,6 +68,8 @@ const LIVE: ConnectionSeams = {
   open: (url) => openBrowser(url, { ...process.env, [OPEN_BROWSER_VAR]: '1' }),
   signOut: disconnect,
   search: searchToolkits,
+  signedIn: async (home) => (await readPerson(home)) !== null,
+  uses: (home) => appUsesSince(home, new Date()),
 };
 
 /** Any of the four connection calls; `remote` is a paired phone, which opens the page itself. */
@@ -74,7 +86,7 @@ export async function answerConnectionCall(
     return guarded(request, COULD_NOT_DISCONNECT, () => signOut(request, home, live));
   if (request.method === DAEMON_METHOD.TOOLKITS_SEARCH)
     return guarded(request, COULD_NOT_SEARCH, () => search(request, home, live));
-  return answerConnections(request, home, live.list, live.local);
+  return answerConnections(request, home, live.list, live.local, live.uses);
 }
 
 /** The Mac's menu bar and notch asking which apps the person connected; a refusal is a sentence, never a throw. */
@@ -83,11 +95,21 @@ export async function answerConnections(
   home: string,
   list: typeof connectionsOf = connectionsOf,
   local: ConnectionSeams['local'] = async () => [],
+  uses: ConnectionSeams['uses'] = async () => new Map(),
 ): Promise<DaemonResponse> {
   try {
-    const [answer, here] = await Promise.all([list(home), local(home).catch(() => [])]);
+    const [answer, here, used] = await Promise.all([
+      list(home),
+      local(home).catch(() => []),
+      // A ledger that will not open names nobody, and the list still stands.
+      uses(home).catch(() => new Map<string, AppUse[]>()),
+    ]);
     if (answer.ok)
-      return { id: request.id, ok: true, connections: [...here, ...answer.value] };
+      return {
+        id: request.id,
+        ok: true,
+        connections: [...here, ...withUses(answer.value, used)],
+      };
     // What this Mac reaches itself stands whatever the cloud said.
     return here.length > 0
       ? { id: request.id, ok: true, connections: here }
@@ -117,6 +139,8 @@ async function signIn(
     );
   }
   const link = await seams.link(home, toolkit);
+  if (!link.ok && link.code === ACCOUNT_REQUIRED)
+    return { ...refused(request, link.said), connectState: CONNECT_STATE.SIGN_IN_NEEDED };
   if (!link.ok) return refused(request, link.said);
   const opened = remote ? false : await seams.open(link.value);
   return { id: request.id, ok: true, signIn: { toolkit, url: link.value, opened } };
@@ -145,10 +169,20 @@ async function search(
   home: string,
   seams: ConnectionSeams,
 ): Promise<DaemonResponse> {
-  const answer = await seams.search(home, request.query);
-  return answer.ok
+  const [answer, signedIn] = await Promise.all([
+    seams.search(home, request.query),
+    seams.signedIn(home).catch(() => false),
+  ]);
+  if (!answer.ok) return refused(request, answer.said);
+  // Said beside the catalogue, so a screen shows the sign in step before anybody presses Connect.
+  return signedIn
     ? { id: request.id, ok: true, toolkits: answer.value }
-    : refused(request, answer.said);
+    : {
+        id: request.id,
+        ok: true,
+        toolkits: answer.value,
+        connectState: CONNECT_STATE.SIGN_IN_NEEDED,
+      };
 }
 
 async function isLocal(

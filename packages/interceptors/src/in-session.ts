@@ -36,6 +36,7 @@ import { SESSION_MOMENT, type SessionEvent } from './session-events';
 import { learnFromAnswer, learnFromRefusal, rememberQuestion } from './prompt-answers';
 import { authorizerFor, type ToolAnswer } from './tool-hook';
 import { taintFromResult } from './result-taint';
+import { keepMcpResult } from './call-memory';
 import { brokenByShell, oweReport } from './shell-written';
 import { DEFAULT_AGENT_NAME } from './tool-hook.constants';
 import type { ToolReply } from './tool-policy';
@@ -159,6 +160,9 @@ export async function beforePause(
       await noteSubagent(payload, context, sessionId);
       await learnFromAnswer(payload, { ...context, env });
       await markIfInstructed(payload, context, env);
+      await keepMcpResult(payload, { ...context, sessionId }).catch((err: unknown) =>
+        log(`keeping a tool result in memory failed: ${String(err)}`),
+      );
       const broken = await shellReport(payload, pause, context, sessionId);
       const arrived = await answersArrived({ ...clockOf(context, sessionId), waitMs: 0 });
       const said = [broken, arrived].filter((each): each is string => each !== null);

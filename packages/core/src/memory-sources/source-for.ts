@@ -5,6 +5,7 @@ import {
   type McpMemoryCall,
 } from './api-sources';
 import { folderSource } from './folder-sources';
+import { ToolCallSource } from './tool-calls';
 import {
   MEMORY_SOURCE_KIND,
   type MemorySource,
@@ -45,6 +46,9 @@ export function memorySourceFor(
       return new McpMemorySource(
         reach.mcp(record.server, record.tool ?? DEFAULT_MCP_MEMORY_TOOL),
       );
+    case MEMORY_SOURCE_KIND.APP_CALLS:
+    case MEMORY_SOURCE_KIND.MCP_CALLS:
+      return new ToolCallSource(record.kind, record.location);
     default:
       return folderSource(record.kind, record.location);
   }

@@ -60,7 +60,7 @@ interface AfterTool {
  * Every agent Memnox hooks hands its result over after a call, each under its own names,
  * so an MCP server that cannot be proxied is still read the way the proxy reads one.
  */
-function afterToolOf(hook: HookFields): AfterTool | null {
+export function afterToolOf(hook: HookFields): AfterTool | null {
   const event = hook['hook_event_name'];
   const tool = hook['tool_name'];
   if (typeof tool === 'string') {
@@ -94,7 +94,7 @@ function afterToolOf(hook: HookFields): AfterTool | null {
 /** Cursor names an MCP tool `MCP:<tool>` with no server, so Memnox's own are known by name. */
 const CURSOR_MCP = /^MCP:(.+)$/;
 
-function isOwnTool(tool: string): boolean {
+export function isOwnTool(tool: string): boolean {
   if (OWN_TOOL.test(tool)) return true;
   const cursor = CURSOR_MCP.exec(tool);
   if (cursor === null) return false;

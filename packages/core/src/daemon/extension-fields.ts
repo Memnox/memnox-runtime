@@ -87,6 +87,8 @@ interface WorkEventFields {
   work?: WorkDraft;
   /** On SIGN_IN, the tools the person asked for and has not signed in to, each with its page. */
   signIn?: ToolSignIn[];
+  /** On a PROPOSAL of `work`, raised by a working agent through Memnox rather than by the voice, so its card waits for Send unasked. */
+  agentAsked?: true;
   /** On a PROPOSAL that an account is the person's own, answered from the signed in pill. */
   claim?: { toolkit: string; label: string };
   /** On a SIGNED_IN or SIGN_IN_STALLED notice, which tool, as whom, and what to carry on with. */

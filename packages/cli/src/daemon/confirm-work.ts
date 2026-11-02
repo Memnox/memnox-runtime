@@ -1,4 +1,11 @@
-import { PROPOSAL_ANSWER, PROPOSAL_KIND, type Proposal } from '@memnox/core';
+import {
+  keepToolCall,
+  PROPOSAL_ANSWER,
+  PROPOSAL_KIND,
+  TOOL_CALL_VIA,
+  type Proposal,
+} from '@memnox/core';
+import { OPERATOR_AGENT } from '../session-tools/propose-tools';
 import { isLocalSlug } from '../local-tools/local-run';
 import { runLocal } from '../local-tools/local-tools';
 import { claimAccount, runPersonalTool } from '../sync/personal-work';
@@ -30,6 +37,8 @@ export async function applyPersonal(
         ? {}
         : { expectedAccount: change.account.key }),
     });
+    if (ran.ok && proposal.proposedBy !== OPERATOR_AGENT)
+      await keepWritten(home, proposal, ran.value.data);
     return ran.ok
       ? { ok: true, outcome: `${PROPOSAL_ANSWER.CONFIRMED}: ${change.label}` }
       : { ok: false, error: ran.said };
@@ -41,4 +50,32 @@ export async function applyPersonal(
       : { ok: false, error: claimed.said };
   }
   return null;
+}
+
+/** What a working agent wrote in an app once the person signed for it, kept in their own memory here like a read. */
+async function keepWritten(
+  home: string,
+  proposal: Proposal,
+  answered: unknown,
+): Promise<void> {
+  const change = proposal.change;
+  if (change.kind !== PROPOSAL_KIND.WORK) return;
+  // Best effort: the send already went, and a memory that could not be kept takes nothing back.
+  await keepToolCall(home, {
+    via: TOOL_CALL_VIA.APP,
+    agent: proposal.proposedBy,
+    app: change.toolkit,
+    tool: change.tool,
+    at: new Date().toISOString(),
+    result: { wrote: argumentsOf(change.argumentsText), answered },
+  }).catch(() => null);
+}
+
+function argumentsOf(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    // Checked when it was proposed; text that no longer parses is kept as it was sent.
+    return text;
+  }
 }

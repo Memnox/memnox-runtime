@@ -87,6 +87,22 @@ export interface MemoryEvidenceView {
   source: string;
   /** The passage changed or went away since it was read. */
   stale: boolean;
+  /** For evidence read from an agent's call: who made it, through what, and when, never what it carried. */
+  call?: MemoryCallView;
+}
+
+/** One call an agent made through an app or an MCP server, named so the map joins the fact to the agent, its conversation and the app. */
+export interface MemoryCallView {
+  /** `app` for a connected app reached through Memnox, `mcp` for an MCP server. */
+  via: string;
+  agent: string;
+  sessionId?: string;
+  /** The app's toolkit slug, on a call through Memnox. */
+  app?: string;
+  /** The MCP server's name, on a call to one. */
+  server?: string;
+  tool: string;
+  at: string;
 }
 
 export interface MemoryRuleView {

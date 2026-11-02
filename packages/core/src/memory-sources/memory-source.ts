@@ -15,6 +15,10 @@ export const MEMORY_SOURCE_KIND = {
   SUPERMEMORY: 'supermemory',
   /** An MCP memory server in the hub, read through one of its tools. */
   MCP: 'mcp',
+  /** What the person's agents read and wrote in one connected app through Memnox, kept on this machine only. */
+  APP_CALLS: 'app-calls',
+  /** What the person's agents read and wrote through one MCP server, kept on this machine only. */
+  MCP_CALLS: 'mcp-calls',
 } as const;
 
 export type MemorySourceKind =
@@ -35,7 +39,19 @@ const ALWAYS_TAINTED: readonly MemorySourceKind[] = [
   MEMORY_SOURCE_KIND.NOTION_EXPORT,
   MEMORY_SOURCE_KIND.SUPERMEMORY,
   MEMORY_SOURCE_KIND.MCP,
+  MEMORY_SOURCE_KIND.APP_CALLS,
+  MEMORY_SOURCE_KIND.MCP_CALLS,
 ];
+
+/** Kept by Memnox itself from the calls agents make, so no form adds one and only Memnox writes them. */
+export const CALL_SOURCE_KINDS: readonly MemorySourceKind[] = [
+  MEMORY_SOURCE_KIND.APP_CALLS,
+  MEMORY_SOURCE_KIND.MCP_CALLS,
+];
+
+export function isCallSource(kind: string): boolean {
+  return (CALL_SOURCE_KINDS as readonly string[]).includes(kind);
+}
 
 export function trustOf(kind: MemorySourceKind): SourceTrust {
   return ALWAYS_TAINTED.includes(kind) ? SOURCE_TRUST.TAINTED : SOURCE_TRUST.TRUSTED;
@@ -83,6 +99,8 @@ export interface SourcePassage {
   /** A link to it, where the source has one. */
   url?: string;
   text: string;
+  /** The agent whose call brought it in, for a source of agents' calls, so what it teaches is theirs to suggest. */
+  by?: string;
 }
 
 export interface SourceDocument {

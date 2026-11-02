@@ -449,8 +449,10 @@ function phoneOf(
   };
 }
 
-/** Something going out in the person's name, drawn on the Mac the way its tool draws it. */
-function workDraftFor(proposal: Proposal): Pick<DaemonEvent, 'work' | 'claim'> {
+/** Something going out in the person's name, drawn as its tool draws it; marked when a working agent asked for it. */
+function workDraftFor(
+  proposal: Proposal,
+): Pick<DaemonEvent, 'work' | 'claim' | 'agentAsked'> {
   const change = proposal.change;
   // Answered from the signed in pill in the notch, so the Mac never declines it as unasked.
   if (change.kind === PROPOSAL_KIND.ACCOUNT)
@@ -462,6 +464,7 @@ function workDraftFor(proposal: Proposal): Pick<DaemonEvent, 'work' | 'claim'> {
       ...(change.account === undefined ? {} : { account: change.account }),
       ...(change.toName === undefined ? {} : { toName: change.toName }),
     }),
+    ...(proposal.proposedBy === OPERATOR_AGENT ? {} : { agentAsked: true as const }),
   };
 }
 

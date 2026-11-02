@@ -1,8 +1,12 @@
 import {
   evidenceRef,
+  isCallSource,
   isFileSource,
   MEMORY_SOURCE_KIND,
+  readToolCallSync,
   sentenceOfRule,
+  type MemoryCallView,
+  type MemoryEvidence,
   type MemoryItem,
   type MemoryItemView,
   type MemoryItemsView,
@@ -25,9 +29,9 @@ export function itemsView(
   items: readonly MemoryItem[],
   total: number,
 ): MemoryItemsView {
-  const names = new Map(store.sources().map((each) => [each.id, each.name]));
+  const sources = new Map(store.sources().map((each) => [each.id, each]));
   return {
-    items: items.map((item) => itemView(store, item, names)),
+    items: items.map((item) => itemView(store, item, sources)),
     more: Math.max(0, total - items.length),
   };
 }
@@ -35,7 +39,7 @@ export function itemsView(
 export function itemView(
   store: SqliteMemoryStore,
   item: MemoryItem,
-  names: ReadonlyMap<string, string> = new Map(),
+  sources: ReadonlyMap<string, MemorySourceRecord> = sourcesOf(store),
 ): MemoryItemView {
   const restated = item.duplicateOf === undefined ? null : store.item(item.duplicateOf);
   return {
@@ -62,12 +66,38 @@ export function itemView(
       document: each.document,
       ...(each.heading === undefined ? {} : { heading: each.heading }),
       ...(each.url === undefined ? {} : { url: each.url }),
-      source: names.get(each.sourceId) ?? each.sourceId,
+      source: sources.get(each.sourceId)?.name ?? each.sourceId,
       stale: each.stale,
+      ...callOf(each, sources.get(each.sourceId)),
     })),
     createdAt: item.createdAt,
     ...(item.decidedAt === undefined ? {} : { decidedAt: item.decidedAt }),
     ...(item.decidedBy === undefined ? {} : { decidedBy: item.decidedBy }),
+  };
+}
+
+function sourcesOf(store: SqliteMemoryStore): Map<string, MemorySourceRecord> {
+  return new Map(store.sources().map((each) => [each.id, each]));
+}
+
+/** Who made the call a piece of evidence was read from, by name only, so the map can join it to them. */
+function callOf(
+  evidence: MemoryEvidence,
+  source: MemorySourceRecord | undefined,
+): { call?: MemoryCallView } {
+  if (source === undefined || !isCallSource(source.kind)) return {};
+  const call = readToolCallSync(source.location, evidence.document);
+  if (call === null) return {};
+  return {
+    call: {
+      via: call.via,
+      agent: call.agent,
+      ...(call.sessionId === undefined ? {} : { sessionId: call.sessionId }),
+      ...(call.app === undefined ? {} : { app: call.app }),
+      ...(call.server === undefined ? {} : { server: call.server }),
+      tool: call.tool,
+      at: call.at,
+    },
   };
 }
 
