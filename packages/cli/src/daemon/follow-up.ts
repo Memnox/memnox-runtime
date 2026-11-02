@@ -61,6 +61,8 @@ interface Sent {
   sent?: boolean;
   how?: string;
   why?: string;
+  /** What the voice would have said back, the only reason some refusals carry. */
+  said?: string;
 }
 
 /** The routes send_instruction names, read as the three a screen can say. */
@@ -108,7 +110,7 @@ export async function followUpAnswer(
   if (sent.sent !== true || outcome === undefined) {
     return refused(
       request,
-      sent.why ?? `${THE_DESKTOP_START} could not hand that to the agent.`,
+      sent.why ?? sent.said ?? `${THE_DESKTOP_START} could not hand that to the agent.`,
     );
   }
   return { id: request.id, ok: true, outcome };

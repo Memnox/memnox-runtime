@@ -200,13 +200,20 @@ async function installInto(
   seams: TerminalsSeams,
 ): Promise<EditorOutcome[]> {
   const packaged = await packageExtension(home, seams);
-  if (typeof packaged !== 'string') {
+  if ('why' in packaged) {
     return editors.map((each) => ({ editor: each.name, done: false, why: packaged.why }));
   }
   return Promise.all(
     editors.map(async (each) => {
-      await forgetRemovedCopies(join(home, each.extensions));
-      const ran = await seams.run(each.cli, ['--install-extension', packaged, '--force']);
+      await forgetRemovedCopy(
+        join(home, each.extensions),
+        `${TERMINALS_EXTENSION}-${packaged.version}`,
+      );
+      const ran = await seams.run(each.cli, [
+        '--install-extension',
+        packaged.vsix,
+        '--force',
+      ]);
       if (!ran.ok) return { editor: each.name, done: false, why: lastLine(ran.output) };
       // An install the editor did not register answers no link, so only its own list is believed.
       const listed = await seams.run(each.cli, ['--list-extensions']);
@@ -221,23 +228,22 @@ const NOT_REGISTERED =
   'the editor took the package but does not list it, so reload its windows and run memnox protect --vscode again';
 
 /**
- * A copy of this extension the editor marked removed, deleted with its mark, since an install of the
- * same version lands in that folder and the editor goes on treating it as uninstalled.
+ * This very build, deleted with its mark where the editor wrote it off, since a reinstall lands in that folder. Any
+ * other copy stays: an editor open since before still loads it as a window restarts its extensions, and found missing
+ * that window comes back with no Memnox extension until the editor itself restarts.
  */
-async function forgetRemovedCopies(folder: string): Promise<void> {
-  const removed = await obsolete(folder);
-  const ours = [...removed].filter((name) => name.startsWith(`${TERMINALS_EXTENSION}-`));
-  if (ours.length === 0) return;
-  for (const name of ours) await rm(join(folder, name), { recursive: true, force: true });
+async function forgetRemovedCopy(folder: string, name: string): Promise<void> {
+  if (!(await obsolete(folder)).has(name)) return;
+  await rm(join(folder, name), { recursive: true, force: true });
   const path = join(folder, OBSOLETE);
   const marks = await readFile(path, 'utf8').then(
     (text): unknown => JSON.parse(text),
     () => null,
   );
   if (typeof marks !== 'object' || marks === null) return;
-  // Only this extension's own marks are taken out; every other extension's stay as the editor left them.
+  // Only this build's own mark is taken out; every other copy's stay as the editor left them.
   const kept = Object.fromEntries(
-    Object.entries(marks).filter(([name]) => !ours.includes(name)),
+    Object.entries(marks).filter(([each]) => each !== name),
   );
   await writeFile(path, JSON.stringify(kept));
 }
@@ -259,7 +265,7 @@ async function uninstallFrom(
 async function packageExtension(
   home: string,
   seams: TerminalsSeams,
-): Promise<string | { why: string }> {
+): Promise<{ vsix: string; version: string } | { why: string }> {
   const script = seams.script();
   if (script === null) return { why: 'the extension was not built into this memnox' };
   const root = join(home, MEMNOX_HOME, 'vscode');
@@ -277,7 +283,9 @@ async function packageExtension(
   const vsix = join(root, `memnox-terminals-${version}.vsix`);
   await rm(vsix, { force: true });
   const zipped = await seams.run('/usr/bin/zip', ['-r', '-X', '-q', vsix, '.'], staging);
-  return zipped.ok ? vsix : { why: `zip failed: ${lastLine(zipped.output)}` };
+  return zipped.ok
+    ? { vsix, version }
+    : { why: `zip failed: ${lastLine(zipped.output)}` };
 }
 
 /** How much of the script's digest names a build, enough that two builds never share a folder. */
