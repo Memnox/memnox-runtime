@@ -33,6 +33,16 @@ import {
   type ItemRow,
   type SourceRow,
 } from './memory-schema';
+import {
+  dropPassageIndex,
+  indexPassages,
+  matchExpression,
+  migratePassageIndex,
+  searchPassages,
+  itemsCiting,
+  type IndexedPassage,
+  type PassageHit,
+} from './memory-passages';
 
 /**
  * What this machine learned, in SQLite beside the ledger: sources, the passages last read from
@@ -82,6 +92,7 @@ export class SqliteMemoryStore {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
     this.db.exec(MEMORY_SCHEMA);
+    migratePassageIndex(this.db);
   }
 
   static forHome(home: string): SqliteMemoryStore {
@@ -118,6 +129,7 @@ export class SqliteMemoryStore {
     return this.db.transaction(() => {
       this.db.prepare('DELETE FROM documents WHERE sourceId = ?').run(id);
       this.db.prepare('DELETE FROM passages WHERE sourceId = ?').run(id);
+      dropPassageIndex(this.db, id);
       this.db.prepare('DELETE FROM sources WHERE id = ?').run(id);
       return this.refreshStaleness(id, at);
     })();
@@ -143,13 +155,16 @@ export class SqliteMemoryStore {
     return new Set(rows.map((row) => row.digest));
   }
 
-  /** The document's passages as read now; an empty stamp has it read again next time. */
+  /** The document's passages as read now, a bare digest left out of the index; an empty stamp reads it again. */
   putDocument(
     sourceId: string,
     document: string,
     stamp: string,
-    digests: string[],
+    passages: readonly (string | IndexedPassage)[],
   ): void {
+    const indexed = passages.map((each) =>
+      typeof each === 'string' ? { digest: each } : each,
+    );
     this.db.transaction(() => {
       this.dropDocument(sourceId, document);
       this.db
@@ -158,8 +173,15 @@ export class SqliteMemoryStore {
       const insert = this.db.prepare(
         'INSERT OR IGNORE INTO passages (sourceId, document, digest) VALUES (?, ?, ?)',
       );
-      for (const digest of digests) insert.run(sourceId, document, digest);
+      for (const each of indexed) insert.run(sourceId, document, each.digest);
+      indexPassages(this.db, { sourceId, document }, indexed);
     })();
+  }
+
+  /** Passages whose words match, best first, and the items whose evidence cites them. */
+  searchPassages(query: string, limit: number): { hits: PassageHit[]; cited: string[] } {
+    const hits = searchPassages(this.db, query, limit);
+    return { hits, cited: itemsCiting(this.db, hits) };
   }
 
   dropDocument(sourceId: string, document: string): void {
@@ -169,6 +191,7 @@ export class SqliteMemoryStore {
     this.db
       .prepare('DELETE FROM passages WHERE sourceId = ? AND document = ?')
       .run(sourceId, document);
+    dropPassageIndex(this.db, sourceId, document);
   }
 
   /** Evidence whose passage is no longer there goes stale, and an item left with none goes outdated. */
@@ -441,13 +464,4 @@ export function whereOf(
   if (filter.scope !== undefined) listed('scope', [filter.scope]);
   if (filter.sourceId !== undefined) listed('sourceId', [filter.sourceId]);
   return { clause: where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`, params };
-}
-
-/** Each word quoted as a phrase, so nothing a person types is read as FTS syntax. */
-function matchExpression(query: string): string {
-  const words = query
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word.length > 1);
-  return [...new Set(words)].map((word) => `"${word}"`).join(' OR ');
 }

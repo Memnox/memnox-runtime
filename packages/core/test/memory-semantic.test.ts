@@ -125,7 +125,11 @@ describe('semantic memory search', () => {
       filter: {},
       embedder: null,
     });
-    expect(off).toEqual({ items: [items[1]], mode: MEMORY_SEARCH_MODE.KEYWORD });
+    expect(off).toEqual({
+      items: [items[1]],
+      mode: MEMORY_SEARCH_MODE.KEYWORD,
+      passages: [],
+    });
 
     const down: EmbeddingPort = {
       model: 'nomic-embed-text',

@@ -1,6 +1,7 @@
 import { MEMORY_SEARCH_MODE, type MemorySearchMode } from '../daemon/memory';
 import { fuseRankings, type EmbeddingPort } from './embedding';
 import type { MemoryItem } from './memory-record';
+import type { PassageHit } from './memory-passages';
 import {
   MOST_ITEMS_LISTED,
   type ItemFilter,
@@ -16,6 +17,8 @@ import type { SqliteMemoryVectors } from './memory-vectors';
 
 /** Items embedded per search at most, so a first search over a large memory stays bounded; the rest follow. */
 export const MOST_EMBEDDED_PER_SEARCH = 64;
+/** Passages a search answers at most, beside the items. */
+export const MOST_PASSAGES_FOUND = 20;
 
 export interface MemorySearchInput {
   store: SqliteMemoryStore;
@@ -31,14 +34,19 @@ export interface MemorySearchResult {
   mode: MemorySearchMode;
   /** Why it is keyword only although semantic search is on. */
   note?: string;
+  /** Passages of the read documents that matched, best first. */
+  passages: PassageHit[];
 }
 
 export async function searchMemory(
   input: MemorySearchInput,
 ): Promise<MemorySearchResult> {
   const { store, vectors, query, filter, embedder } = input;
-  const keyword = store.search(query, filter);
-  if (embedder === null) return { items: keyword, mode: MEMORY_SEARCH_MODE.KEYWORD };
+  const found = store.searchPassages(query, MOST_PASSAGES_FOUND);
+  const keyword = withCited(store, store.search(query, filter), found.cited, filter);
+  const passages = found.hits;
+  if (embedder === null)
+    return { items: keyword, mode: MEMORY_SEARCH_MODE.KEYWORD, passages };
   let ranked: string[];
   try {
     await embedMissing(vectors, embedder);
@@ -51,6 +59,7 @@ export async function searchMemory(
     return {
       items: keyword,
       mode: MEMORY_SEARCH_MODE.KEYWORD,
+      passages,
       note: `The embedding model ${embedder.model} did not answer (${why}), so this is keyword search only.`,
     };
   }
@@ -61,7 +70,32 @@ export async function searchMemory(
     const item = byId.get(id) ?? store.item(id);
     return item === null ? [] : [item];
   });
-  return { items, mode: MEMORY_SEARCH_MODE.SEMANTIC };
+  return { items, mode: MEMORY_SEARCH_MODE.SEMANTIC, passages };
+}
+
+/** The keyword items, then any item a matching passage is evidence for, where the filter would list it. */
+function withCited(
+  store: SqliteMemoryStore,
+  keyword: MemoryItem[],
+  cited: readonly string[],
+  filter: ItemFilter,
+): MemoryItem[] {
+  const listed = new Set(keyword.map((item) => item.id));
+  const more = cited.flatMap((id) => {
+    if (listed.has(id)) return [];
+    const item = store.item(id);
+    return item !== null && passes(item, filter) ? [item] : [];
+  });
+  const limit = Math.min(filter.limit ?? MOST_ITEMS_LISTED, MOST_ITEMS_LISTED);
+  return [...keyword, ...more].slice(0, limit);
+}
+
+function passes(item: MemoryItem, filter: ItemFilter): boolean {
+  if (filter.statuses !== undefined && !filter.statuses.includes(item.status))
+    return false;
+  if (filter.scope !== undefined && item.scope !== filter.scope) return false;
+  if (filter.kinds !== undefined && !filter.kinds.includes(item.kind)) return false;
+  return filter.sourceId === undefined || item.sourceId === filter.sourceId;
 }
 
 /** Vectors for items that have none from this model yet, a bounded batch at a time. */
