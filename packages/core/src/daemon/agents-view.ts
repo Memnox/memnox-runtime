@@ -1,4 +1,6 @@
 import type { DecisionEffect } from '../constants/decision.constants';
+import type { CapabilityTally } from '../discovery/capabilities';
+import type { AgentNode } from './protocol';
 
 /**
  * The agents on this machine as a screen manages them: whether each runs under Memnox, its
@@ -16,6 +18,11 @@ export const AGENTS_METHOD = {
   SESSION_STOP: 'session-stop',
   /** Opens the agent in a new terminal in a folder, for an agent with a known launch command. */
   AGENT_LAUNCH: 'agent-launch',
+  /**
+   * Every agent the scan finds now, with the counted facts the full screen scan draws, read and never shown, so a
+   * screen draws it without asking the voice. A server never asked starts one full count behind the answer.
+   */
+  AGENTS_SCAN: 'agents-scan',
 } as const;
 
 export const AGENT_STATUS = {
@@ -104,9 +111,18 @@ export interface AgentsRequestFields {
   workingDirectory?: string;
 }
 
+/** What AGENTS_SCAN found: each agent with its counted facts, and the machine's real capabilities. */
+export interface AgentsScanView {
+  agents: AgentNode[];
+  /** `total` is absent while the servers are still being counted, never zero for that. */
+  capabilities: CapabilityTally;
+}
+
 export interface AgentsResponseFields {
   /** On AGENTS, and after a pause or a stop. */
   agentsView?: AgentView[];
   /** On AGENT_LAUNCH. */
   agentLaunched?: AgentLaunched;
+  /** On AGENTS_SCAN. */
+  agentsScan?: AgentsScanView;
 }

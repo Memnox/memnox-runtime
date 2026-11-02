@@ -17,6 +17,8 @@ import { agentNamed, pauseAgent } from '../agents/agent-pause';
 import { launchAgent, launchable } from '../agents/agent-launch';
 import { applyProfile } from '../profiles/profile-apply';
 import { readAgentsView } from '../studio/agents-read';
+import { readAgentsScan } from '../session-tools/agents-tool';
+import type { SessionToolDeps } from '../session-tools/read-tools';
 
 /**
  * The agent manager's methods. Pausing an agent or stopping a session only holds work back, so
@@ -38,6 +40,10 @@ interface AgentsDeps {
   cards: () => Promise<SessionCard[]>;
   /** Where an agent's command is found; the login shell by default, a fixed answer in a test. */
   resolveCommand?: (agent: StartableAgent) => string | null;
+  /** What the session tools read with, for AGENTS_SCAN's sessions; absent where nothing scans. */
+  sessionDeps?: () => SessionToolDeps;
+  /** The scan's seams, faked in a test so it never reads the real home or starts a server. */
+  scan?: Parameters<typeof readAgentsScan>[1];
 }
 
 type Answered = Omit<DaemonResponse, 'id'>;
@@ -48,6 +54,8 @@ export async function agentsAnswer(
   request: DaemonRequest,
   deps: AgentsDeps,
 ): Promise<DaemonResponse> {
+  // A read of its own, so it answers without the cards, which it has no use for.
+  if (request.method === AGENTS_METHOD.AGENTS_SCAN) return scanAnswer(request, deps);
   const answered = await answerOf(home, request, deps).catch((err: unknown): Answered =>
     refused(err instanceof Error ? err.message : String(err)),
   );
@@ -72,6 +80,29 @@ async function answerOf(
       return launch(home, request, deps);
     default:
       return { ok: true };
+  }
+}
+
+/** The agents the scan finds now, counted; no agent is an empty scan rather than a failure. */
+async function scanAnswer(
+  request: DaemonRequest,
+  deps: AgentsDeps,
+): Promise<DaemonResponse> {
+  if (deps.sessionDeps === undefined) {
+    return { id: request.id, ...refused('Scanning is not available here.') };
+  }
+  try {
+    const found = await readAgentsScan(deps.sessionDeps(), deps.scan);
+    return {
+      id: request.id,
+      ok: true,
+      agentsScan: found ?? { agents: [], capabilities: { total: 0, areas: [] } },
+    };
+  } catch (err) {
+    return {
+      id: request.id,
+      ...refused(err instanceof Error ? err.message : String(err)),
+    };
   }
 }
 

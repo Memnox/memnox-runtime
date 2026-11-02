@@ -93,7 +93,7 @@ describe('the real capabilities on the scan screen', () => {
     });
     expect(request?.agents?.[0]?.capabilities?.total).toBe(2);
     expect(request?.agents?.[0]?.mcp).toEqual([
-      { name: 'github', tools: 3, changing: 2 },
+      { name: 'github', command: 'npx', tools: 3, changing: 2 },
     ]);
   });
 

@@ -407,6 +407,8 @@ export interface AgentNode {
 /** One MCP server as the scan screen names it; counts are absent where no scan has asked it. */
 export interface AgentServer {
   name: string;
+  /** The program its config starts, by file name only since a path names the user; absent for a server reached by URL. */
+  command?: string;
   tools?: number;
   /** Of those, the ones that change something outside it. */
   changing?: number;

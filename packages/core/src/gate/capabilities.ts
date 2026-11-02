@@ -104,6 +104,8 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.SKILL_REMOVE]: REMOTE_CAPABILITY.ASK,
   // Opens a terminal on the Mac, which is something only the Mac does.
   [DAEMON_METHOD.AGENT_LAUNCH]: REMOTE_CAPABILITY.MAC,
+  // Starts every MCP server nobody has asked yet to count its tools, which only the Mac's own setup asks for.
+  [DAEMON_METHOD.AGENTS_SCAN]: REMOTE_CAPABILITY.MAC,
   [DAEMON_METHOD.PROJECTS]: REMOTE_CAPABILITY.SEE,
   // Each writes instructions at once and only proposes what widens an agent, signed as rules are.
   [DAEMON_METHOD.PROJECT_OPEN]: REMOTE_CAPABILITY.ASK,

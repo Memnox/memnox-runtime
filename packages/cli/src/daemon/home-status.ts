@@ -97,5 +97,9 @@ function studioAnswer(
   if (isPolicyMethod(request.method))
     return policiesAnswer(home, request, { now, env: process.env });
   if (isActivityMethod(request.method)) return activityAnswer(home, request, now);
-  return agentsAnswer(home, request, { now, cards: () => views.list() });
+  return agentsAnswer(home, request, {
+    now,
+    cards: () => views.list(),
+    sessionDeps: () => views.deps(),
+  });
 }

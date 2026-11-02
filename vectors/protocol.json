@@ -205,6 +205,7 @@
       "agent-resume",
       "session-stop",
       "agent-launch",
+      "agents-scan",
       "skills-hub",
       "skill-import",
       "skill-put",
