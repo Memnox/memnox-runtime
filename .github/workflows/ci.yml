@@ -57,6 +57,27 @@ jobs:
       # A folder is read as a module to load on Windows, so the files are named.
       - run: node --test native/noise/test/*.test.cjs
 
+  # ADR 0003 made native Windows a platform, and its suite had never run, so this leg shows what fails there.
+  # It does not block a merge until it is green; remove continue-on-error then.
+  test-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @memnox/noise build
+      - run: pnpm check-setup
+      - run: pnpm run build
+      - run: pnpm run test
+
   # Catches a broken manifest at PR time rather than at tag time.
   publish-dry-run:
     runs-on: ubuntu-latest
