@@ -205,6 +205,8 @@ describe('setup, the keeper and uninstall', () => {
     registerUninstallCommand(program, new CliContext(out, plainStyle), {
       home: () => dir,
       dir: () => repo,
+      managedTarget: () => null,
+      cli: { packageDir: join(dir, 'no-package'), prefixes: async () => [] },
       unservice: async () => ({
         state: { supported: false, installed: false, path: '', manager: 'none' },
       }),
