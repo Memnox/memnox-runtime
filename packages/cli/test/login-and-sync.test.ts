@@ -65,22 +65,31 @@ describe('the account file', () => {
     expect(await readAccount(home)).toBeNull();
   });
 
-  it('is owner-only, because anything that reads it can act as this machine', async () => {
-    const keys = machineKeypair();
-    await writeAccount(
-      home,
-      accountFrom(
-        { baseUrl: 'https://api.example' },
-        keys,
-        { machineId: 'mch_1', token: 'mch_secret', mode: 'observe', workspaceId: 'ws_1' },
-        '2026-09-05T12:00:00.000Z',
-      ),
-    );
+  // Windows has no POSIX mode bits, so 0o600 reads back as 0o666.
+  it.skipIf(process.platform === 'win32')(
+    'is owner-only, because anything that reads it can act as this machine',
+    async () => {
+      const keys = machineKeypair();
+      await writeAccount(
+        home,
+        accountFrom(
+          { baseUrl: 'https://api.example' },
+          keys,
+          {
+            machineId: 'mch_1',
+            token: 'mch_secret',
+            mode: 'observe',
+            workspaceId: 'ws_1',
+          },
+          '2026-09-05T12:00:00.000Z',
+        ),
+      );
 
-    const mode = (await stat(accountPathFor(home))).mode & 0o777;
+      const mode = (await stat(accountPathFor(home))).mode & 0o777;
 
-    expect(mode).toBe(0o600);
-  });
+      expect(mode).toBe(0o600);
+    },
+  );
 
   it('keeps the private key here and nowhere else', async () => {
     const keys = machineKeypair();

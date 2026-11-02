@@ -76,11 +76,15 @@ describe('the daemon', () => {
     await daemon.close();
   });
 
-  it('keeps its socket owner-only, because anything that reaches it reads your rules', async () => {
-    const { daemon, path } = await running();
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
-    await daemon.close();
-  });
+  // A Windows named pipe has no POSIX mode to stat, since its access is set when it is made.
+  it.skipIf(process.platform === 'win32')(
+    'keeps its socket owner-only, because anything that reaches it reads your rules',
+    async () => {
+      const { daemon, path } = await running();
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
+      await daemon.close();
+    },
+  );
 
   it('rules on an action, carrying the alternative back', async () => {
     const { daemon, path } = await running({ gate: gate() });
@@ -171,22 +175,26 @@ describe('the daemon', () => {
     await daemon.close();
 
     const second = new MemnoxDaemon({ log: () => {} });
-    await expect(second.listen(home)).resolves.toContain('memnox.sock');
+    await expect(second.listen(home)).resolves.toBe(socketPathFor(home));
     await second.close();
   });
 
-  it('takes over a socket file nothing answers on', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-daemon-'));
-    await mkdir(dirname(socketPathFor(home)), { recursive: true });
-    await writeFile(socketPathFor(home), '');
+  // A named pipe is not a file, so there is no stale socket file on Windows to take over.
+  it.skipIf(process.platform === 'win32')(
+    'takes over a socket file nothing answers on',
+    async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-daemon-'));
+      await mkdir(dirname(socketPathFor(home)), { recursive: true });
+      await writeFile(socketPathFor(home), '');
 
-    const daemon = new MemnoxDaemon({ log: () => {} });
-    await expect(daemon.listen(home)).resolves.toContain('memnox.sock');
-    expect(
-      await ask(socketPathFor(home), { id: 1, method: DAEMON_METHOD.PING }),
-    ).toMatchObject({ ok: true });
-    await daemon.close();
-  });
+      const daemon = new MemnoxDaemon({ log: () => {} });
+      await expect(daemon.listen(home)).resolves.toContain('memnox.sock');
+      expect(
+        await ask(socketPathFor(home), { id: 1, method: DAEMON_METHOD.PING }),
+      ).toMatchObject({ ok: true });
+      await daemon.close();
+    },
+  );
 
   it('leaves a running daemon its socket, so two never run side by side', async () => {
     const { home, daemon, path } = await running();
@@ -207,7 +215,7 @@ describe('the daemon', () => {
     expect(await second.listen(home)).toBeNull();
 
     await daemon.close();
-    await expect(second.listen(home)).resolves.toContain('memnox.sock');
+    await expect(second.listen(home)).resolves.toBe(socketPathFor(home));
     await second.close();
   });
 });
@@ -215,13 +223,17 @@ describe('the daemon', () => {
 describe('a socket path the kernel will not accept', () => {
   /* Over the limit, `listen` fails with EADDRINUSE and sends somebody hunting for a
      process that is not there. The length is knowable before we try, so it is said. */
-  it('says the path is too long rather than letting the kernel say the wrong thing', async () => {
-    const tooLong = `/tmp/${'x'.repeat(120)}`;
+  // A named pipe has no length cap, so Windows never refuses a long home this way.
+  it.skipIf(process.platform === 'win32')(
+    'says the path is too long rather than letting the kernel say the wrong thing',
+    async () => {
+      const tooLong = `/tmp/${'x'.repeat(120)}`;
 
-    await expect(
-      new MemnoxDaemon({ log: () => undefined }).listen(tooLong),
-    ).rejects.toThrow(/socket path is \d+ bytes and the kernel allows/);
-  });
+      await expect(
+        new MemnoxDaemon({ log: () => undefined }).listen(tooLong),
+      ).rejects.toThrow(/socket path is \d+ bytes and the kernel allows/);
+    },
+  );
 });
 
 describe('the breaker holds a session that is getting nowhere', () => {

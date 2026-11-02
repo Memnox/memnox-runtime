@@ -163,7 +163,8 @@ async function logged(path: string): Promise<Logged[]> {
     .map((line) => JSON.parse(line) as Logged);
 }
 
-describe('AcpBrain', () => {
+// Every test runs a #! stand in agent directly, and Windows cannot execute a shebang file.
+describe.skipIf(process.platform === 'win32')('AcpBrain', () => {
   it('answers a turn with the tool it read once and the words it said', async () => {
     const setup = await fake();
     const brain = brainFor(setup);

@@ -38,9 +38,10 @@ describe('policy registry', () => {
     await registerPolicyFile(home, '/repos/web/memnox.policies.yaml');
     const files = await registerPolicyFile(home, '/repos/api/memnox.policies.yaml');
 
+    // Resolved, since Windows puts the current drive in front of a rooted path.
     expect(files).toEqual([
-      '/repos/web/memnox.policies.yaml',
-      '/repos/api/memnox.policies.yaml',
+      resolve('/repos/web/memnox.policies.yaml'),
+      resolve('/repos/api/memnox.policies.yaml'),
     ]);
   });
 
@@ -51,16 +52,18 @@ describe('policy registry', () => {
       '/repos/web/../web/memnox.policies.yaml',
     );
 
-    expect(files).toEqual(['/repos/web/memnox.policies.yaml']);
+    expect(files).toEqual([resolve('/repos/web/memnox.policies.yaml')]);
   });
 
   it('forgets only the paths it was handed', async () => {
     await registerPolicyFile(home, '/repos/web/memnox.policies.yaml');
     await registerPolicyFile(home, '/repos/gone/memnox.policies.yaml');
 
-    const files = await forgetPolicyFiles(home, ['/repos/gone/memnox.policies.yaml']);
+    const files = await forgetPolicyFiles(home, [
+      resolve('/repos/gone/memnox.policies.yaml'),
+    ]);
 
-    expect(files).toEqual(['/repos/web/memnox.policies.yaml']);
+    expect(files).toEqual([resolve('/repos/web/memnox.policies.yaml')]);
   });
 
   it('refuses to silently drop the rules a corrupt registry still names', async () => {

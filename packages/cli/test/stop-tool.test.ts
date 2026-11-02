@@ -37,53 +37,66 @@ async function agentOnATerminal(): Promise<number> {
 afterEach(releaseTerminal);
 
 describe('stopping an agent by voice', () => {
-  it('presses Escape in its own terminal and records its turn as over', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-stop-'));
-    await new SessionHosts(home).note({
-      sessionId: 'ses_a',
-      agent: 'claude-code',
-      pid: await agentOnATerminal(),
-      app: 'iTerm2',
-      seenAt: NOW.toISOString(),
-    });
-    await new SessionTurns(home).prompted(
-      'ses_a',
-      'claude-code',
-      '2026-10-09T11:59:00.000Z',
-    );
-    const deps = depsAt(home, 'typed');
-    expect(
-      await callOperatorTool(deps, SEAMS, 'show', { session: 'ses_a', display: 'stop' }),
-    ).toMatchObject({ stopped: true });
-    const [request] = await new DisplayRequests(home).open(NOW.toISOString());
-    expect(request).toMatchObject({
-      display: 'interrupt',
-      sessionId: 'ses_a',
-      // A terminal as each system names it: ttys004 on macOS, pts/0 on Linux.
-      tty: expect.stringMatching(/^(ttys\d+|pts\/\d+)$/),
-    });
-    expect((await new SessionTurns(home).read('ses_a'))?.endedAt).toBe(NOW.toISOString());
-  });
+  // The terminal harness holds a process on a pty through script, pgrep and ps, which Windows has none of.
+  it.skipIf(process.platform === 'win32')(
+    'presses Escape in its own terminal and records its turn as over',
+    async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-stop-'));
+      await new SessionHosts(home).note({
+        sessionId: 'ses_a',
+        agent: 'claude-code',
+        pid: await agentOnATerminal(),
+        app: 'iTerm2',
+        seenAt: NOW.toISOString(),
+      });
+      await new SessionTurns(home).prompted(
+        'ses_a',
+        'claude-code',
+        '2026-10-09T11:59:00.000Z',
+      );
+      const deps = depsAt(home, 'typed');
+      expect(
+        await callOperatorTool(deps, SEAMS, 'show', {
+          session: 'ses_a',
+          display: 'stop',
+        }),
+      ).toMatchObject({ stopped: true });
+      const [request] = await new DisplayRequests(home).open(NOW.toISOString());
+      expect(request).toMatchObject({
+        display: 'interrupt',
+        sessionId: 'ses_a',
+        // A terminal as each system names it: ttys004 on macOS, pts/0 on Linux.
+        tty: expect.stringMatching(/^(ttys\d+|pts\/\d+)$/),
+      });
+      expect((await new SessionTurns(home).read('ses_a'))?.endedAt).toBe(
+        NOW.toISOString(),
+      );
+    },
+  );
 
-  it('never calls it stopped when the Mac could not press it', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-stop-'));
-    await new SessionHosts(home).note({
-      sessionId: 'ses_a',
-      agent: 'claude-code',
-      pid: await agentOnATerminal(),
-      app: 'iTerm2',
-      seenAt: NOW.toISOString(),
-    });
-    const answer = (await callOperatorTool(depsAt(home, 'failed'), SEAMS, 'show', {
-      session: 'ses_a',
-      display: 'stop',
-    })) as { stopped: boolean; why: string; said: string };
-    expect(answer).toMatchObject({
-      stopped: false,
-      why: 'no iTerm tab has its terminal',
-    });
-    expect(answer.said).toContain('still going');
-  });
+  // The terminal harness holds a process on a pty through script, pgrep and ps, which Windows has none of.
+  it.skipIf(process.platform === 'win32')(
+    'never calls it stopped when the Mac could not press it',
+    async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-stop-'));
+      await new SessionHosts(home).note({
+        sessionId: 'ses_a',
+        agent: 'claude-code',
+        pid: await agentOnATerminal(),
+        app: 'iTerm2',
+        seenAt: NOW.toISOString(),
+      });
+      const answer = (await callOperatorTool(depsAt(home, 'failed'), SEAMS, 'show', {
+        session: 'ses_a',
+        display: 'stop',
+      })) as { stopped: boolean; why: string; said: string };
+      expect(answer).toMatchObject({
+        stopped: false,
+        why: 'no iTerm tab has its terminal',
+      });
+      expect(answer.said).toContain('still going');
+    },
+  );
 
   it('asks the Mac to stop a session in an editor panel, where it has no terminal', async () => {
     const home = await mkdtemp(join(tmpdir(), 'memnox-stop-'));

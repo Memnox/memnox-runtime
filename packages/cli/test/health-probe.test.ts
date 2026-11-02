@@ -15,14 +15,18 @@ describe('what the doctor expects to be wrapped', () => {
     expect(facts.interceptorsExpected).toEqual([]);
   });
 
-  it('expects only what is actually on PATH', async () => {
-    const facts = await readHealth(await home(), await home(), {
-      PATH: '/usr/bin:/bin',
-    });
-    // git is on every machine this runs on; terraform is not on most.
-    expect(facts.interceptorsExpected).toContain('git');
-    expect(facts.interceptorsExpected.length).toBeLessThan(20);
-  });
+  // Windows has no /usr/bin, and a runner's own PATH holds more of these CLIs than the bound allows.
+  it.skipIf(process.platform === 'win32')(
+    'expects only what is actually on PATH',
+    async () => {
+      const facts = await readHealth(await home(), await home(), {
+        PATH: '/usr/bin:/bin',
+      });
+      // git is on every machine this runs on; terraform is not on most.
+      expect(facts.interceptorsExpected).toContain('git');
+      expect(facts.interceptorsExpected.length).toBeLessThan(20);
+    },
+  );
 
   it('reports nothing held on a machine that has never run an agent', async () => {
     const facts = await readHealth(await home(), await home(), { PATH: '' });
@@ -46,7 +50,10 @@ describe('what the doctor expects to be wrapped', () => {
 describe('whether the interceptor binary can be found', () => {
   it('finds it when a PATH entry holds it', async () => {
     const bin = await mkdtemp(join(tmpdir(), 'memnox-bin-'));
-    await writeFile(join(bin, 'memnox-intercept'), '#!/bin/sh\n', { mode: 0o755 });
+    // Windows finds a binary on PATH only through a PATHEXT extension such as .cmd.
+    const name =
+      process.platform === 'win32' ? 'memnox-intercept.cmd' : 'memnox-intercept';
+    await writeFile(join(bin, name), '#!/bin/sh\n', { mode: 0o755 });
 
     const facts = await readHealth(await home(), await home(), { PATH: bin });
     expect(facts.interceptBinaryFound).toBe(true);

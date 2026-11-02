@@ -246,26 +246,38 @@ describe('the untrusted preset', () => {
     );
   });
 
-  it('leaves the runtimes an agent starts from readable, but not the credentials beside them', () => {
-    expect(preset.guard.readable).toEqual(
-      expect.arrayContaining([
-        '/home/dev/.nvm',
-        '/home/dev/.cargo/bin',
-        '/home/dev/.local/bin',
-      ]),
-    );
-    expect(preset.guard.readable).not.toContain('/home/dev/.cargo');
-  });
+  // The untrusted wall is Seatbelt or Landlock, and on Windows these '/' paths are joined with backslashes.
+  it.skipIf(process.platform === 'win32')(
+    'leaves the runtimes an agent starts from readable, but not the credentials beside them',
+    () => {
+      expect(preset.guard.readable).toEqual(
+        expect.arrayContaining([
+          '/home/dev/.nvm',
+          '/home/dev/.cargo/bin',
+          '/home/dev/.local/bin',
+        ]),
+      );
+      expect(preset.guard.readable).not.toContain('/home/dev/.cargo');
+    },
+  );
 
-  it('leaves the agent its own state, and the keychains unreadable', () => {
-    expect(preset.guard.statePrefixes).toEqual(['/home/dev/.claude']);
-    expect(preset.guard.unreadable).toContain('/home/dev/Library/Keychains');
-    expect(preset.guard.proxyPort).toBe(7777);
-  });
+  // The untrusted wall is Seatbelt or Landlock, and on Windows these '/' paths are joined with backslashes.
+  it.skipIf(process.platform === 'win32')(
+    'leaves the agent its own state, and the keychains unreadable',
+    () => {
+      expect(preset.guard.statePrefixes).toEqual(['/home/dev/.claude']);
+      expect(preset.guard.unreadable).toContain('/home/dev/Library/Keychains');
+      expect(preset.guard.proxyPort).toBe(7777);
+    },
+  );
 
-  it('points package caches into the session’s temp, since the home is walled off', () => {
-    expect(preset.env['PIP_CACHE_DIR']).toBe('/private/tmp/memnox-ses_1/pip_cache_dir');
-  });
+  // The untrusted wall is Seatbelt or Landlock, and on Windows these '/' paths are joined with backslashes.
+  it.skipIf(process.platform === 'win32')(
+    'points package caches into the session’s temp, since the home is walled off',
+    () => {
+      expect(preset.env['PIP_CACHE_DIR']).toBe('/private/tmp/memnox-ses_1/pip_cache_dir');
+    },
+  );
 });
 
 describe('the hint toward --untrusted', () => {

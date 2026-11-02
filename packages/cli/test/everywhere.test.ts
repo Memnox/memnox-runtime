@@ -154,7 +154,8 @@ describe('closing a session wherever it runs', () => {
     );
   });
 
-  it('kills its tmux pane', async () => {
+  // The terminal harness holds a process on a pty through script, pgrep and ps, which Windows has none of.
+  it.skipIf(process.platform === 'win32')('kills its tmux pane', async () => {
     const { pid, tty } = await onATerminal();
     const { seams, ran } = tmux({ [tty]: '%3' });
     const deps = await depsAt({ panes: seams });
@@ -173,30 +174,34 @@ describe('closing a session wherever it runs', () => {
     expect(ran).toContainEqual(['kill-pane', '-t', '%3']);
   });
 
-  it('ends the agent in Terminal first, and says so when its tab could not be closed', async () => {
-    const { pid } = await onATerminal();
-    const deps = await depsAt({
-      endAgent: async () => true,
-      delivered: async () => ({
-        outcome: 'failed',
-        at: NOW.toISOString(),
-        reason: 'its tab did not come to the front',
-      }),
-    });
-    await new SessionHosts(deps.home).note({
-      sessionId: 'ses_tab',
-      agent: 'claude-code',
-      pid,
-      app: 'Terminal',
-      seenAt: NOW.toISOString(),
-    });
-    const answer = (await callOperatorTool(deps, SEAMS, 'show', {
-      session: 'ses_tab',
-      display: 'close',
-    })) as { closed: boolean; said: string };
-    expect(answer.closed).toBe(true);
-    expect(answer.said).toContain('still open at a shell prompt');
-  });
+  // The terminal harness holds a process on a pty through script, pgrep and ps, which Windows has none of.
+  it.skipIf(process.platform === 'win32')(
+    'ends the agent in Terminal first, and says so when its tab could not be closed',
+    async () => {
+      const { pid } = await onATerminal();
+      const deps = await depsAt({
+        endAgent: async () => true,
+        delivered: async () => ({
+          outcome: 'failed',
+          at: NOW.toISOString(),
+          reason: 'its tab did not come to the front',
+        }),
+      });
+      await new SessionHosts(deps.home).note({
+        sessionId: 'ses_tab',
+        agent: 'claude-code',
+        pid,
+        app: 'Terminal',
+        seenAt: NOW.toISOString(),
+      });
+      const answer = (await callOperatorTool(deps, SEAMS, 'show', {
+        session: 'ses_tab',
+        display: 'close',
+      })) as { closed: boolean; said: string };
+      expect(answer.closed).toBe(true);
+      expect(answer.said).toContain('still open at a shell prompt');
+    },
+  );
 });
 
 describe('showing a session in a tmux pane', () => {

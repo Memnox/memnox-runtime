@@ -227,7 +227,8 @@ describe('how this copy was installed', () => {
       line,
       { ...line, verified: true },
     ]);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    // Windows has no POSIX mode bits, so 0o600 reads back as 0o666.
+    if (process.platform !== 'win32') expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it('compares versions as numbers', () => {

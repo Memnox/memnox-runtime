@@ -17,46 +17,50 @@ import { readFile } from 'node:fs/promises';
  * that key through while `memnox run` reported the sandbox was on. The same is true
  * of any home reached through a link, which is most managed machines.
  */
-describe('the kernel profile names paths the kernel will match', () => {
-  it('writes the resolved path beside the one it was given', async () => {
-    const real = await mkdtemp(join(tmpdir(), 'memnox-guard-real-'));
-    const home = join(real, 'home');
-    await mkdir(join(home, '.memnox'), { recursive: true });
+// The OS guard is Seatbelt or Landlock, and Windows has neither, nor symlinks without privilege.
+describe.skipIf(process.platform === 'win32')(
+  'the kernel profile names paths the kernel will match',
+  () => {
+    it('writes the resolved path beside the one it was given', async () => {
+      const real = await mkdtemp(join(tmpdir(), 'memnox-guard-real-'));
+      const home = join(real, 'home');
+      await mkdir(join(home, '.memnox'), { recursive: true });
 
-    const link = join(real, 'link');
-    await symlink(home, link);
+      const link = join(real, 'link');
+      await symlink(home, link);
 
-    const repo = await mkdtemp(join(tmpdir(), 'memnox-guard-repo-'));
-    await writeFile(
-      join(repo, 'memnox.policies.toml'),
-      [
-        'version = 1',
-        '[[policies]]',
-        'name = "no-keys"',
-        '[policies.match]',
-        'actions = [ "filesystem.read" ]',
-        'targets = [ "**/.ssh", "**/.ssh/**" ]',
-        '[policies.decision]',
-        'effect = "deny"',
-        'reason = "keys stay put"',
-      ].join('\n'),
-    );
+      const repo = await mkdtemp(join(tmpdir(), 'memnox-guard-repo-'));
+      await writeFile(
+        join(repo, 'memnox.policies.toml'),
+        [
+          'version = 1',
+          '[[policies]]',
+          'name = "no-keys"',
+          '[policies.match]',
+          'actions = [ "filesystem.read" ]',
+          'targets = [ "**/.ssh", "**/.ssh/**" ]',
+          '[policies.decision]',
+          'effect = "deny"',
+          'reason = "keys stay put"',
+        ].join('\n'),
+      );
 
-    const out = new RecordedOutput();
-    const previous = process.cwd();
-    process.chdir(repo);
-    try {
-      await runOsGuard(new CliContext(out, plainStyle), repo, link);
-    } finally {
-      process.chdir(previous);
-    }
+      const out = new RecordedOutput();
+      const previous = process.cwd();
+      process.chdir(repo);
+      try {
+        await runOsGuard(new CliContext(out, plainStyle), repo, link);
+      } finally {
+        process.chdir(previous);
+      }
 
-    const written = out.lines.join('\n');
-    if (!written.includes('seatbelt profile')) return; // Linux runs the Landlock path.
+      const written = out.lines.join('\n');
+      if (!written.includes('seatbelt profile')) return; // Linux runs the Landlock path.
 
-    const profile = await readFile(join(link, '.memnox', 'guard', 'memnox.sb'), 'utf8');
-    expect(profile).toContain(link);
-    // The half that actually bites.
-    expect(profile).toContain(realpathSync(link));
-  });
-});
+      const profile = await readFile(join(link, '.memnox', 'guard', 'memnox.sb'), 'utf8');
+      expect(profile).toContain(link);
+      // The half that actually bites.
+      expect(profile).toContain(realpathSync(link));
+    });
+  },
+);

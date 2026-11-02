@@ -9,7 +9,7 @@ import { sandboxed } from '../src/commands/run/sandbox';
 import { ENV_AGENT_NAME, LeaseRegistry, SESSION_VAR } from '@memnox/core';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { transcriptPathFor } from '../src/memnox-paths';
 
 const HOME = '/home/dev';
@@ -48,7 +48,7 @@ class FakeMilestones {
 describe('the environment memnox run builds', () => {
   it('puts the interceptors first on PATH, so they are found before the real binary', () => {
     const env = environmentFor({ PATH: '/usr/bin:/bin' }, HOME, 'ses_1', 'memnox-shell');
-    expect(env['PATH']).toBe(`${interceptorDirFor(HOME)}:/usr/bin:/bin`);
+    expect(env['PATH']).toBe(`${interceptorDirFor(HOME)}${delimiter}/usr/bin:/bin`);
   });
 
   it('never adds itself twice', () => {
@@ -209,7 +209,7 @@ describe('the transcript tap', () => {
 
     const path = (start.mock.calls[0] as unknown as string[])[3];
     expect(path).toBe(transcriptPathFor(HOME, 'ses_test'));
-    expect(path).toContain('.memnox/transcripts');
+    expect(path).toContain(join('.memnox', 'transcripts'));
     expect(out.notes.join('\n')).toContain('transcript');
   });
 
@@ -226,7 +226,7 @@ describe('starting an agent inside the kernel sandbox', () => {
     expect(sandboxed(['claude'], '/home/me', true, mac).command).toEqual([
       'sandbox-exec',
       '-f',
-      '/home/me/.memnox/guard/memnox.sb',
+      join('/home/me', '.memnox', 'guard', 'memnox.sb'),
       'claude',
     ]);
   });
@@ -247,8 +247,8 @@ describe('starting an agent inside the kernel sandbox', () => {
     expect(run.guard).toBe('landlock');
     expect(run.command).toEqual([
       'python3',
-      '/home/me/.memnox/guard/landlock-exec.py',
-      '/home/me/.memnox/guard/landlock.json',
+      join('/home/me', '.memnox', 'guard', 'landlock-exec.py'),
+      join('/home/me', '.memnox', 'guard', 'landlock.json'),
       '--',
       'claude',
     ]);
