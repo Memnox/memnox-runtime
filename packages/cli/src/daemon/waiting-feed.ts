@@ -26,6 +26,7 @@ import {
   POST_KIND,
   SessionPosts,
   SessionTurns,
+  typedAsks,
   type SessionPost,
   type AgentQuestion,
   type DaemonEvent,
@@ -257,8 +258,7 @@ export class WaitingFeed {
       sessionId: question.sessionId,
       questions: question.questions,
       ...(question.answers === undefined ? {} : { answers: question.answers }),
-      ...(task === null ? {} : { task: task.statement }),
-      ...(task?.latestAsk === undefined ? {} : { lastAsk: task.latestAsk }),
+      ...typedAsks(task),
       ...(host?.cwd === undefined ? {} : { place: basename(host.cwd) }),
     };
   }
@@ -287,8 +287,7 @@ export class WaitingFeed {
       what: plain.doing ?? describeHeldCall(request),
       why: plain.why,
       sessionId: request.sessionId,
-      ...(task === null ? {} : { task: task.statement }),
-      ...(task?.latestAsk === undefined ? {} : { lastAsk: task.latestAsk }),
+      ...typedAsks(task),
       ...(host?.cwd === undefined ? {} : { place: basename(host.cwd) }),
       ...(request.withinSession === true ? { withinSession: true } : {}),
       // What a v4 yes signs, so the answer covers this exact call and no later edit of it.

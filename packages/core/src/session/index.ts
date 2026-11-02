@@ -18,6 +18,7 @@ export * from './destinations';
 export * from './session-summary';
 export * from './authority';
 export * from './agent-lineage';
+export * from './injected-prompt';
 export * from './prompt-task';
 export * from './notices';
 export * from './watches';

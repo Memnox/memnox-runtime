@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { isInjectedOrigin, isInjectedPrompt } from '../src/session/injected-prompt';
 import {
   intentOfPrompt,
   statementOfPrompt,
   taskFromPrompt,
+  typedAsks,
 } from '../src/session/prompt-task';
 
 describe('an ask read as an investigation', () => {
@@ -77,5 +79,67 @@ describe('the task a prompt declares', () => {
     expect(taskFromPrompt('and check the tags too', followUp, moment)?.latestAsk).toBe(
       'and check the tags too',
     );
+  });
+});
+
+describe('a prompt the person never typed', () => {
+  const handBack =
+    '<agent-message from="a1">\n[Subagent hand-back] The text below is the final report of a subagent this session delegated to.\n  I traced it.';
+
+  it.each([
+    handBack,
+    '[Subagent hand-back] The text below is the final report of a subagent.',
+    'Another Claude session sent a message:\nhello',
+    '<task-notification>\n<task-id>b1</task-id>',
+    '<command-name>/clear</command-name>',
+    '<local-command-stdout>done</local-command-stdout>',
+    '<system-reminder>be brief</system-reminder>\n[Subagent hand-back] The report follows.',
+    '[Memnox, not the person] They just finished signing in.',
+    '[Request interrupted by user for tool use]',
+  ])('is no statement: %s', (prompt) => {
+    expect(isInjectedPrompt(prompt)).toBe(true);
+    expect(statementOfPrompt(prompt)).toBe('');
+  });
+
+  it('leaves what the person typed, a paste included, as theirs', () => {
+    expect(isInjectedPrompt('fix the login bug')).toBe(false);
+    expect(
+      isInjectedPrompt('<pasted_content>log</pasted_content>\nwhy does this fail'),
+    ).toBe(false);
+    expect(isInjectedPrompt('[Image #1] make it look like this')).toBe(false);
+    expect(
+      isInjectedPrompt('<system-reminder>be brief</system-reminder>\nship the fix'),
+    ).toBe(false);
+    expect(
+      statementOfPrompt('<system-reminder>be brief</system-reminder>\nship the fix'),
+    ).toBe('ship the fix');
+  });
+
+  it('reads a peer or a task origin as not the person', () => {
+    expect(isInjectedOrigin({ kind: 'peer' })).toBe(true);
+    expect(isInjectedOrigin({ kind: 'task-notification' })).toBe(true);
+    expect(isInjectedOrigin({ kind: 'human', handback: true })).toBe(true);
+    expect(isInjectedOrigin({ kind: 'human' })).toBe(false);
+    expect(isInjectedOrigin(undefined)).toBe(false);
+  });
+
+  it('never becomes the task or the latest ask, and a task one set is replaced by the next real prompt', () => {
+    const moment = { sessionId: 's1', now: '2026-11-01T10:00:00.000Z' };
+    expect(taskFromPrompt(handBack, null, moment)).toBeNull();
+    const first = taskFromPrompt('add a cancel button', null, moment);
+    expect(first).not.toBeNull();
+    expect(taskFromPrompt(handBack, first, moment)).toBeNull();
+    const polluted = {
+      ...first!,
+      statement: '[Subagent hand-back] The text below is a report.',
+    };
+    expect(typedAsks(polluted)).toEqual({});
+    const healed = taskFromPrompt('now make it red', polluted, moment);
+    expect(healed?.statement).toBe('now make it red');
+    expect(typedAsks(healed)).toEqual({
+      task: 'now make it red',
+      lastAsk: 'now make it red',
+    });
+    expect(typedAsks(null)).toEqual({});
   });
 });

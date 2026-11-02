@@ -12,6 +12,7 @@ import {
   SessionTasks,
   SessionTurns,
   summarizeSubagents,
+  typedAsks,
   type SessionTurn,
   summarizeSession,
   UNNAMED_AGENT,
@@ -317,9 +318,8 @@ async function describe(
       run?.agent ??
       namedAgent(events) ??
       'unknown',
-    ...(task === null ? {} : { task: task.statement }),
     // The mission stays the task; what the person asked last sits beside it.
-    ...(task?.latestAsk === undefined ? {} : { lastAsk: task.latestAsk }),
+    ...typedAsks(task),
     repositories: repositories.length > 0 || run === undefined ? repositories : [run.cwd],
     started:
       summary?.started ??

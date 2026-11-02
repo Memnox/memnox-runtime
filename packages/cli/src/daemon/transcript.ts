@@ -1,12 +1,15 @@
-import { closeSync, fstatSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
+import { closeSync, openSync, readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import {
+  isInjectedOrigin,
+  isInjectedPrompt,
   isTestCommand,
   SessionHosts,
   SPEAKER,
   type ConversationLine,
   type TestRun,
 } from '@memnox/core';
+import { headOf, tailOf } from './transcript-file';
 
 /**
  * The conversation itself, read from the file Claude Code keeps for each session, so the live
@@ -14,8 +17,6 @@ import {
  * screen only: nothing of it is written to the ledger, and the agent's private thinking is left out.
  */
 
-/** The end of a long session is all the window shows, so a day of conversation is never read whole. */
-const TAIL_BYTES = 1_024 * 1_024;
 /** Enough of the session for the window to read as its chat, scrolled back through a long afternoon. */
 const MOST_LINES = 160;
 /** A reply whole as the agent wrote it, which the window lays out, short of a pasted file. */
@@ -158,9 +159,6 @@ function everyLineIn(raw: string): ConversationLine[] {
   return lines;
 }
 
-/** Enough of a session's start to hold its first request after whatever the agent loads first. */
-const HEAD_BYTES = 256 * 1_024;
-
 /** The person's first words in the session, which say what it was opened for, or null before they said any. */
 export function readOpeningAsk(path: string): string | null {
   return openingAskIn(headOf(path));
@@ -208,7 +206,7 @@ export function lastAnswerIn(raw: string): string | null {
     const content = entry.message?.content;
     if (entry.type === 'user') {
       const said = typeof content === 'string' ? content : textBlocks(content).join('\n');
-      if (ownWords(said) !== '') answer = [];
+      if (personWords(entry, said) !== '') answer = [];
       continue;
     }
     if (entry.type !== 'assistant' || !Array.isArray(content)) continue;
@@ -332,6 +330,8 @@ interface Entry {
   parent_tool_use_id?: unknown;
   isSidechain?: unknown;
   isMeta?: unknown;
+  /** Who put the turn there: `human`, or a peer session or task that typed nothing. */
+  origin?: unknown;
   isApiErrorMessage?: unknown;
   message?: { content?: unknown; stop_reason?: unknown };
 }
@@ -342,7 +342,7 @@ function linesOf(entry: Entry): ConversationLine[] {
   const content = entry.message?.content;
   if (entry.type === 'user') {
     const said = typeof content === 'string' ? content : textBlocks(content).join('\n');
-    const person = ownWords(said);
+    const person = personWords(entry, said);
     return person === ''
       ? []
       : [{ at, who: SPEAKER.PERSON, text: clipped(person, MOST_SAID_CHARS) }];
@@ -389,6 +389,12 @@ function withoutHostTags(said: string): string {
     text = text.replace(HOST_TAG, '');
   }
   return text;
+}
+
+/** The person's own words in a user turn, or nothing where a helper, a task or the harness put the turn there. */
+function personWords(entry: Entry, said: string): string {
+  if (isInjectedOrigin(entry.origin) || isInjectedPrompt(said)) return '';
+  return ownWords(said);
 }
 
 /** What the person typed, without the tags and reminders the host wraps around it. */
@@ -452,41 +458,5 @@ function parsed(line: string): Entry | null {
   } catch {
     // A line cut where the tail began, or one still being written.
     return null;
-  }
-}
-
-/** The first stretch of a file, since a session's opening request never moves from its start. */
-function headOf(path: string, bytes: number = HEAD_BYTES): string {
-  try {
-    const fd = openSync(path, 'r');
-    try {
-      const length = Math.min(fstatSync(fd).size, bytes);
-      const buffer = Buffer.alloc(length);
-      readSync(fd, buffer, 0, length, 0);
-      return buffer.toString('utf8');
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    // Gone or unreadable: the card says what else it knows of the session.
-    return '';
-  }
-}
-
-function tailOf(path: string, bytes: number = TAIL_BYTES): string {
-  try {
-    const fd = openSync(path, 'r');
-    try {
-      const size = fstatSync(fd).size;
-      const length = Math.min(size, bytes);
-      const buffer = Buffer.alloc(length);
-      readSync(fd, buffer, 0, length, size - length);
-      return buffer.toString('utf8');
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    // Gone or unreadable: the window shows the rest of what it knows.
-    return '';
   }
 }
