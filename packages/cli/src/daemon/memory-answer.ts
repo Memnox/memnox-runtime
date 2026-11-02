@@ -5,6 +5,7 @@ import {
   MEMORY_STATUSES,
   nodeSecretStore,
   OPEN_STATUSES,
+  readWorkspaceMemory,
   searchMemory,
   SqliteMemoryStore,
   SqliteMemoryVectors,
@@ -31,6 +32,9 @@ import { addSource } from '../memory/memory-source-change';
 import { itemsView, itemView, sourcesView } from '../memory/memory-views';
 import { rewatchMemory } from '../memory/memory-watch';
 import { embedderFor } from '../memory/ollama-embedding';
+import { noteSearchTime } from '../memory/search-times';
+import { readWorkspaceGraph, type WorkspaceGraphDeps } from '../sync/workspace-graph';
+import { isMemoryLayersMethod, memoryLayersAnswer } from './memory-layers-answer';
 
 /**
  * The memory methods. Reads come from the local store; a confirm of a fact verifies it, a confirm
@@ -51,6 +55,8 @@ interface MemoryDeps {
   secrets?: SecretStore;
   /** The embedding model search also ranks by; read from the config when absent, null when it is off. */
   embedder?: EmbeddingPort | null;
+  /** How the live workspace graph reaches the cloud; the real client when absent. */
+  graph?: Pick<WorkspaceGraphDeps, 'call'>;
 }
 
 type Answered = Omit<DaemonResponse, 'id'>;
@@ -78,6 +84,8 @@ async function answerOf(
   request: DaemonRequest,
   deps: MemoryDeps,
 ): Promise<Answered> {
+  if (isMemoryLayersMethod(request.method))
+    return memoryLayersAnswer(home, store, { request, now: deps.now });
   switch (request.method) {
     case MEMORY_METHOD.MEMORY_SOURCES:
       return sources(home, store, deps);
@@ -92,6 +100,17 @@ async function answerOf(
     case MEMORY_METHOD.MEMORY_SEARCH:
     case MEMORY_METHOD.MEMORY_FACTS:
       return facts(home, store, request, deps);
+    case MEMORY_METHOD.WORKSPACE_MEMORY:
+      return workspace(home);
+    case MEMORY_METHOD.WORKSPACE_GRAPH:
+      return {
+        ok: true,
+        workspaceGraph: await readWorkspaceGraph(home, {
+          ...deps.graph,
+          fresh: request.workspaceGraphFresh === true,
+          now: () => deps.now,
+        }),
+      };
     default:
       return answerChange(home, store, request, deps);
   }
@@ -118,6 +137,12 @@ async function answerChange(
     default:
       return { ok: true };
   }
+}
+
+/** The workspace's pull as it lies on disk, so a screen reads exactly what agents are briefed with. */
+async function workspace(home: string): Promise<Answered> {
+  const memory = await readWorkspaceMemory(home);
+  return memory === null ? { ok: true } : { ok: true, workspaceMemory: memory };
 }
 
 function refused(reason: string): Answered {
@@ -246,12 +271,18 @@ async function facts(
   const embedder = deps.embedder === undefined ? await embedderFor(home) : deps.embedder;
   const vectors = SqliteMemoryVectors.forHome(home);
   try {
+    const started = performance.now();
     const found = await searchMemory({ store, vectors, query, filter, embedder });
+    // A time that could not be kept leaves the search answered; only the median misses it.
+    await noteSearchTime(home, performance.now() - started).catch(() => undefined);
     return {
       ok: true,
       memoryFacts: itemsView(store, found.items, found.items.length),
       memorySearchMode: found.mode,
       ...(found.note === undefined ? {} : { memorySearchNote: found.note }),
+      ...(found.passages.length === 0
+        ? {}
+        : { memoryPassages: found.passages.map(({ digest: _, ...passage }) => passage) }),
     };
   } finally {
     vectors.close();

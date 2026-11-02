@@ -115,6 +115,9 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.MEMORY_LEARN]: REMOTE_CAPABILITY.SEE,
   [DAEMON_METHOD.MEMORY_SEARCH]: REMOTE_CAPABILITY.SEE,
   [DAEMON_METHOD.MEMORY_FACTS]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.WORKSPACE_MEMORY]: REMOTE_CAPABILITY.SEE,
+  // Only a read down, at this machine's own clearance, so a phone sees what the Mac would.
+  [DAEMON_METHOD.WORKSPACE_GRAPH]: REMOTE_CAPABILITY.SEE,
   // A confirm of a rule only raises its proposal, which is signed under RULES like any other rule.
   [DAEMON_METHOD.MEMORY_SOURCE_ADD]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.MEMORY_SOURCE_REMOVE]: REMOTE_CAPABILITY.ASK,

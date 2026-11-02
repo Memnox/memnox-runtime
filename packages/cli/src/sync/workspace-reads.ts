@@ -1,8 +1,12 @@
 import {
+  budgetOf,
   HTTP,
   isCredentialRefused,
+  noteRead,
   readAccount,
+  readRange,
   secondsToMs,
+  type ReadRange,
   type WorkSource,
 } from '@memnox/core';
 
@@ -29,6 +33,13 @@ export interface SourceRead {
   /** The workspace stopped at its own ceiling, so this is not the end of it. */
   cut: boolean;
   untrusted: boolean;
+  /** Where a range was asked: the lines this is, of how many, and the range to ask for next. */
+  lines?: { from: number; to: number; total: number; next?: string };
+}
+
+/** Part of an item to read, inside a token budget, rather than the whole of it. */
+interface SourceRange extends ReadRange {
+  budget?: number;
 }
 
 /** What the person asked for, every part optional and narrowing. */
@@ -63,16 +74,43 @@ export async function readSources(
   };
 }
 
-/** The item at this link read whole, or null where it is not there, not cleared, or not reachable. */
-export async function readSource(home: string, link: string): Promise<SourceRead | null> {
-  const answer = await callWorkspaceTool(home, TOOL_SOURCE, { link });
+/**
+ * The item at this link, whole, or only the asked lines or heading inside a token budget; null
+ * where it is not there, not cleared, or not reachable. A control plane that answered whole is cut
+ * here, so a range costs the agent the same whichever version answered.
+ */
+export async function readSource(
+  home: string,
+  link: string,
+  range?: SourceRange,
+): Promise<SourceRead | null> {
+  const answer = await callWorkspaceTool(home, TOOL_SOURCE, {
+    link,
+    ...(range === undefined ? {} : { ...range, budget: budgetOf(range.budget) }),
+  });
   const source = objectOr(answer?.['source']);
   const content = source?.['content'];
   if (source === null || typeof content !== 'string') return null;
-  return {
+  const whole = {
     content,
     cut: source['cut'] === true,
     untrusted: typeof source['untrusted'] === 'string',
+  };
+  if (range === undefined) return whole;
+  const ranged = objectOr(source['lines']);
+  if (ranged !== null) return { ...whole, lines: linesOf(ranged) };
+  const part = readRange(content, range, budgetOf(range.budget));
+  if (part === null) return { ...whole, content: '' };
+  await noteRead(home, { tool: TOOL_SOURCE, returnedText: part.text, fullText: content });
+  return {
+    ...whole,
+    content: part.text,
+    lines: {
+      from: part.from,
+      to: part.to,
+      total: part.total,
+      ...(part.next === undefined ? {} : { next: part.next }),
+    },
   };
 }
 
@@ -182,6 +220,17 @@ function textField(
 ): Partial<Record<typeof key, string>> {
   const value = row?.[key];
   return typeof value === 'string' && value !== '' ? { [key]: value } : {};
+}
+
+/** The control plane's account of which lines it sent, read field by field. */
+function linesOf(ranged: Record<string, unknown>): NonNullable<SourceRead['lines']> {
+  const next = ranged['next'];
+  return {
+    from: numberOr(ranged['from'], 1),
+    to: numberOr(ranged['to'], 0),
+    total: numberOr(ranged['total'], 0),
+    ...(typeof next === 'string' ? { next } : {}),
+  };
 }
 
 function objectOr(value: unknown): Record<string, unknown> | null {

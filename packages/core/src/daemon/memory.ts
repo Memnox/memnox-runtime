@@ -1,7 +1,18 @@
 import type { DecisionEffect } from '../constants/decision.constants';
 import type { MemoryKind, MemoryOrigin, MemoryStatus } from '../memory/memory-record';
-import type { MemorySourceKind, SourceTrust } from '../memory-sources/memory-source';
+import type {
+  MemorySourceKind,
+  SkippedDocument,
+  SourceTrust,
+} from '../memory-sources/memory-source';
 import type { MemoryScope } from '../projects/project';
+import type { WorkspaceMemory } from '../context/workspace-memory';
+import type { WorkspaceGraphView } from '../context/workspace-graph';
+import {
+  MEMORY_LAYERS_METHOD,
+  type MemoryLayersRequestFields,
+  type MemoryLayersResponseFields,
+} from './memory-layers';
 import type { RuleDraftInput } from './policies';
 
 /**
@@ -33,12 +44,27 @@ export const MEMORY_METHOD = {
   MEMORY_FACTS: 'memory-facts',
   /** Deletes one item and its evidence. */
   MEMORY_FORGET: 'memory-forget',
+  /**
+   * What the workspace settled and what its connected tools said, as this machine last pulled
+   * it, read off disk with no network near it. Only a read down: nothing local goes up with it.
+   */
+  WORKSPACE_MEMORY: 'workspace-memory',
+  /**
+   * The workspace's memory graph as the console draws it, read live off the control plane on this
+   * machine's own credential and held only in memory, folded with the saved facts. Where the cloud
+   * cannot be reached or refuses, the saved facts alone, saying why.
+   */
+  WORKSPACE_GRAPH: 'workspace-graph',
+  ...MEMORY_LAYERS_METHOD,
 } as const;
 
 /** A source as a form adds it; a key is named, never sent, and kept with the hub's secrets. */
 export interface MemorySourceInput {
   kind: MemorySourceKind;
-  /** A folder, absolute, or a repository for instruction files, or an API's base URL. */
+  /**
+   * A folder, absolute, or a repository for instruction files, or an API's base URL. A Markdown,
+   * a Notion export or an instructions source may also name one file, which is all it reads.
+   */
   location?: string;
   name?: string;
   scope?: MemoryScope;
@@ -179,6 +205,8 @@ export interface MemoryReadSummary {
   /** Whether the person's agent CLI answered, so passages left unread are said as such. */
   extractor: ExtractorState;
   error?: string;
+  /** Documents the source holds that this read passed over, and why; absent when none were. */
+  skipped?: SkippedDocument[];
 }
 
 /** An edit before confirming; a rule goes through the same draft as any other rule. */
@@ -197,7 +225,16 @@ export const MEMORY_SEARCH_MODE = {
 export type MemorySearchMode =
   (typeof MEMORY_SEARCH_MODE)[keyof typeof MEMORY_SEARCH_MODE];
 
-export interface MemoryRequestFields {
+/** A passage a search found in what a source read, so a file's words are found and not only what was learned from it. */
+export interface MemoryPassageView {
+  sourceId: string;
+  document: string;
+  heading?: string;
+  /** The words around the match, cut short. */
+  snippet: string;
+}
+
+export interface MemoryRequestFields extends MemoryLayersRequestFields {
   /** On MEMORY_SOURCE_ADD. */
   memorySource?: MemorySourceInput;
   /** On MEMORY_SOURCE_REMOVE and MEMORY_SOURCE_READ. */
@@ -212,12 +249,14 @@ export interface MemoryRequestFields {
   memoryScope?: MemoryScope;
   /** On MEMORY_FACTS. */
   memoryStatus?: MemoryStatus;
+  /** On WORKSPACE_GRAPH: read the cloud again now rather than answer from the last few seconds' read. */
+  workspaceGraphFresh?: boolean;
 }
 
-export interface MemoryResponseFields {
+export interface MemoryResponseFields extends MemoryLayersResponseFields {
   /** On every source method, so a screen redraws from one answer. */
   memorySources?: MemorySourceView[];
-  /** On MEMORY_SOURCE_READ, and on ADD, which reads the source once. */
+  /** On MEMORY_SOURCE_READ, which waits for a read already running, such as the one an add starts. */
   memoryRead?: MemoryReadSummary;
   /** On LEARN, and after CONFIRM, REJECT and EDIT. */
   memoryLearn?: MemoryItemsView;
@@ -227,6 +266,12 @@ export interface MemoryResponseFields {
   memorySearchMode?: MemorySearchMode;
   /** On MEMORY_SEARCH: why it was keyword only although semantic search is on, such as the model not answering. */
   memorySearchNote?: string;
+  /** On MEMORY_SEARCH: passages of the read documents that matched, best first. */
+  memoryPassages?: MemoryPassageView[];
   /** On CONFIRM and EDIT: the item as it now stands. */
   memoryItem?: MemoryItemView;
+  /** On WORKSPACE_MEMORY: absent where this machine never pulled one, which is every machine never connected. */
+  workspaceMemory?: WorkspaceMemory;
+  /** On WORKSPACE_GRAPH: always present, live where the cloud answered and the saved facts where it did not. */
+  workspaceGraph?: WorkspaceGraphView;
 }

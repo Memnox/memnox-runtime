@@ -13,6 +13,7 @@ import {
   remoteCapabilityFor,
   RULE_SOURCE,
   SqliteMemoryStore,
+  writeWorkspaceMemory,
   type DaemonRequest,
   type DaemonResponse,
   type SecretStore,
@@ -332,6 +333,77 @@ describe('the memory methods', () => {
     });
   });
 
+  it('adds one picked note, and a read asked while the add reads waits for that read', async () => {
+    const at = await fixture();
+    const added = await at.ask({
+      method: DAEMON_METHOD.MEMORY_SOURCE_ADD,
+      memorySource: {
+        kind: MEMORY_SOURCE_KIND.MARKDOWN,
+        location: join(at.vault, 'ops.md'),
+      },
+    });
+    expect(added.ok).toBe(true);
+    expect(added.memorySources?.[0]?.name).toBe('ops.md');
+    const id = added.memorySources?.[0]?.id;
+    const read = await at.ask({
+      method: DAEMON_METHOD.MEMORY_SOURCE_READ,
+      memorySourceId: id,
+    });
+    expect(read.memoryRead).toMatchObject({
+      documents: 1,
+      passages: 2,
+      extractor: 'answered',
+    });
+    expect(read.memoryRead?.error).toBeUndefined();
+    expect(at.prompts).toHaveLength(1);
+  });
+
+  it('refuses a picked file its kind does not read, and one note as a vault', async () => {
+    const at = await fixture();
+    await writeFile(join(at.vault, 'notes.zip'), 'zip');
+    const zipped = await at.ask({
+      method: DAEMON_METHOD.MEMORY_SOURCE_ADD,
+      memorySource: {
+        kind: MEMORY_SOURCE_KIND.NOTION_EXPORT,
+        location: join(at.vault, 'notes.zip'),
+      },
+    });
+    expect(zipped.reason).toContain('not Markdown');
+    const note = await at.ask({
+      method: DAEMON_METHOD.MEMORY_SOURCE_ADD,
+      memorySource: {
+        kind: MEMORY_SOURCE_KIND.OBSIDIAN,
+        location: join(at.vault, 'ops.md'),
+      },
+    });
+    expect(note.reason).toContain('vault is a folder');
+    const wrong = await at.ask({
+      method: DAEMON_METHOD.MEMORY_SOURCE_ADD,
+      memorySource: {
+        kind: MEMORY_SOURCE_KIND.INSTRUCTIONS,
+        location: join(at.vault, 'ops.md'),
+      },
+    });
+    expect(wrong.reason).toContain('not an instruction file');
+  });
+
+  it('adds one CLAUDE.md as the project of the folder it sits in', async () => {
+    const at = await fixture();
+    const repo = join(at.home, 'repo');
+    await mkdir(repo, { recursive: true });
+    await writeFile(join(repo, 'CLAUDE.md'), '# Rules\nRun pnpm test.');
+    const added = await at.ask({
+      method: DAEMON_METHOD.MEMORY_SOURCE_ADD,
+      memorySource: {
+        kind: MEMORY_SOURCE_KIND.INSTRUCTIONS,
+        location: join(repo, 'CLAUDE.md'),
+      },
+    });
+    expect(added.ok).toBe(true);
+    expect(added.memorySources?.[0]?.project).toMatch(/repo$/);
+    await settled(at.home);
+  });
+
   it('refuses a source that is not there, a plain http API, and a project scope on a vault', async () => {
     const at = await fixture();
     const missing = await at.ask({
@@ -359,5 +431,58 @@ describe('the memory methods', () => {
       },
     });
     expect(scoped.ok).toBe(false);
+  });
+
+  it('reads the workspace pull down as it lies on disk, and answers nothing where none was pulled', async () => {
+    const at = await fixture();
+    expect(isMemoryMethod(DAEMON_METHOD.WORKSPACE_MEMORY)).toBe(true);
+    expect(isScreenMethod(DAEMON_METHOD.WORKSPACE_MEMORY)).toBe(true);
+    expect(remoteCapabilityFor(DAEMON_METHOD.WORKSPACE_MEMORY)).toBe(
+      REMOTE_CAPABILITY.SEE,
+    );
+    const never = await at.ask({ method: DAEMON_METHOD.WORKSPACE_MEMORY });
+    expect(never.ok).toBe(true);
+    expect(never.workspaceMemory).toBeUndefined();
+
+    await writeWorkspaceMemory(at.home, {
+      hash: 'h1',
+      facts: [
+        {
+          id: 'f1',
+          kind: 'decision',
+          statement: 'Payments retry three times.',
+          subject: 'payments',
+          principal: 'Ana',
+          verifiedBy: 'Ben',
+          sourceRef: 'https://linear.app/acme/issue/PAY-1',
+        },
+      ],
+      unconfirmed: [
+        {
+          id: 'c1',
+          kind: 'decision',
+          statement: 'Ship the beta on Monday.',
+          subject: 'beta',
+          standing: 'candidate',
+          approved: false,
+          sources: ['slack'],
+          saidBy: ['Cara'],
+        },
+      ],
+      withheld: 2,
+      syncedAt: NOW.toISOString(),
+    });
+    const pulled = await at.ask({ method: DAEMON_METHOD.WORKSPACE_MEMORY });
+    expect(pulled.ok).toBe(true);
+    expect(pulled.workspaceMemory?.facts[0]).toMatchObject({
+      id: 'f1',
+      principal: 'Ana',
+      verifiedBy: 'Ben',
+    });
+    expect(pulled.workspaceMemory?.unconfirmed?.[0]).toMatchObject({
+      sources: ['slack'],
+      saidBy: ['Cara'],
+    });
+    expect(pulled.workspaceMemory?.withheld).toBe(2);
   });
 });
