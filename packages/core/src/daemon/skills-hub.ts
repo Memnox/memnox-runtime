@@ -26,6 +26,12 @@ export const SKILLS_METHOD = {
   SKILL_ACCEPT: 'skill-accept',
   /** Takes a skill out of the hub and every agent at once, its kept versions with it, since that only narrows. */
   SKILL_REMOVE: 'skill-remove',
+  /** How often each skill was used lately, and how often what ran inside it failed or was refused. */
+  SKILL_STATS: 'skill-stats',
+  /** Adds one line to a skill's fix backlog, which nothing reads until the person calibrates it. */
+  SKILL_NOTE: 'skill-note',
+  /** A suggested SKILL.md built from the backlog and the failures, a preview that changes nothing. */
+  SKILL_CALIBRATE: 'skill-calibrate',
 } as const;
 
 /** What one agent keeps of a skill once it is written in that agent's format. */
@@ -152,6 +158,34 @@ export interface SkillDraft {
   permissions?: Partial<SkillPermissionsView>;
 }
 
+/** One skill's use over the chats lately, read from the transcripts the runtime already reads. */
+export interface SkillStatsView {
+  name: string;
+  uses: number;
+  /** Tool calls inside the skill's turn that ended in an error. */
+  failures: number;
+  /** Tool calls inside the skill's turn that a permission or a rule refused. */
+  refusals: number;
+  lastUsedAt?: string;
+  /** The fix backlog, oldest first. */
+  notes: string[];
+  /** The first line of a few recent failures, newest first. */
+  recentFailures: string[];
+}
+
+/** A suggested change to one skill, built from its backlog and failures and accepted through SKILL_PUT. */
+export interface SkillCalibration {
+  name: string;
+  /** The section the suggestion adds or replaces in the instructions. */
+  section: string;
+  before: string[];
+  after: string[];
+  /** The skill as SKILL_PUT takes it with the change in, its version moved on by one. */
+  draft: SkillDraft;
+  notes: number;
+  failures: number;
+}
+
 export interface SkillsRequestFields {
   /** On every change but IMPORT and PUT: the skill, by name. */
   skillName?: string;
@@ -169,6 +203,8 @@ export interface SkillsRequestFields {
   skillScope?: SkillScope;
   /** On PUT. */
   skillDraft?: SkillDraft;
+  /** On SKILL_NOTE: the one line to add to the backlog. */
+  skillNote?: string;
 }
 
 export interface SkillsResponseFields {
@@ -176,4 +212,8 @@ export interface SkillsResponseFields {
   skillsHub?: SkillsHubView;
   /** On SYNC, and after a change that wrote agents' folders. */
   skillsSynced?: SkillsSyncSummary;
+  /** On SKILL_STATS and SKILL_NOTE: every hub skill, used or not. */
+  skillStats?: SkillStatsView[];
+  /** On SKILL_CALIBRATE: absent where there is nothing in the backlog and nothing failed. */
+  skillCalibration?: SkillCalibration;
 }

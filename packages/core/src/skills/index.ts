@@ -5,3 +5,4 @@ export * from './hub';
 export * from './hub-store';
 export * from './formats/index';
 export * from './org-skills';
+export * from './skill-care';

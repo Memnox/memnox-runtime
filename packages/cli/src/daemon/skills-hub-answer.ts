@@ -24,6 +24,7 @@ import {
   setSkillEnabled,
   type SkillsChanged,
 } from '../skills/skills-changes';
+import { addSkillNote, calibrate, readSkillStats } from '../skills/skill-care';
 import { readSkillsView } from '../skills/skills-view';
 import { syncSkills } from '../skills/skills-writer';
 
@@ -71,6 +72,8 @@ async function answerOf(
       });
     case SKILLS_METHOD.SKILLS_HUB:
       return { ok: true };
+    case SKILLS_METHOD.SKILL_STATS:
+      return { ok: true, skillStats: await readSkillStats(home, now) };
   }
   if (name === undefined || name === '') return refused('Name the skill.');
   if (await onlyOrganizations(home, name)) return refused(orgSkillOwned(name));
@@ -105,6 +108,9 @@ async function namedAnswer(
       return changedAnswer(await acceptSkill(home, name, now));
     case SKILLS_METHOD.SKILL_REMOVE:
       return changedAnswer(await removeSkill(home, name, now));
+    case SKILLS_METHOD.SKILL_NOTE:
+    case SKILLS_METHOD.SKILL_CALIBRATE:
+      return careAnswer(home, { request, name, now });
     case SKILLS_METHOD.SKILL_ROLLBACK:
       if (request.skillVersion === undefined)
         return refused('Name the version to hand out again.');
@@ -112,6 +118,24 @@ async function namedAnswer(
     default:
       return { ok: true };
   }
+}
+
+/** A note added to the backlog, or the suggestion built from it; neither changes the skill. */
+async function careAnswer(
+  home: string,
+  { request, name, now }: { request: DaemonRequest; name: string; now: Date },
+): Promise<Answered> {
+  if (request.method === SKILLS_METHOD.SKILL_NOTE) {
+    const note = typeof request.skillNote === 'string' ? request.skillNote : '';
+    const added = await addSkillNote(home, name, note);
+    if ('refused' in added) return refused(added.refused);
+    return { ok: true, skillStats: await readSkillStats(home, now) };
+  }
+  const calibrated = await calibrate(home, name, now);
+  if ('refused' in calibrated) return refused(calibrated.refused);
+  return calibrated.calibration === null
+    ? { ok: true }
+    : { ok: true, skillCalibration: calibrated.calibration };
 }
 
 function refused(reason: string): Answered {
