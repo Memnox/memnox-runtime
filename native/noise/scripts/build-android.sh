@@ -9,10 +9,14 @@ if [ -z "$ndk" ]; then
 fi
 # Android 11 is the floor because the Keystore's per use biometric key, which signs every yes, starts there.
 api="${MEMNOX_ANDROID_API:-30}"
+# The NDK's Windows compilers are .cmd wrappers and its archiver an .exe, which Git Bash runs as they are.
+clang_suffix=""
+ar_suffix=""
 case "$(uname -s)" in
   Darwin) host="darwin-x86_64" ;;
   Linux) host="linux-x86_64" ;;
-  *) echo "the NDK build runs on macOS or Linux, not $(uname -s)" >&2; exit 1 ;;
+  MINGW* | MSYS* | CYGWIN*) host="windows-x86_64"; clang_suffix=".cmd"; ar_suffix=".exe" ;;
+  *) echo "the NDK build runs on macOS, Linux or Git Bash on Windows, not $(uname -s)" >&2; exit 1 ;;
 esac
 bin="$ndk/toolchains/llvm/prebuilt/$host/bin"
 out="build/android/jniLibs"
@@ -25,7 +29,8 @@ build() {
   # ring, which snow uses, compiles C as well, so the cc crate is named the NDK's compiler and archiver too.
   cc_var="CC_$(printf '%s' "$triple" | tr '-' '_')"
   ar_var="AR_$(printf '%s' "$triple" | tr '-' '_')"
-  env "$linker_var=$bin/$triple$api-clang" "$cc_var=$bin/$triple$api-clang" "$ar_var=$bin/llvm-ar" \
+  clang="$bin/$triple$api-clang$clang_suffix"
+  env "$linker_var=$clang" "$cc_var=$clang" "$ar_var=$bin/llvm-ar$ar_suffix" \
     cargo build --release --features jni --target "$triple"
   mkdir -p "$out/$abi"
   cp "target/$triple/release/libmemnox_noise.so" "$out/$abi/libmemnox_noise.so"
