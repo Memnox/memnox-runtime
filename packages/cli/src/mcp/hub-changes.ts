@@ -1,6 +1,9 @@
 import {
+  agentsOf,
   HUB_TRANSPORT,
   hubServerProblems,
+  isHubLine,
+  isMemnoxLine,
   isOrgServer,
   isOwnServer,
   proxiedRemoteOf,
@@ -12,6 +15,7 @@ import {
   withServer,
   type DiscoveredAgentKind,
   type FilePlan,
+  type Hub,
   type HubChange,
   type HubServer,
   type ServerLaunch,
@@ -57,8 +61,6 @@ export async function importServer(
   wanted: { name: string; agent: DiscoveredAgentKind },
 ): Promise<HubChanged> {
   const hub = await readHub(home);
-  if (hub.servers.some((each) => each.name === wanted.name))
-    return { refused: `The hub already has a server named ${wanted.name}.` };
   if (isOrgServer(await readOrgServers(home), wanted.name))
     return {
       refused: `The organization already provides a server named ${wanted.name}.`,
@@ -70,7 +72,15 @@ export async function importServer(
   );
   if (config === undefined)
     return { refused: `${wanted.agent} has no server named ${wanted.name} to import.` };
-  const server = serverOf(wanted.name, config.servers[wanted.name]);
+  const line = config.servers[wanted.name];
+  // Onboarding's own line carries this machine's credential, and the hub never takes it in.
+  if (isMemnoxLine(wanted.name, line))
+    return {
+      refused: `${wanted.name} is Memnox's own server, so it stays as onboarding wrote it.`,
+    };
+  const held = hub.servers.find((each) => each.name === wanted.name);
+  if (held !== undefined) return adopted(home, hub, { held, line, config, wanted });
+  const server = serverOf(wanted.name, line);
   if (server === null)
     return { refused: `${wanted.name} is not a server line Memnox can read.` };
   const problems = hubServerProblems(server);
@@ -81,6 +91,31 @@ export async function importServer(
     { server: server.name, agent: wanted.agent },
     true,
   );
+  return { synced: await syncHub(home, taken) };
+}
+
+/**
+ * A found line for a server the hub already holds: taken in when it is the very line the hub writes for this
+ * agent, so nothing widens, and refused in words when it is a different server under the same name.
+ */
+async function adopted(
+  home: string,
+  hub: Hub,
+  found: {
+    held: HubServer;
+    line: unknown;
+    config: { format: FilePlan['format'] };
+    wanted: { name: string; agent: DiscoveredAgentKind };
+  },
+): Promise<HubChanged> {
+  const { held, line, config, wanted } = found;
+  if (agentsOf(hub, held.name).includes(wanted.agent))
+    return { refused: `The hub already has a server named ${wanted.name}.` };
+  if (!isHubLine(line, held, wanted.agent, config.format))
+    return {
+      refused: `The hub already has a different server named ${wanted.name}, so this one stays as it is. Rename one of them to bring it in.`,
+    };
+  const taken = withAssignment(hub, { server: held.name, agent: wanted.agent }, true);
   return { synced: await syncHub(home, taken) };
 }
 

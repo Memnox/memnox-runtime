@@ -12,6 +12,7 @@ import {
   readHub,
   readHubHealth,
   readOrgServers,
+  runnerForInstall,
   withAssignment,
   withOrganization,
   withoutServer,
@@ -112,18 +113,45 @@ async function putServer(
   request: DaemonRequest,
   now: Date,
 ): Promise<Answered> {
-  const server = hubServerFrom(request.mcpServer);
-  if (server === null)
+  const sent = hubServerFrom(request.mcpServer);
+  if (sent === null)
     return refused('Send the server as a name, a transport, env and secrets.');
+  const { server, runs, installs } = startedRatherThanInstalled(sent);
   const problems = hubServerProblems(server);
   if (problems.length > 0) return refused(problems.join(' '));
   if (isOrgServer(await readOrgServers(home), server.name))
     return refused(orgOwned(server.name));
-  return propose(
-    home,
-    { put: server },
-    { rationale: `Add the MCP server ${server.name}`, now },
-  );
+  const rationale = `Add the MCP server ${server.name}${runs === undefined ? '' : `, started with ${runs}`}`;
+  const proposed = await propose(home, { put: server }, { rationale, now });
+  if (runs === undefined || installs === undefined) return proposed;
+  return { ...proposed, outcome: installedLine(sent, installs, runs) };
+}
+
+/**
+ * A command typed as a package install only installs, so it is written as the runner that fetches the package and
+ * starts it; the server then installs itself the first time an agent starts it, with no step left to the person.
+ */
+function startedRatherThanInstalled(server: HubServer): {
+  server: HubServer;
+  runs?: string;
+  installs?: string;
+} {
+  if (server.transport !== HUB_TRANSPORT.STDIO || server.command === undefined)
+    return { server };
+  const runner = runnerForInstall(server.command, server.args ?? []);
+  if (runner === null) return { server };
+  const runs = [runner.command, ...runner.args].join(' ');
+  return {
+    server: { ...server, command: runner.command, args: runner.args },
+    runs,
+    installs: runner.installs,
+  };
+}
+
+/** Said under the press, so the person knows what will run in place of what they typed. */
+function installedLine(sent: HubServer, installs: string, runs: string): string {
+  const typed = [sent.command ?? '', ...(sent.args ?? [])].join(' ');
+  return `${typed} only installs ${installs}, so the hub starts it with ${runs}, which installs it the first time it starts.`;
 }
 
 async function removeServer(home: string, request: DaemonRequest): Promise<Answered> {

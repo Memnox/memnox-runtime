@@ -1,8 +1,10 @@
 import { canonicalJson } from '../domain/canonical-json';
 import { digest } from '../domain/digest';
 import type { DiscoveredAgentKind } from '../discovery/discovery.constants';
+import { SESSION_SERVER_NAME, WORKSPACE_SERVER_NAME } from '../discovery/own-tools';
 import {
   AGENT_FLAG,
+  isOwnServer,
   PROXY_BINARY,
   WRAP_MARKER,
   type ServerLaunch,
@@ -165,13 +167,17 @@ function planFile(hub: Hub, config: ConfigServers): FilePlan {
   // A file several agents read, or one that is the repository's, is only ever reported on.
   if (config.agent === undefined || config.shared === true) {
     plan.found.push(
-      ...Object.keys(config.servers).filter((name) => !writtenHere.has(name)),
+      ...Object.entries(config.servers)
+        .filter(([name, entry]) => !writtenHere.has(name) && !isOwnLine(entry))
+        .map(([name]) => name),
     );
     return plan;
   }
   const agent = config.agent;
   const wanted = new Map(serversFor(hub, agent).map((server) => [server.name, server]));
   for (const [name, current] of Object.entries(config.servers)) {
+    // Memnox's own lines, which onboarding writes and owns, are neither offered for import nor overwritten.
+    if (isMemnoxLine(name, current)) continue;
     const written = writtenHere.get(name);
     planExisting(plan, {
       name,
@@ -231,6 +237,11 @@ interface Existing {
 function planExisting(plan: FilePlan, each: Existing): void {
   const { name, current, wanted, written, agent, format } = each;
   if (written === undefined) {
+    // Already the very line the hub would write, so it is taken as the hub's own rather than waiting forever.
+    if (wanted !== undefined && isHubLine(current, wanted, agent, format)) {
+      plan.update.push({ name, entry: entryFor(wanted, agent) });
+      return;
+    }
     // Somebody's own server: a hub server of the same name would overwrite it, so it waits.
     if (wanted !== undefined)
       plan.skipped.push({
@@ -250,6 +261,30 @@ function planExisting(plan: FilePlan, each: Existing): void {
   }
   const entry = entryFor(wanted, agent);
   if (entryDigest(entry, format) !== written.digest) plan.update.push({ name, entry });
+}
+
+/** Whether a line in an agent's config is exactly what the hub writes for this server and agent. */
+export function isHubLine(
+  current: unknown,
+  server: HubServer,
+  agent: DiscoveredAgentKind,
+  format: ConfigFormat,
+): boolean {
+  return entryDigest(current, format) === entryDigest(entryFor(server, agent), format);
+}
+
+/** Memnox's own line in an agent's own config: a name onboarding gives it, or a line starting its own server. */
+export function isMemnoxLine(name: string, entry: unknown): boolean {
+  return (
+    name === WORKSPACE_SERVER_NAME || name === SESSION_SERVER_NAME || isOwnLine(entry)
+  );
+}
+
+/** A line that starts Memnox's own session server or workspace bridge, wherever it is found. */
+function isOwnLine(entry: unknown): boolean {
+  if (typeof entry !== 'object' || entry === null) return false;
+  // Cast is safe: isOwnServer checks the command and args are there before it reads them.
+  return isOwnServer(entry as ServerLaunch);
 }
 
 /** The written record after a plan was applied, so the next sync knows what is ours. */

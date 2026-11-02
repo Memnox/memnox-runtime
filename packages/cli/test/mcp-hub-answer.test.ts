@@ -1,13 +1,14 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ConfirmKeys,
   confirmationMessage,
   DAEMON_METHOD,
   DISCOVERED_AGENT_KIND,
+  entryFor,
   HUB_TRANSPORT,
   HUB_VERSION,
   MCP_HEALTH,
@@ -35,6 +36,7 @@ import { isVoiceMethod } from '../src/daemon/voice-methods';
 
 const NOW = new Date('2026-10-30T12:00:00.000Z');
 const CLAUDE = DISCOVERED_AGENT_KIND.CLAUDE_CODE;
+const DESKTOP = DISCOVERED_AGENT_KIND.CLAUDE_DESKTOP;
 // Assembled at run time, so no scanner reads a credential in this file.
 const TOKEN_VALUE = ['ghp', 'only', 'in', 'the', 'store'].join('_');
 
@@ -295,5 +297,88 @@ describe('the MCP Hub methods', () => {
     expect(removed.mcpHub?.servers).toEqual([]);
     const claude = JSON.parse(await readFile(join(at.home, '.claude.json'), 'utf8'));
     expect(claude.mcpServers).toEqual({});
+  });
+  it('starts a server typed as a pip install with uvx, and says what will run', async () => {
+    const at = await fixture();
+    const typed: HubServer = {
+      name: 'comfyui',
+      transport: HUB_TRANSPORT.STDIO,
+      command: 'pip',
+      args: ['install', 'comfy-mcp'],
+      env: {},
+      secrets: {},
+    };
+    const put = await at.ask({ method: DAEMON_METHOD.SERVER_PUT, mcpServer: typed });
+    expect(put.outcome).toBe(
+      'pip install comfy-mcp only installs comfy-mcp, so the hub starts it with uvx comfy-mcp, which installs it the first time it starts.',
+    );
+    const proposal = await new Proposals(at.home).read(put.proposed ?? '');
+    expect(proposal?.rationale).toBe(
+      'Add the MCP server comfyui, started with uvx comfy-mcp',
+    );
+    expect(proposal?.change).toEqual({
+      kind: PROPOSAL_KIND.MCP_HUB,
+      hub: { put: { ...typed, command: 'uvx', args: ['comfy-mcp'] } },
+    });
+  });
+
+  it('brings in a found line that is already the hub’s own for that agent, and refuses a different one', async () => {
+    const at = await fixture();
+    const put = await at.ask({ method: DAEMON_METHOD.SERVER_PUT, mcpServer: GITHUB });
+    await confirmed(at, put.proposed ?? '');
+    const desktop = join(
+      at.home,
+      'Library/Application Support/Claude/claude_desktop_config.json',
+    );
+    await mkdir(dirname(desktop), { recursive: true });
+    await writeFile(
+      desktop,
+      JSON.stringify({ mcpServers: { github: entryFor(GITHUB, DESKTOP) } }),
+    );
+    const found = await at.ask({});
+    expect(found.mcpHub?.found.map((each) => each.name)).toEqual(['notes', 'github']);
+    const imported = await at.ask({
+      method: DAEMON_METHOD.IMPORT,
+      mcpServerName: 'github',
+      mcpAgent: DESKTOP,
+    });
+    expect(imported.ok).toBe(true);
+    expect(imported.mcpHub?.found.map((each) => each.name)).toEqual(['notes']);
+    expect(imported.mcpHub?.servers[0]?.agents).toEqual([DESKTOP]);
+    expect(imported.mcpHub?.skipped).toEqual([]);
+
+    await writeFile(
+      join(at.home, '.claude.json'),
+      JSON.stringify({
+        mcpServers: { github: { command: 'docker', args: ['run', 'gh'] } },
+      }),
+    );
+    const different = await at.ask({
+      method: DAEMON_METHOD.IMPORT,
+      mcpServerName: 'github',
+      mcpAgent: CLAUDE,
+    });
+    expect(different.ok).toBe(false);
+    expect(different.error).toMatch(/different server named github/);
+  });
+
+  it('never offers or takes in Memnox’s own server, which carries this machine’s credential', async () => {
+    const at = await fixture();
+    await writeFile(
+      join(at.home, '.claude.json'),
+      JSON.stringify({
+        mcpServers: {
+          memnox: { type: 'http', url: 'https://api.memnox.com/v1/workspaces/w/mcp' },
+        },
+      }),
+    );
+    expect((await at.ask({})).mcpHub?.found).toEqual([]);
+    const imported = await at.ask({
+      method: DAEMON_METHOD.IMPORT,
+      mcpServerName: 'memnox',
+      mcpAgent: CLAUDE,
+    });
+    expect(imported.ok).toBe(false);
+    expect((await readHub(at.home)).servers).toEqual([]);
   });
 });

@@ -174,6 +174,25 @@ describe('a sync', () => {
     expect(plan.files[0]?.skipped.map((each) => each.name)).toEqual(['github']);
   });
 
+  it('takes the very line it would write as its own rather than waiting on it', () => {
+    const hub = hubWith(github(), CLAUDE);
+    const plan = planSync(hub, [claudeConfig({ github: entryFor(github(), CLAUDE) })]);
+    expect(plan.files[0]?.skipped).toEqual([]);
+    expect(plan.files[0]?.update.map((each) => each.name)).toEqual(['github']);
+    expect(writtenAfter(hub, plan).map((each) => each.server)).toEqual(['github']);
+  });
+
+  it('never offers Memnox’s own servers for import', () => {
+    const plan = planSync(emptyHub(), [
+      claudeConfig({
+        memnox: { type: 'http', url: 'https://api.memnox.com/v1/workspaces/w/mcp' },
+        'memnox-session': { command: 'memnox-session', args: ['--agent', CLAUDE] },
+        notion: { command: 'npx', args: ['notion-mcp'] },
+      }),
+    ]);
+    expect(plan.files[0]?.found).toEqual(['notion']);
+  });
+
   it('updates its own line when the server changes, and removes it when unassigned', () => {
     const first = hubWith(github(), CLAUDE);
     const applied = planSync(first, [claudeConfig()]);

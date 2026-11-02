@@ -470,7 +470,10 @@ export interface DaemonResponse extends ExtensionResponseFields {
   connections?: ToolConnection[];
   /** On POLISH: the dictation as it should be typed. */
   polished?: string;
-  /** On CONFIRM and REGISTER_KEY, what happened in a word or two; on PING, which memnox answered. */
+  /**
+   * On CONFIRM and REGISTER_KEY, what happened in a word or two; on PING, which memnox answered; on
+   * the hub's SERVER_PUT, how a server typed as a package install will be started instead.
+   */
   outcome?: string;
   version?: string;
   error?: string;
