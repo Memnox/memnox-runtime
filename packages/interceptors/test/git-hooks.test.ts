@@ -170,20 +170,27 @@ describe('where git actually looks for a hook', () => {
 });
 
 describe('an install path the shell would otherwise read', () => {
-  it('runs a binary whose path holds a space, a dollar and quotes', async () => {
-    const dir = await repo();
-    const bin = join(
-      await mkdtemp(join(tmpdir(), 'memnox-hooks-bin-')),
-      `my $HOME "it's"`,
-    );
-    await mkdir(bin);
-    const binary = join(bin, 'memnox');
-    const marker = join(dir, 'ran');
-    await writeFile(binary, `#!/bin/sh\necho "$@" >> '${marker}'\nexit 0\n`);
-    await chmod(binary, 0o755);
+  // Windows forbids a double quote in a file name, and the fake memnox is a POSIX sh script.
+  it.skipIf(process.platform === 'win32')(
+    'runs a binary whose path holds a space, a dollar and quotes',
+    async () => {
+      const dir = await repo();
+      const bin = join(
+        await mkdtemp(join(tmpdir(), 'memnox-hooks-bin-')),
+        `my $HOME "it's"`,
+      );
+      await mkdir(bin);
+      const binary = join(bin, 'memnox');
+      const marker = join(dir, 'ran');
+      await writeFile(binary, `#!/bin/sh\necho "$@" >> '${marker}'\nexit 0\n`);
+      await chmod(binary, 0o755);
 
-    await installGitHooks(dir, binary);
-    execFileSync('sh', [hookPath(dir, 'pre-commit')], { cwd: dir, env: ownProcessEnv() });
-    expect(await readFile(marker, 'utf8')).toContain('policy test git.commit');
-  });
+      await installGitHooks(dir, binary);
+      execFileSync('sh', [hookPath(dir, 'pre-commit')], {
+        cwd: dir,
+        env: ownProcessEnv(),
+      });
+      expect(await readFile(marker, 'utf8')).toContain('policy test git.commit');
+    },
+  );
 });

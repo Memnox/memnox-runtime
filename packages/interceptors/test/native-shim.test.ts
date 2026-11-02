@@ -37,34 +37,38 @@ function typed(shims: string, real: string): string {
   }).stdout.trim();
 }
 
-describe('the shims with a native wrapper in front', () => {
-  it('runs the native wrapper first, quoted, and Node where it is gone', async () => {
-    const { home, real, native } = await machine();
-    const report = await installInterceptors(home, 'memnox-intercept', {
-      path: real,
-      native,
-      platform: 'darwin',
+// The shims and fakes are POSIX sh scripts run through a PATH Windows cannot read, and a $ name is invalid there.
+describe.skipIf(process.platform === 'win32')(
+  'the shims with a native wrapper in front',
+  () => {
+    it('runs the native wrapper first, quoted, and Node where it is gone', async () => {
+      const { home, real, native } = await machine();
+      const report = await installInterceptors(home, 'memnox-intercept', {
+        path: real,
+        native,
+        platform: 'darwin',
+      });
+      expect(report.installed).toContain('git');
+      expect(typed(report.directory, real)).toBe('native git status');
+
+      await chmod(native, 0o644);
+      expect(typed(report.directory, real)).toBe('node git status');
     });
-    expect(report.installed).toContain('git');
-    expect(typed(report.directory, real)).toBe('native git status');
 
-    await chmod(native, 0o644);
-    expect(typed(report.directory, real)).toBe('node git status');
-  });
+    it('writes the shims it always wrote when no native wrapper was built', async () => {
+      const { home, real } = await machine();
+      const report = await installInterceptors(home, 'memnox-intercept', { path: real });
+      const script = await readFile(join(report.directory, 'git'), 'utf8');
+      expect(script).not.toContain(NATIVE_INTERCEPT_BINARY);
+      expect(typed(report.directory, real)).toBe('node git status');
+    });
 
-  it('writes the shims it always wrote when no native wrapper was built', async () => {
-    const { home, real } = await machine();
-    const report = await installInterceptors(home, 'memnox-intercept', { path: real });
-    const script = await readFile(join(report.directory, 'git'), 'utf8');
-    expect(script).not.toContain(NATIVE_INTERCEPT_BINARY);
-    expect(typed(report.directory, real)).toBe('node git status');
-  });
-
-  it('leaves nothing behind on removal, since the native wrapper is never copied', async () => {
-    const { home, real, native } = await machine();
-    await installInterceptors(home, 'memnox-intercept', { path: real, native });
-    const removed = await removeInterceptors(home);
-    expect(removed).not.toContain(NATIVE_INTERCEPT_BINARY);
-    expect(spawnSync('test', ['-x', native]).status).toBe(0);
-  });
-});
+    it('leaves nothing behind on removal, since the native wrapper is never copied', async () => {
+      const { home, real, native } = await machine();
+      await installInterceptors(home, 'memnox-intercept', { path: real, native });
+      const removed = await removeInterceptors(home);
+      expect(removed).not.toContain(NATIVE_INTERCEPT_BINARY);
+      expect(spawnSync('test', ['-x', native]).status).toBe(0);
+    });
+  },
+);

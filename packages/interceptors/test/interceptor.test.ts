@@ -214,17 +214,22 @@ describe('the interceptor runtime', () => {
     ).toBeNull();
   });
 
-  it('never resolves its own executable as the real binary', () => {
-    const always = (): boolean => true;
-    expect(resolveReal(INTERCEPT_BINARY, '/usr/bin', always)).toBeNull();
-    // Even when a stray PATH entry holds one, it is skipped rather than exec'd.
-    expect(resolveReal('git', '/usr/bin', (p) => p === '/usr/bin/git')).toBe(
-      '/usr/bin/git',
-    );
-  });
+  // This walks a POSIX PATH of '/usr/bin' entries, which Windows joins with backslashes and splits on ';'.
+  it.skipIf(process.platform === 'win32')(
+    'never resolves its own executable as the real binary',
+    () => {
+      const always = (): boolean => true;
+      expect(resolveReal(INTERCEPT_BINARY, '/usr/bin', always)).toBeNull();
+      // Even when a stray PATH entry holds one, it is skipped rather than exec'd.
+      expect(resolveReal('git', '/usr/bin', (p) => p === '/usr/bin/git')).toBe(
+        '/usr/bin/git',
+      );
+    },
+  );
 });
 
-describe('finding the real binary', () => {
+// These walk a POSIX PATH of ':' separated entries and execute bits, which Windows has neither of.
+describe.skipIf(process.platform === 'win32')('finding the real binary', () => {
   it('takes our own directory off PATH, or the interceptor would exec itself', () => {
     const ours = interceptorDirFor('/home/dev');
     const path = `${ours}:/usr/bin:/bin`;
@@ -265,56 +270,72 @@ describe('finding the real binary', () => {
 });
 
 describe('installing the interceptors', () => {
-  it('writes one executable per intercepted binary and prints the PATH line', async () => {
-    const dir = await home();
-    const report = await installInterceptors(dir, '/usr/local/bin/memnox-intercept');
+  // Windows writes git.cmd shims and has no POSIX mode bits, so the names and 0o700 differ.
+  it.skipIf(process.platform === 'win32')(
+    'writes one executable per intercepted binary and prints the PATH line',
+    async () => {
+      const dir = await home();
+      const report = await installInterceptors(dir, '/usr/local/bin/memnox-intercept');
 
-    expect(report.installed).toContain('git');
-    expect(report.installed).toContain('rm');
-    expect(report.pathLine).toContain(interceptorDirFor(dir));
+      expect(report.installed).toContain('git');
+      expect(report.installed).toContain('rm');
+      expect(report.pathLine).toContain(interceptorDirFor(dir));
 
-    const names = await readdir(report.directory);
-    // The interceptors, and a launcher for each agent CLI this machine has.
-    expect(names.sort()).toEqual([...report.installed, ...report.launchers].sort());
+      const names = await readdir(report.directory);
+      // The interceptors, and a launcher for each agent CLI this machine has.
+      expect(names.sort()).toEqual([...report.installed, ...report.launchers].sort());
 
-    const mode = (await stat(join(report.directory, 'git'))).mode & 0o777;
-    expect(mode).toBe(0o700);
-  });
+      const mode = (await stat(join(report.directory, 'git'))).mode & 0o777;
+      expect(mode).toBe(0o700);
+    },
+  );
 
-  it('hands the binary the name it stands in for', async () => {
-    const dir = await home();
-    await installInterceptors(dir, '/usr/local/bin/memnox-intercept');
-    const script = await readFile(join(interceptorDirFor(dir), 'git'), 'utf8');
+  // Windows writes a git.cmd shim rather than this sh wrapper.
+  it.skipIf(process.platform === 'win32')(
+    'hands the binary the name it stands in for',
+    async () => {
+      const dir = await home();
+      await installInterceptors(dir, '/usr/local/bin/memnox-intercept');
+      const script = await readFile(join(interceptorDirFor(dir), 'git'), 'utf8');
 
-    expect(script).toContain('exec "/usr/local/bin/memnox-intercept" "git" "$@"');
-    // Somebody reading the file has to be told how to undo it.
-    expect(script).toContain('memnox uninstall');
-  });
+      expect(script).toContain('exec "/usr/local/bin/memnox-intercept" "git" "$@"');
+      // Somebody reading the file has to be told how to undo it.
+      expect(script).toContain('memnox uninstall');
+    },
+  );
 
-  it('runs the real binary once Memnox itself is gone', async () => {
-    const dir = await home();
-    await installInterceptors(dir, 'memnox-intercept-not-installed');
-    const real = await home();
-    await writeFile(join(real, 'git'), '#!/bin/sh\necho "real git $1"\n', {
-      mode: 0o755,
-    });
+  // The wrapper and the fake git are POSIX sh scripts, which Windows cannot run.
+  it.skipIf(process.platform === 'win32')(
+    'runs the real binary once Memnox itself is gone',
+    async () => {
+      const dir = await home();
+      await installInterceptors(dir, 'memnox-intercept-not-installed');
+      const real = await home();
+      await writeFile(join(real, 'git'), '#!/bin/sh\necho "real git $1"\n', {
+        mode: 0o755,
+      });
 
-    const { stdout } = await promisify(execFile)(
-      join(interceptorDirFor(dir), 'git'),
-      ['status'],
-      { env: { PATH: [interceptorDirFor(dir), real, '/usr/bin', '/bin'].join(':') } },
-    );
-    expect(stdout.trim()).toBe('real git status');
-  });
+      const { stdout } = await promisify(execFile)(
+        join(interceptorDirFor(dir), 'git'),
+        ['status'],
+        { env: { PATH: [interceptorDirFor(dir), real, '/usr/bin', '/bin'].join(':') } },
+      );
+      expect(stdout.trim()).toBe('real git status');
+    },
+  );
 
-  it('removes every one, so the machine goes back as it was', async () => {
-    const dir = await home();
-    await installInterceptors(dir, '/x/memnox-intercept');
-    const removed = await removeInterceptors(dir);
+  // Windows needs the node and entry paths its .cmd shims start, which this install does not pass.
+  it.skipIf(process.platform === 'win32')(
+    'removes every one, so the machine goes back as it was',
+    async () => {
+      const dir = await home();
+      await installInterceptors(dir, '/x/memnox-intercept');
+      const removed = await removeInterceptors(dir);
 
-    expect(removed.length).toBeGreaterThan(0);
-    await expect(readdir(interceptorDirFor(dir))).rejects.toThrow();
-  });
+      expect(removed.length).toBeGreaterThan(0);
+      await expect(readdir(interceptorDirFor(dir))).rejects.toThrow();
+    },
+  );
 
   it('says nothing was removed when nothing was installed', async () => {
     expect(await removeInterceptors(await home())).toEqual([]);
@@ -334,41 +355,54 @@ describe('which binaries get a wrapper', () => {
 
   /* A shim for an absent `aws` answers `command -v aws`, and every script that checks
      for it takes the wrong branch. A governance tool that breaks a build gets removed. */
-  it('wraps only what this machine actually has', async () => {
-    const report = await installInterceptors(home, 'memnox-intercept', {
-      path: '/usr/bin',
-      exists: (candidate) => candidate === '/usr/bin/git' || candidate === '/usr/bin/gh',
-    });
+  // This walks a POSIX PATH of '/usr/bin' entries, which Windows joins with backslashes and splits on ';'.
+  it.skipIf(process.platform === 'win32')(
+    'wraps only what this machine actually has',
+    async () => {
+      const report = await installInterceptors(home, 'memnox-intercept', {
+        path: '/usr/bin',
+        exists: (candidate) =>
+          candidate === '/usr/bin/git' || candidate === '/usr/bin/gh',
+      });
 
-    expect(report.installed.sort()).toEqual(['gh', 'git']);
-    expect(report.absent).toContain('aws');
-  });
+      expect(report.installed.sort()).toEqual(['gh', 'git']);
+      expect(report.absent).toContain('aws');
+    },
+  );
 
   /* `protect --for gh` writes rules named `gh.pr-merge`. Wrapping only the generic
      classifiers left every one of those rules with nothing to fire on. */
-  it('covers the CLIs the verb tables name, not just the generic ones', async () => {
-    const report = await installInterceptors(home, 'memnox-intercept', {
-      path: '/usr/bin',
-      exists: () => true,
-    });
+  // Windows needs the node and entry paths its .cmd shims start, which this install does not pass.
+  it.skipIf(process.platform === 'win32')(
+    'covers the CLIs the verb tables name, not just the generic ones',
+    async () => {
+      const report = await installInterceptors(home, 'memnox-intercept', {
+        path: '/usr/bin',
+        exists: () => true,
+      });
 
-    for (const binary of ['gh', 'docker', 'kubectl', 'psql', 'vercel', 'aws']) {
-      expect(report.installed).toContain(binary);
-    }
-  });
+      for (const binary of ['gh', 'docker', 'kubectl', 'psql', 'vercel', 'aws']) {
+        expect(report.installed).toContain(binary);
+      }
+    },
+  );
 
-  it('never counts its own shims as the real binary', async () => {
-    await installInterceptors(home, 'memnox-intercept', {
-      path: '/usr/bin',
-      exists: (candidate) => candidate === '/usr/bin/git',
-    });
+  // This walks a POSIX PATH of '/usr/bin' entries, which Windows joins with backslashes and splits on ';'.
+  it.skipIf(process.platform === 'win32')(
+    'never counts its own shims as the real binary',
+    async () => {
+      await installInterceptors(home, 'memnox-intercept', {
+        path: '/usr/bin',
+        exists: (candidate) => candidate === '/usr/bin/git',
+      });
 
-    // Second run with our directory on PATH: git is still the only real one.
-    const again = await installInterceptors(home, 'memnox-intercept', {
-      path: `${interceptorDirFor(home)}:/usr/bin`,
-      exists: (candidate) => candidate === '/usr/bin/git',
-    });
+      // Second run with our directory on PATH: git is still the only real one.
+      const again = await installInterceptors(home, 'memnox-intercept', {
+        path: `${interceptorDirFor(home)}:/usr/bin`,
+        exists: (candidate) => candidate === '/usr/bin/git',
+      });
 
-    expect(again.installed).toEqual(['git']);
-  });
+      expect(again.installed).toEqual(['git']);
+    },
+  );
 });

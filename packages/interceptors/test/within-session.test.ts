@@ -17,7 +17,8 @@ beforeAll(async () => {
   outside = join(base, 'elsewhere');
   await mkdir(join(repo, 'src'), { recursive: true });
   await mkdir(outside);
-  await symlink(outside, join(repo, 'link'));
+  // Creating a symlink on Windows needs admin rights or developer mode, so only the link test uses it.
+  if (process.platform !== 'win32') await symlink(outside, join(repo, 'link'));
   contained = { root: repo, cwd: repo, home: base };
 });
 
@@ -60,10 +61,14 @@ describe('a held call answered without a fingerprint', () => {
     expect(withinSession(write(join(outside, 'a.ts')), contained, {})).toBe(false);
   });
 
-  it('follows a link out of the repository rather than trusting its name', () => {
-    expect(withinSession(write(join(repo, 'link/a.ts')), contained, {})).toBe(false);
-    expect(withinSession(line('rm link/a.ts'), contained, {})).toBe(false);
-  });
+  // The link is never made on Windows, where a symlink needs admin rights or developer mode.
+  it.skipIf(process.platform === 'win32')(
+    'follows a link out of the repository rather than trusting its name',
+    () => {
+      expect(withinSession(write(join(repo, 'link/a.ts')), contained, {})).toBe(false);
+      expect(withinSession(line('rm link/a.ts'), contained, {})).toBe(false);
+    },
+  );
 
   it('is never one that moves, expands or runs something it cannot see into', () => {
     expect(withinSession(line('cd .. && rm shop'), contained, {})).toBe(false);
