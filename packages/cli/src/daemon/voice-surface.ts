@@ -22,6 +22,7 @@ import {
   pausedBrief,
 } from '../operator/voice-prompts';
 import { isWordsMethod, wordsAnswer } from '../operator/recognizer-words';
+import { FeedGate } from './feed-gate';
 import { answerHome, isScreenMethod } from './home-status';
 import { AddressLimit } from './address-limit';
 import { deliveredAnswer, phoneDeliveredAnswer, seenAnswer } from './voice-deliveries';
@@ -466,8 +467,9 @@ export class VoiceSurface {
   /** Polls for what is waiting while somebody listens or a phone's question may still raise a show. */
   private startFeed(): void {
     if (this.feedTimer !== null) return;
+    const gate = new FeedGate(this.deps.home);
     this.feedTimer = setInterval(
-      () => void this.pushWaiting(),
+      () => void gate.whenMoved(this.subscribers.size, () => this.pushWaiting()),
       this.deps.feedIntervalMs ?? FEED_INTERVAL_MS,
     );
     // A subscriber is not a reason to keep a daemon alive that was asked to stop.
