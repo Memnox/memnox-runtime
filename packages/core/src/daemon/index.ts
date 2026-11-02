@@ -28,6 +28,7 @@ export * from './skills-hub';
 export * from './held-action';
 export * from './projects';
 export * from './memory';
+export * from './memory-layers';
 export * from './backup';
 export * from './lan';
 export * from './personal-sync';

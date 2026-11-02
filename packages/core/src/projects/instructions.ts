@@ -5,6 +5,7 @@ import {
   withoutNativeBlock,
   type NativeBlockMarkers,
 } from '../distribute/native-files';
+import { CURSOR_LAYERS_FILE, MEMORY_ROUTER_MARKERS } from './memory-layers';
 
 /**
  * A project's instructions, read from every agent's own file and written into each agent's own
@@ -64,12 +65,14 @@ export interface InstructionSource {
 
 /** A source of ours is never read back as the person's, or two agents' files would copy each other for ever. */
 export function isOwnInstructionFile(path: string): boolean {
-  return path === CURSOR_TARGET;
+  return path === CURSOR_TARGET || path === CURSOR_LAYERS_FILE;
 }
 
 /** What a source says once anything Memnox wrote into it is taken out. */
 export function sourceText(source: InstructionSource): string {
-  return withoutNativeBlock(source.text, INSTRUCTION_MARKERS).trim();
+  // The memory router names this file's own departments, so it is never copied into another agent's.
+  const theirs = withoutNativeBlock(source.text, MEMORY_ROUTER_MARKERS);
+  return withoutNativeBlock(theirs, INSTRUCTION_MARKERS).trim();
 }
 
 /**
