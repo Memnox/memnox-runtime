@@ -45,29 +45,34 @@ const GUARD: UntrustedGuard = {
   proxyPort: 18080,
 };
 
-describe('carving a grant around what is denied', () => {
-  it('grants every sibling on the way down, and never the denied path or a link', () => {
-    expect(carve('/', ['/home/dev/.ssh'], list)).toEqual([
-      '/usr',
-      '/home/dev/.aws',
-      '/home/dev/.claude',
-      '/home/dev/.claude.json',
-      '/home/dev/.memnox',
-      '/home/dev/shop',
-      '/home/dev/notes',
-    ]);
-  });
+// The Landlock plan walks a POSIX tree with '/' paths, and Windows has no Landlock and joins with backslashes.
+describe.skipIf(process.platform === 'win32')(
+  'carving a grant around what is denied',
+  () => {
+    it('grants every sibling on the way down, and never the denied path or a link', () => {
+      expect(carve('/', ['/home/dev/.ssh'], list)).toEqual([
+        '/usr',
+        '/home/dev/.aws',
+        '/home/dev/.claude',
+        '/home/dev/.claude.json',
+        '/home/dev/.memnox',
+        '/home/dev/shop',
+        '/home/dev/notes',
+      ]);
+    });
 
-  it('grants the whole root when nothing under it is denied', () => {
-    expect(carve('/usr', ['/home/dev/.ssh'], list)).toEqual(['/usr']);
-  });
+    it('grants the whole root when nothing under it is denied', () => {
+      expect(carve('/usr', ['/home/dev/.ssh'], list)).toEqual(['/usr']);
+    });
 
-  it('grants nothing when the root itself is denied', () => {
-    expect(carve('/home/dev/.ssh', ['/home/dev/.ssh'], list)).toEqual([]);
-  });
-});
+    it('grants nothing when the root itself is denied', () => {
+      expect(carve('/home/dev/.ssh', ['/home/dev/.ssh'], list)).toEqual([]);
+    });
+  },
+);
 
-describe('the untrusted Landlock plan', () => {
+// The Landlock plan walks a POSIX tree with '/' paths, and Windows has no Landlock and joins with backslashes.
+describe.skipIf(process.platform === 'win32')('the untrusted Landlock plan', () => {
   const plan = untrustedLandlockPlan(GUARD, list);
 
   it('leaves dotfiles unreadable, bar the agent state and the Memnox home', () => {
@@ -142,29 +147,37 @@ describe('the untrusted seatbelt profile', () => {
   });
 });
 
-describe('toolchains installed under the home', () => {
-  const tree: Record<string, CarveEntry[]> = {
-    '/': [{ name: 'home', symlink: false }],
-    '/home': [{ name: 'dev', symlink: false }],
-    '/home/dev': [
-      { name: '.cargo', symlink: false },
-      { name: '.nvm', symlink: false },
-    ],
-    '/home/dev/.cargo': [
-      { name: 'bin', symlink: false },
-      { name: 'credentials.toml', symlink: false },
-    ],
-  };
-  const plan = untrustedLandlockPlan(
-    { ...GUARD, readable: ['/home/dev/.nvm', '/home/dev/.cargo/bin'], statePrefixes: [] },
-    (dir) => tree[dir] ?? [],
-  );
-
-  it('stay readable, down to the one directory named, and no further', () => {
-    expect(plan.read).toEqual(
-      expect.arrayContaining(['/home/dev/.nvm', '/home/dev/.cargo/bin']),
+// The Landlock plan walks a POSIX tree with '/' paths, and Windows has no Landlock and joins with backslashes.
+describe.skipIf(process.platform === 'win32')(
+  'toolchains installed under the home',
+  () => {
+    const tree: Record<string, CarveEntry[]> = {
+      '/': [{ name: 'home', symlink: false }],
+      '/home': [{ name: 'dev', symlink: false }],
+      '/home/dev': [
+        { name: '.cargo', symlink: false },
+        { name: '.nvm', symlink: false },
+      ],
+      '/home/dev/.cargo': [
+        { name: 'bin', symlink: false },
+        { name: 'credentials.toml', symlink: false },
+      ],
+    };
+    const plan = untrustedLandlockPlan(
+      {
+        ...GUARD,
+        readable: ['/home/dev/.nvm', '/home/dev/.cargo/bin'],
+        statePrefixes: [],
+      },
+      (dir) => tree[dir] ?? [],
     );
-    expect(plan.read).not.toContain('/home/dev/.cargo/credentials.toml');
-    expect(plan.read).not.toContain('/home/dev/.cargo');
-  });
-});
+
+    it('stay readable, down to the one directory named, and no further', () => {
+      expect(plan.read).toEqual(
+        expect.arrayContaining(['/home/dev/.nvm', '/home/dev/.cargo/bin']),
+      );
+      expect(plan.read).not.toContain('/home/dev/.cargo/credentials.toml');
+      expect(plan.read).not.toContain('/home/dev/.cargo');
+    });
+  },
+);

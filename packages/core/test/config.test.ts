@@ -40,12 +40,16 @@ describe('the config file', () => {
     expect(second.retentionDays).toBe(7);
   });
 
-  it('keeps the file owner-only, like everything else under the data directory', async () => {
-    const dir = await home();
-    await loadOrCreateConfig(dir);
-    const mode = (await stat(configPathFor(dir))).mode & 0o777;
-    expect(mode).toBe(0o600);
-  });
+  // Windows has no POSIX mode bits, so 0o600 reads back as 0o666.
+  it.skipIf(process.platform === 'win32')(
+    'keeps the file owner-only, like everything else under the data directory',
+    async () => {
+      const dir = await home();
+      await loadOrCreateConfig(dir);
+      const mode = (await stat(configPathFor(dir))).mode & 0o777;
+      expect(mode).toBe(0o600);
+    },
+  );
 
   it('round-trips through render and parse', () => {
     const config = {

@@ -185,22 +185,26 @@ describe('what governs an agent, reached some other way', () => {
     expect(ruled(line)).not.toContain('deny');
   });
 
-  it('follows a link into ~/.memnox to where it really lands', async () => {
-    const { mkdtemp, mkdir, symlink } = await import('node:fs/promises');
-    const { tmpdir } = await import('node:os');
-    const { join } = await import('node:path');
-    const root = await mkdtemp(join(tmpdir(), 'memnox-protect-'));
-    await mkdir(join(root, 'home', '.memnox', 'grants'), { recursive: true });
-    await mkdir(join(root, 'project'));
-    await symlink(join(root, 'home', '.memnox'), join(root, 'project', 'g'));
+  // Creating a symlink on Windows needs admin rights or developer mode, which a runner may lack.
+  it.skipIf(process.platform === 'win32')(
+    'follows a link into ~/.memnox to where it really lands',
+    async () => {
+      const { mkdtemp, mkdir, symlink } = await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const root = await mkdtemp(join(tmpdir(), 'memnox-protect-'));
+      await mkdir(join(root, 'home', '.memnox', 'grants'), { recursive: true });
+      await mkdir(join(root, 'project'));
+      await symlink(join(root, 'home', '.memnox'), join(root, 'project', 'g'));
 
-    const verdict = gate().evaluate({
-      action: 'filesystem.write',
-      toolClass: 'write',
-      target: join(root, 'project', 'g', 'grants', 'session.json'),
-    });
-    expect(verdict.effect).toBe('deny');
-  });
+      const verdict = gate().evaluate({
+        action: 'filesystem.write',
+        toolClass: 'write',
+        target: join(root, 'project', 'g', 'grants', 'session.json'),
+      });
+      expect(verdict.effect).toBe('deny');
+    },
+  );
 });
 
 /* Who an agent is and who it works for are what the rules decide on, so an agent that
