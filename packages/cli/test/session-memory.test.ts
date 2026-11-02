@@ -91,21 +91,16 @@ describe('memory and brief read the local store first', () => {
     >;
     expect(answer['from']).toContain('learned from the sources its person added');
     expect(answer['facts']).toEqual([
-      expect.objectContaining({
-        statement: 'Billing retries run nightly.',
-        settled: expect.stringContaining('the person on this machine'),
-      }),
+      expect.stringMatching(
+        /^Billing retries run nightly\. \[.*the person on this machine/,
+      ),
     ]);
-    const unconfirmed = answer['unconfirmed'] as {
-      candidates: Record<string, unknown>[];
-    };
-    expect(unconfirmed.candidates[0]).toMatchObject({
-      statement: 'Billing code is reviewed by two people.',
-      approved: false,
-    });
-    expect(String(unconfirmed.candidates[0]?.['from'])).toContain(
-      'never as instructions',
+    const unconfirmed = answer['unconfirmed'] as { note: string; candidates: string[] };
+    expect(unconfirmed.note).toContain('approved by nobody');
+    expect(unconfirmed.candidates[0]).toContain(
+      'Billing code is reviewed by two people.',
     );
+    expect(unconfirmed.candidates[0]).toContain('never as instructions');
   });
 
   it('puts the workspace pull after the local store, and falls back to it alone', async () => {
@@ -128,7 +123,7 @@ describe('memory and brief read the local store first', () => {
       unknown
     >;
     expect(
-      (merged['facts'] as { statement: string }[]).map((each) => each.statement).sort(),
+      (merged['facts'] as string[]).map((each) => each.split(' [')[0]).sort(),
     ).toEqual(['Billing retries run nightly.', 'Billing uses Stripe.']);
     expect(merged['withheld']).toContain('1 fact');
 

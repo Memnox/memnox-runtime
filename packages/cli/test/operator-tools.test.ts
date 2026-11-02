@@ -481,7 +481,9 @@ describe('a question about the workspace', () => {
     );
     expect(await callOperatorTool(deps, SEAMS, 'memory', {})).toMatchObject({
       held: 1,
-      facts: [{ statement: 'The billing service is owned by Engineering.' }],
+      facts: [
+        expect.stringContaining('The billing service is owned by Engineering. [f_owner;'),
+      ],
     });
   });
 });
