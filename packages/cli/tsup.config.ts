@@ -10,6 +10,7 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/bin/mcp-proxy.ts',
+    'src/bin/mcp-remote.ts',
     'src/bin/shell.ts',
     'src/bin/intercept.ts',
     'src/bin/git-credential.ts',

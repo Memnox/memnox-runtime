@@ -22,6 +22,38 @@ export function managedServerFor(mcpUrl: string, token: string): ManagedServer {
   };
 }
 
+/**
+ * The same server for an agent whose config starts only a command, such as Claude Desktop, which skips an entry
+ * naming a URL as not a server at all. The credential rides in its environment, where no process listing shows it.
+ */
+export interface ManagedBridge {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+/** Either shape; only JSON configs are ever given the command, since only Claude Desktop needs it. */
+export type ManagedEntry = ManagedServer | ManagedBridge;
+
+/** How the bridge is started: the node running this memnox and the script beside it, so no PATH is needed. */
+export interface BridgeLaunch {
+  command: string;
+  args: string[];
+}
+
+export function managedBridgeFor(
+  mcpUrl: string,
+  token: string,
+  launch: BridgeLaunch,
+  authorizationEnv: string,
+): ManagedBridge {
+  return {
+    command: launch.command,
+    args: [...launch.args, mcpUrl],
+    env: { [authorizationEnv]: `Bearer ${token}` },
+  };
+}
+
 export interface RewriteResult {
   /** The config as it should now be written, or null where it cannot be. */
   next: string | null;

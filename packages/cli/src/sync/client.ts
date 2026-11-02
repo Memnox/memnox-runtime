@@ -96,6 +96,19 @@ export async function callCloud<T>(request: CloudRequest): Promise<CloudResponse
   }
 }
 
+/**
+ * One MCP message to the workspace, answered as the raw response, since an answer can come back as an event stream
+ * that only the caller reads. For the bridge an agent such as Claude Desktop starts, which only runs once onboarded.
+ */
+export async function relayToCloud(
+  url: string,
+  init: { method: 'POST' | 'DELETE'; headers: Record<string, string>; body?: string },
+): Promise<Response> {
+  const insecure = insecureBaseUrl(url);
+  if (insecure !== null) throw new CloudUnreachable(insecure);
+  return fetch(url, init);
+}
+
 function headersFor(request: CloudRequest, hasBody: boolean): Record<string, string> {
   const headers: Record<string, string> = { accept: 'application/json' };
   if (request.token !== undefined) {

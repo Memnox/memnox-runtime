@@ -10,6 +10,12 @@ export const PROXY_BINARY = 'memnox-mcp-proxy';
 /** Memnox's own session server: it answers from the ledger, so a proxy in front of it would govern itself. */
 export const SESSION_BINARY = 'memnox-session';
 
+/**
+ * Where the workspace bridge an agent such as Claude Desktop starts reads its credential, which also marks the
+ * entry as Memnox's own, since the bridge is started by node and its command names nothing.
+ */
+export const REMOTE_BRIDGE_ENV = 'MEMNOX_MCP_AUTHORIZATION';
+
 /** Which agent launched the proxy, written into the line so the proxy can say. */
 export const AGENT_FLAG = '--agent';
 
@@ -30,7 +36,11 @@ export interface WrapPlan {
 }
 
 /** A launch line as any caller holds it, whether read from a config or a scan. */
-type LaunchLine = Pick<ServerLaunch, 'command'> & { args: readonly string[] };
+// The environment is read loosely, since a scan holds only the names of its variables.
+type LaunchLine = Pick<ServerLaunch, 'command'> & {
+  args: readonly string[];
+  env?: unknown;
+};
 
 /**
  * Whether this entry is a command a proxy could stand in front of. `ServerLaunch` is a
@@ -41,9 +51,19 @@ function isLaunch(launch: LaunchLine): boolean {
   return typeof launch.command === 'string' && Array.isArray(launch.args);
 }
 
-/** Whether this line starts Memnox's own session server, which is never wrapped. */
+function bridgeEnv(env: unknown): boolean {
+  return typeof env === 'object' && env !== null && REMOTE_BRIDGE_ENV in env;
+}
+
+/** Whether this line starts Memnox's own session server or workspace bridge, neither of which is ever wrapped. */
 export function isOwnServer(launch: LaunchLine): boolean {
   if (!isLaunch(launch)) return false;
+  if (
+    Array.isArray(launch.env)
+      ? launch.env.includes(REMOTE_BRIDGE_ENV)
+      : bridgeEnv(launch.env)
+  )
+    return true;
   return launch.command.split(/[\\/]/).pop() === SESSION_BINARY;
 }
 
