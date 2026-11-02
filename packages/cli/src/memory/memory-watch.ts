@@ -1,13 +1,15 @@
-import { existsSync, watch, type FSWatcher } from 'node:fs';
+import { existsSync, mkdirSync, statSync, watch, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import {
   CURSOR_RULES_DIR,
   CURSOR_RULES_FILE,
   INSTRUCTION_FILES,
+  isCallSource,
   isFileSource,
   MEMORY_SOURCE_KIND,
   memoryDatabasePathFor,
   SqliteMemoryStore,
+  toolCallsRootFor,
   type MemorySourceRecord,
 } from '@memnox/core';
 
@@ -64,14 +66,48 @@ export class MemoryWatch {
   rewatch(): void {
     this.close();
     // A machine that never added a source has no database, and watching creates none.
-    if (!existsSync(memoryDatabasePathFor(this.home))) return;
-    const store = SqliteMemoryStore.forHome(this.home);
-    const sources = store.sources().filter((each) => isFileSource(each.kind));
-    store.close();
-    for (const source of sources) this.follow(source);
+    if (existsSync(memoryDatabasePathFor(this.home))) {
+      const store = SqliteMemoryStore.forHome(this.home);
+      const sources = store
+        .sources()
+        .filter((each) => isFileSource(each.kind) && !isCallSource(each.kind));
+      store.close();
+      for (const source of sources) this.follow(source);
+    }
+    this.followCalls();
+  }
+
+  /**
+   * Every agent's calls in one watch, since a hook or a session server starts a new app's source
+   * without asking the daemon, and the folder a call lands in is named by its source.
+   */
+  private followCalls(): void {
+    const root = toolCallsRootFor(this.home);
+    try {
+      mkdirSync(root, { recursive: true, mode: 0o700 });
+    } catch (err) {
+      this.deps.log(`Memory is not keeping agents' calls: ${String(err)}`);
+      return;
+    }
+    const start = this.deps.watch ?? watch;
+    try {
+      this.watchers.push(
+        start(root, { recursive: true }, (_event, name) => {
+          const sourceId = name === null ? '' : (String(name).split(/[\\/]/)[0] ?? '');
+          if (sourceId !== '' && !isHidden(sourceId)) this.schedule(sourceId);
+        }),
+      );
+    } catch (err) {
+      this.deps.log(`Memory is not watching ${root}: ${String(err)}`);
+    }
   }
 
   private follow(source: MemorySourceRecord): void {
+    // One file picked is watched as itself, since nothing beside it belongs to the source.
+    if (isOneFile(source.location)) {
+      this.open(source.location, false, () => true, source.id);
+      return;
+    }
     if (source.kind !== MEMORY_SOURCE_KIND.INSTRUCTIONS) {
       this.open(
         source.location,
@@ -126,6 +162,14 @@ export class MemoryWatch {
   private close(): void {
     for (const watcher of this.watchers) watcher.close();
     this.watchers = [];
+  }
+}
+
+function isOneFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
   }
 }
 

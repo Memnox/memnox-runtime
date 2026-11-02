@@ -11,10 +11,12 @@ import {
   markdownPassages,
   MEMORY_SCOPE,
   MEMORY_SOURCE_KIND,
+  MOST_FILE_BYTES,
   memoryExtractPrompt,
   memorySourceFor,
   parseExtraction,
   passageDigest,
+  SKIP_REASON,
   SOURCE_TRUST,
   trustOf,
   validatePolicyDocument,
@@ -115,6 +117,42 @@ describe('folder sources', () => {
     const read = await source.read(ref);
     expect(read?.passages[0]?.heading).toBe('Deploys');
     expect(trustOf(MEMORY_SOURCE_KIND.NOTION_EXPORT)).toBe(SOURCE_TRUST.TAINTED);
+  });
+});
+
+describe('a source of one picked file', () => {
+  it('reads only that note, named from the folder it sits in', async () => {
+    const root = await folder({ 'README.md': NOTE, 'other.md': '# Other' });
+    const source = folderSource(MEMORY_SOURCE_KIND.MARKDOWN, join(root, 'README.md'));
+    if (source === null) throw new Error('a note is a file source');
+    const listed = await source.list();
+    expect(listed.map((each) => each.document)).toEqual(['README.md']);
+    const [ref] = listed;
+    if (ref === undefined) throw new Error('one note');
+    expect((await source.read(ref))?.passages.length).toBeGreaterThan(0);
+  });
+
+  it('reads one CLAUDE.md, and nothing from a picked file that is not an instruction file', async () => {
+    const root = await folder({
+      'CLAUDE.md': '# Rules\nRun pnpm test.',
+      'notes.md': '# Notes',
+    });
+    const one = folderSource(MEMORY_SOURCE_KIND.INSTRUCTIONS, join(root, 'CLAUDE.md'));
+    expect((await one?.list())?.map((each) => each.document)).toEqual(['CLAUDE.md']);
+    const not = folderSource(MEMORY_SOURCE_KIND.INSTRUCTIONS, join(root, 'notes.md'));
+    expect(await not?.list()).toEqual([]);
+  });
+
+  it('says a note too large to read was passed over', async () => {
+    const root = await folder({
+      'small.md': '# Small',
+      'dump.md': 'x'.repeat(MOST_FILE_BYTES + 1),
+    });
+    const source = folderSource(MEMORY_SOURCE_KIND.MARKDOWN, root);
+    expect((await source?.list())?.map((each) => each.document)).toEqual(['small.md']);
+    expect(source?.skipped?.()).toEqual([
+      { document: 'dump.md', reason: SKIP_REASON.TOO_LARGE },
+    ]);
   });
 });
 

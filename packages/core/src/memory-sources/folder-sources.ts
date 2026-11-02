@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { basename, extname, join, relative, sep } from 'node:path';
+import { basename, dirname, extname, join, relative, sep } from 'node:path';
 
 import { withoutNativeBlock } from '../distribute/native-files';
 import {
@@ -12,18 +12,19 @@ import { markdownPassages } from './markdown';
 import {
   changedOf,
   MEMORY_SOURCE_KIND,
+  SKIP_REASON,
   trustOf,
   type MemorySource,
   type MemorySourceKind,
   type SourceDocument,
   type SourceDocumentRef,
+  type SkippedDocument,
   type SourceTrust,
 } from './memory-source';
 
 /**
- * The sources that are files on this machine: an Obsidian vault, a folder of Markdown, a Notion
- * export, and the instruction files agents read in one repository. Each walk is bounded in files
- * and in bytes, and never follows into a dot folder, so `.obsidian` and `.git` are not read.
+ * The sources that are files on this machine: a vault, a Markdown folder, a Notion export, a repo's agent files,
+ * or one picked file. Walks are bounded in files and bytes and skip dot folders, so `.obsidian` and `.git` stay unread.
  */
 
 /** More notes than anybody points at by hand; past it the rest is not read. */
@@ -44,9 +45,9 @@ export function folderSource(kind: MemorySourceKind, root: string): MemorySource
   switch (kind) {
     case MEMORY_SOURCE_KIND.OBSIDIAN:
     case MEMORY_SOURCE_KIND.MARKDOWN:
-      return new FolderSource(kind, root, () => walk(root));
+      return new FolderSource(kind, root, () => markdownUnder(root));
     case MEMORY_SOURCE_KIND.NOTION_EXPORT:
-      return new FolderSource(kind, root, () => walk(root), notionTitle);
+      return new FolderSource(kind, root, () => markdownUnder(root), notionTitle);
     case MEMORY_SOURCE_KIND.INSTRUCTIONS:
       // What Memnox carried in from the other agents' files is theirs already, so it is not read twice.
       return new FolderSource(
@@ -63,6 +64,8 @@ export function folderSource(kind: MemorySourceKind, root: string): MemorySource
 
 class FolderSource implements MemorySource {
   readonly trust: SourceTrust;
+  /** What the last list left out, and why, so a read can say it rather than pass over it. */
+  private left: SkippedDocument[] = [];
 
   constructor(
     readonly kind: MemorySourceKind,
@@ -75,20 +78,32 @@ class FolderSource implements MemorySource {
   }
 
   async list(): Promise<SourceDocumentRef[]> {
+    const base = await baseOf(this.root);
+    const files = await this.files();
     const found: SourceDocumentRef[] = [];
-    for (const path of (await this.files()).slice(0, MOST_DOCUMENTS)) {
+    const skipped: SkippedDocument[] = [];
+    for (const path of files.slice(0, MOST_DOCUMENTS)) {
       const info = await stat(path).catch(() => null);
-      if (info === null || !info.isFile() || info.size > MOST_FILE_BYTES) continue;
-      found.push({
-        document: relativeOf(this.root, path),
-        stamp: `${info.mtimeMs}:${info.size}`,
-      });
+      if (info === null || !info.isFile()) continue;
+      const document = relativeOf(base, path);
+      if (info.size > MOST_FILE_BYTES) {
+        skipped.push({ document, reason: SKIP_REASON.TOO_LARGE });
+        continue;
+      }
+      found.push({ document, stamp: `${info.mtimeMs}:${info.size}` });
     }
+    for (const path of files.slice(MOST_DOCUMENTS))
+      skipped.push({ document: relativeOf(base, path), reason: SKIP_REASON.PAST_LIMIT });
+    this.left = skipped;
     return found;
   }
 
+  skipped(): SkippedDocument[] {
+    return this.left;
+  }
+
   async read(ref: SourceDocumentRef): Promise<SourceDocument | null> {
-    const path = join(this.root, ref.document);
+    const path = join(await baseOf(this.root), ref.document);
     const info = await stat(path).catch(() => null);
     if (info === null || !info.isFile() || info.size > MOST_FILE_BYTES) return null;
     const read = await readFile(path, 'utf8').catch(() => null);
@@ -111,7 +126,20 @@ function relativeOf(root: string, path: string): string {
   return relative(root, path).split(sep).join('/');
 }
 
-/** Markdown under a folder, breadth first and bounded, never into a dot folder. */
+/** The folder a source's documents are named from: the location, or the folder holding the one file picked. */
+async function baseOf(root: string): Promise<string> {
+  const info = await stat(root).catch(() => null);
+  return info !== null && info.isFile() ? dirname(root) : root;
+}
+
+/** The file itself when one was picked, or the Markdown under the folder. */
+async function markdownUnder(root: string): Promise<string[]> {
+  const info = await stat(root).catch(() => null);
+  if (info !== null && info.isFile()) return isMarkdown(root) ? [root] : [];
+  return walk(root);
+}
+
+/** Markdown under a folder, breadth first, never into a dot folder; one past the bound says more was there. */
 async function walk(root: string): Promise<string[]> {
   const found: string[] = [];
   let level = [root];
@@ -124,7 +152,7 @@ async function walk(root: string): Promise<string[]> {
         const path = join(dir, entry.name);
         if (entry.isDirectory()) next.push(path);
         else if (entry.isFile() && isMarkdown(entry.name)) found.push(path);
-        if (found.length >= MOST_DOCUMENTS) return found;
+        if (found.length > MOST_DOCUMENTS) return found;
       }
     }
     level = next;
@@ -132,12 +160,14 @@ async function walk(root: string): Promise<string[]> {
   return found;
 }
 
-function isMarkdown(name: string): boolean {
+export function isMarkdown(name: string): boolean {
   return MARKDOWN_EXTENSIONS.includes(extname(name).toLowerCase());
 }
 
-/** The instruction files that are there, and every rule file under `.cursor/rules`. */
+/** The instruction files that are there, and every rule file under `.cursor/rules`; or the one file picked. */
 async function instructionFiles(root: string): Promise<string[]> {
+  const info = await stat(root).catch(() => null);
+  if (info !== null && info.isFile()) return isInstructionFile(root) ? [root] : [];
   const rules = join(root, CURSOR_RULES_DIR);
   const entries = await readdir(rules, { withFileTypes: true }).catch(() => []);
   return [
@@ -146,6 +176,15 @@ async function instructionFiles(root: string): Promise<string[]> {
       .filter((entry) => entry.isFile() && isMarkdown(entry.name))
       .map((entry) => join(rules, entry.name)),
   ];
+}
+
+/** CLAUDE.md, AGENTS.md and the rest by name, or a Cursor rule file, which is what an instructions source reads. */
+export function isInstructionFile(path: string): boolean {
+  const name = basename(path);
+  return (
+    [...INSTRUCTION_FILES, CURSOR_RULES_FILE].includes(name) ||
+    extname(name).toLowerCase() === '.mdc'
+  );
 }
 
 /** A Notion page's title without the id Notion appends, which nobody wrote. */

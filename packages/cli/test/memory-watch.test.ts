@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import type { FSWatcher, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +8,7 @@ import {
   MEMORY_SOURCE_KIND,
   SOURCE_TRUST,
   SqliteMemoryStore,
+  toolCallsRootFor,
 } from '@memnox/core';
 import { MemoryWatch, rewatchMemory } from '../src/memory/memory-watch';
 
@@ -85,7 +86,13 @@ describe('the memory watcher', () => {
       watch: fake.watch,
     });
     watcher.start();
-    expect(fake.paths).toEqual(['/vault', '/repo', join('/repo', '.cursor', 'rules')]);
+    const calls = toolCallsRootFor(home);
+    expect(fake.paths).toEqual([
+      '/vault',
+      '/repo',
+      join('/repo', '.cursor', 'rules'),
+      calls,
+    ]);
 
     fake.fire('/vault', 'ops.md');
     fake.fire('/vault', 'ops.md');
@@ -102,7 +109,62 @@ describe('the memory watcher', () => {
     again.removeSource('vault', 'y');
     again.close();
     rewatchMemory(home);
-    expect(fake.paths.slice(3)).toEqual(['/repo', join('/repo', '.cursor', 'rules')]);
+    expect(fake.paths.slice(4)).toEqual([
+      '/repo',
+      join('/repo', '.cursor', 'rules'),
+      calls,
+    ]);
+    watcher.stop();
+  });
+
+  it('watches one picked note as itself, and nothing beside it', async () => {
+    vi.useFakeTimers();
+    const home = await mkdtemp(join(tmpdir(), 'memnox-memory-file-'));
+    const note = join(home, 'README.md');
+    await writeFile(note, '# Readme');
+    const store = SqliteMemoryStore.forHome(home);
+    store.putSource({
+      trust: SOURCE_TRUST.TRUSTED,
+      scope: MEMORY_SCOPE.PERSONAL,
+      addedAt: 'x',
+      id: 'note',
+      kind: MEMORY_SOURCE_KIND.MARKDOWN,
+      name: 'README.md',
+      location: note,
+    });
+    store.close();
+    const reads: string[] = [];
+    const fake = fakeWatch();
+    const watcher = new MemoryWatch(home, {
+      read: async (id) => reads.push(id),
+      log: () => undefined,
+      watch: fake.watch,
+    });
+    watcher.start();
+    expect(fake.paths).toEqual([note, toolCallsRootFor(home)]);
+    fake.fire(note, 'README.md');
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(reads).toEqual(['note']);
+    watcher.stop();
+  });
+
+  it('reads the source an agent call landed in, named by its folder, even before any source was added', async () => {
+    vi.useFakeTimers();
+    const home = await mkdtemp(join(tmpdir(), 'memnox-memory-calls-'));
+    const reads: string[] = [];
+    const fake = fakeWatch();
+    const watcher = new MemoryWatch(home, {
+      read: async (id) => reads.push(id),
+      log: () => undefined,
+      watch: fake.watch,
+    });
+    watcher.start();
+    const calls = toolCallsRootFor(home);
+    expect(fake.paths).toEqual([calls]);
+    fake.fire(calls, join('msrc_calls_abc', 'call_1.json'));
+    fake.fire(calls, '.DS_Store');
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(reads).toEqual(['msrc_calls_abc']);
     watcher.stop();
   });
 });

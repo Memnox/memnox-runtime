@@ -8,6 +8,7 @@ import {
   MOST_PASSAGES_PER_BATCH,
   parseExtraction,
   passageDigest,
+  SKIP_REASON,
   SOURCE_TRUST,
   type ExtractedCandidate,
   type ExtractPassage,
@@ -16,6 +17,7 @@ import {
   type MemorySource,
   type MemorySourceRecord,
   type NewMemoryItem,
+  type SkippedDocument,
   type SourceReach,
   type SqliteMemoryStore,
 } from '@memnox/core';
@@ -46,6 +48,12 @@ interface Changed {
   fresh: ExtractPassage[];
 }
 
+/** What a read found changed, and the documents it passed over. */
+interface Found {
+  changed: Changed[];
+  skipped: SkippedDocument[];
+}
+
 type Tally = Omit<MemoryReadSummary, 'sourceId' | 'documents' | 'passages' | 'outdated'>;
 
 export async function readMemorySource(
@@ -57,12 +65,13 @@ export async function readMemorySource(
   const source = memorySourceFor(record, deps.reach);
   if (source === null)
     return failed(store, record, at, 'Nothing can read this source here.');
-  let changed: Changed[];
+  let found: Found;
   try {
-    changed = await changedDocuments(store, record, source);
+    found = await changedDocuments(store, record, source);
   } catch (err) {
     return failed(store, record, at, err instanceof Error ? err.message : String(err));
   }
+  const { changed, skipped } = found;
   const fresh = changed.flatMap((each) => each.fresh).slice(0, MOST_PASSAGES_PER_READ);
   const { tally, answered } = await extractAll(store, record, { fresh, deps, at });
   for (const each of changed) keepDocument(store, record.id, each, answered);
@@ -74,6 +83,7 @@ export async function readMemorySource(
     passages: fresh.length,
     ...tally,
     outdated,
+    ...(skipped.length === 0 ? {} : { skipped }),
   };
 }
 
@@ -82,17 +92,19 @@ async function changedDocuments(
   store: SqliteMemoryStore,
   record: MemorySourceRecord,
   source: MemorySource,
-): Promise<Changed[]> {
+): Promise<Found> {
   const seen = store.documentStamps(record.id);
   const listed = await source.list();
   const present = new Set(listed.map((each) => each.document));
   for (const document of seen.keys())
     if (!present.has(document)) store.dropDocument(record.id, document);
   const changed: Changed[] = [];
+  const skipped = [...(source.skipped?.() ?? [])];
   for (const ref of listed.filter((each) => seen.get(each.document) !== each.stamp)) {
     const read = await source.read(ref);
     if (read === null) {
       store.dropDocument(record.id, ref.document);
+      skipped.push({ document: ref.document, reason: SKIP_REASON.UNREADABLE });
       continue;
     }
     const known = store.knownDigests(record.id, ref.document);
@@ -100,7 +112,7 @@ async function changedDocuments(
     const fresh = passages.filter((each) => !known.has(each.digest));
     changed.push({ document: ref.document, stamp: ref.stamp, passages, fresh });
   }
-  return changed;
+  return { changed, skipped };
 }
 
 function extractPassage(
@@ -178,6 +190,7 @@ function itemOf(
   const cited = candidate.cites
     .map((index) => batch[index])
     .filter((each): each is ExtractPassage => each !== undefined);
+  const by = suggesterOf(cited);
   return {
     kind: candidate.kind,
     statement: candidate.statement,
@@ -188,6 +201,7 @@ function itemOf(
     sourceId: record.id,
     tainted: cited.some((each) => each.tainted),
     confidence: candidate.confidence,
+    ...(by === undefined ? {} : { suggestedBy: by }),
     ...(candidate.rule === undefined ? {} : { rule: candidate.rule }),
     evidence: cited.map((each) => ({
       sourceId: each.sourceId,
@@ -197,6 +211,13 @@ function itemOf(
       digest: each.digest,
     })),
   };
+}
+
+/** The one agent whose calls every cited passage came from, so a fact read out of its calls is its suggestion. */
+function suggesterOf(cited: readonly ExtractPassage[]): string | undefined {
+  const agents = new Set(cited.map((each) => each.by));
+  const [only] = [...agents];
+  return agents.size === 1 && only !== undefined && only !== '' ? only : undefined;
 }
 
 /** The passages read are kept; a document with any left unread keeps no stamp, so it is read again. */
@@ -209,7 +230,11 @@ function keepDocument(
   const unread = changed.fresh.filter((each) => !answered.has(each.digest));
   const kept = changed.passages
     .filter((each) => !unread.includes(each))
-    .map((each) => each.digest);
+    .map((each) => ({
+      digest: each.digest,
+      text: each.text,
+      ...(each.heading === undefined ? {} : { heading: each.heading }),
+    }));
   store.putDocument(
     sourceId,
     changed.document,

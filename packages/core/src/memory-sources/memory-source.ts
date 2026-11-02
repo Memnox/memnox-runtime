@@ -92,6 +92,23 @@ export interface SourceDocumentRef {
   stamp: string;
 }
 
+/** Why a document a source holds was not read, so a read says what it passed over. */
+export const SKIP_REASON = {
+  /** Past the bytes a note may have, so an attachment or a dump. */
+  TOO_LARGE: 'too-large',
+  /** Past the documents one source reads. */
+  PAST_LIMIT: 'past-limit',
+  /** Listed, then gone or not text when it was opened. */
+  UNREADABLE: 'unreadable',
+} as const;
+
+export type SkipReason = (typeof SKIP_REASON)[keyof typeof SKIP_REASON];
+
+export interface SkippedDocument {
+  document: string;
+  reason: SkipReason;
+}
+
 /** A piece of a document under one heading, which is what a citation names. */
 export interface SourcePassage {
   document: string;
@@ -118,6 +135,8 @@ export interface MemorySource {
   read(ref: SourceDocumentRef): Promise<SourceDocument | null>;
   /** Those listed whose stamp moved past the one given, by document. */
   changedSince(seen: ReadonlyMap<string, string>): Promise<SourceDocumentRef[]>;
+  /** What the last list left out and why; absent for a source that leaves nothing out. */
+  skipped?(): SkippedDocument[];
 }
 
 /** The changed half of `list`, shared by every source since a stamp is only ever compared. */

@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
-import { basename, isAbsolute, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import {
   DEFAULT_MCP_MEMORY_TOOL,
+  isCallSource,
+  isInstructionFile,
   isKeptSecretName,
+  isMarkdown,
   MEMORY_SCOPE,
   MEMORY_SOURCE_KIND,
   MEMORY_SOURCE_KINDS,
@@ -11,6 +14,7 @@ import {
   SUPERMEMORY_URL,
   trustOf,
   type MemorySourceInput,
+  type MemorySourceKind,
   type MemorySourceRecord,
   type SqliteMemoryStore,
 } from '@memnox/core';
@@ -31,8 +35,8 @@ export async function addSource(
   input: MemorySourceInput,
   now: Date,
 ): Promise<SourceAdded> {
-  if (!MEMORY_SOURCE_KINDS.includes(input.kind))
-    return { refused: `A source is one of ${MEMORY_SOURCE_KINDS.join(', ')}.` };
+  const kind = kindRefusal(input.kind);
+  if (kind !== null) return kind;
   const placed = await placeOf(home, input);
   if ('refused' in placed) return placed;
   const instructions = input.kind === MEMORY_SOURCE_KIND.INSTRUCTIONS;
@@ -49,25 +53,47 @@ export async function addSource(
         each.server === placed.server,
     );
   if (same !== undefined) return { refused: `${same.name} is already a source.` };
-  const source: MemorySourceRecord = {
+  const source = recordOf(input, placed, now);
+  store.putSource(source);
+  return { source };
+}
+
+function kindRefusal(kind: string): { refused: string } | null {
+  if (!MEMORY_SOURCE_KINDS.includes(kind))
+    return { refused: `A source is one of ${MEMORY_SOURCE_KINDS.join(', ')}.` };
+  // Kept by Memnox from the calls agents make, so a form naming one would point it at any folder.
+  if (isCallSource(kind))
+    return { refused: 'What agents read through their tools is kept by Memnox itself.' };
+  return null;
+}
+
+type Placed =
+  | { refused: string }
+  | (Pick<MemorySourceRecord, 'location'> &
+      Partial<Pick<MemorySourceRecord, 'secret' | 'server' | 'tool' | 'project'>>);
+
+/** The record a placed source is kept as, under a fresh id. */
+function recordOf(
+  input: MemorySourceInput,
+  placed: Exclude<Placed, { refused: string }>,
+  now: Date,
+): MemorySourceRecord {
+  const instructions = input.kind === MEMORY_SOURCE_KIND.INSTRUCTIONS;
+  return {
     id: `msrc_${randomUUID()}`,
     kind: input.kind,
     name: nameOf(input, placed.location),
     trust: trustOf(input.kind),
     // A repository's instruction files are that project's; everything else is the person's own.
     scope: instructions ? MEMORY_SCOPE.PROJECT : MEMORY_SCOPE.PERSONAL,
-    ...(instructions ? { project: placed.location } : {}),
-    ...placed,
+    ...(instructions ? { project: placed.project ?? placed.location } : {}),
+    location: placed.location,
+    ...(placed.secret === undefined ? {} : { secret: placed.secret }),
+    ...(placed.server === undefined ? {} : { server: placed.server }),
+    ...(placed.tool === undefined ? {} : { tool: placed.tool }),
     addedAt: now.toISOString(),
   };
-  store.putSource(source);
-  return { source };
 }
-
-type Placed =
-  | { refused: string }
-  | (Pick<MemorySourceRecord, 'location'> &
-      Partial<Pick<MemorySourceRecord, 'secret' | 'server' | 'tool'>>);
 
 async function placeOf(home: string, input: MemorySourceInput): Promise<Placed> {
   switch (input.kind) {
@@ -76,19 +102,46 @@ async function placeOf(home: string, input: MemorySourceInput): Promise<Placed> 
     case MEMORY_SOURCE_KIND.MCP:
       return serverPlace(home, input);
     default:
-      return folderPlace(input.location);
+      return folderPlace(input.kind, input.location);
   }
 }
 
-async function folderPlace(location: string | undefined): Promise<Placed> {
+async function folderPlace(
+  kind: MemorySourceKind,
+  location: string | undefined,
+): Promise<Placed> {
   if (location === undefined || !isAbsolute(location))
-    return { refused: 'Name the folder by its full path.' };
-  const folder = resolve(location);
-  const info = await stat(folder).catch(() => null);
-  if (info === null || !info.isDirectory())
-    return { refused: `${folder} is not a folder here.` };
+    return { refused: 'Name the folder or the file by its full path.' };
+  const path = resolve(location);
+  const info = await stat(path).catch(() => null);
+  if (info === null) return { refused: `${path} is not here.` };
   // The real path, so a project source matches the repository root a session reads from git.
-  return { location: await realpath(folder) };
+  if (info.isDirectory()) return { location: await realpath(path) };
+  if (!info.isFile()) return { refused: `${path} is neither a folder nor a file.` };
+  const refused = fileRefusal(kind, path);
+  if (refused !== null) return { refused };
+  const file = await realpath(path);
+  // One instruction file belongs to the repository it sits at the top of.
+  return {
+    location: file,
+    ...(kind === MEMORY_SOURCE_KIND.INSTRUCTIONS ? { project: dirname(file) } : {}),
+  };
+}
+
+/** A vault is always a folder, and a picked file must be one its kind reads. */
+function fileRefusal(kind: MemorySourceKind, path: string): string | null {
+  switch (kind) {
+    case MEMORY_SOURCE_KIND.OBSIDIAN:
+      return 'An Obsidian vault is a folder: choose the vault rather than one note.';
+    case MEMORY_SOURCE_KIND.INSTRUCTIONS:
+      return isInstructionFile(path)
+        ? null
+        : `${basename(path)} is not an instruction file. Choose CLAUDE.md, AGENTS.md, GEMINI.md, a Cursor rule, or the repository.`;
+    default:
+      return isMarkdown(path)
+        ? null
+        : `${basename(path)} is not Markdown. Choose a .md or .markdown file, or a folder.`;
+  }
 }
 
 function apiPlace(input: MemorySourceInput): Placed {
