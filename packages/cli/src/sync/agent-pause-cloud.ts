@@ -57,7 +57,7 @@ async function callerOf(home: string): Promise<Caller | null> {
 
 /** The cloud's route for a machine's freeze on itself, which takes the machine from the credential. */
 function machineFreezesPath(caller: Caller, rest = ''): string {
-  return `/v1/workspaces/${encodeURIComponent(caller.workspaceId)}/state/machine-freezes${rest}`;
+  return `/v1/workspaces/${encodeURIComponent(caller.workspaceId)}/conditions/machine-freezes${rest}`;
 }
 
 interface DeclareInput {
