@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { DAY_MS } from '../domain/time';
 import { MEMNOX_HOME } from '../config/config';
 import { OVERLAY_KIND, type Overlay } from './overlay';
 import { readJsonArray, readJsonFile, writeJsonFile } from '../store/json-records';
@@ -57,10 +56,11 @@ export interface OrgConditionsFile {
 }
 
 /**
- * How long an open-ended condition outlives the last successful sync, so a freeze with
- * no end is still liftable: a machine that left the fleet releases it.
+ * Where an open-ended condition is held until. A freeze somebody declared stays in force
+ * until the control plane lifts it, and losing the network is not lifting it; a machine
+ * that leaves the fleet drops the file with its login, which is how it is released.
  */
-export const ORG_CONDITION_GRACE_MS = DAY_MS;
+export const UNTIL_LIFTED = '9999-12-31T23:59:59.999Z';
 
 /** Absent means every subject, and `*` is what a rule names to match one. */
 export const WORKSPACE_WIDE = '*';
@@ -99,9 +99,10 @@ export function orgOverlaysFrom(file: OrgConditionsFile): Overlay[] {
     // The control plane has no reason column, so this says where it came from rather than guess.
     reason: `${condition.kind} declared for this workspace`,
     declaredAt: new Date(condition.fromAt).toISOString(),
-    validUntil: new Date(
-      condition.untilAt ?? file.syncedAt + ORG_CONDITION_GRACE_MS,
-    ).toISOString(),
+    validUntil:
+      condition.untilAt === undefined
+        ? UNTIL_LIFTED
+        : new Date(condition.untilAt).toISOString(),
     source: 'the workspace',
   }));
 }

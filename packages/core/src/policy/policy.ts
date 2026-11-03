@@ -71,6 +71,11 @@ export interface PolicyCarveOut {
   project?: string;
   agents?: string[];
   workingDirectories?: string[];
+  /**
+   * When the exception behind it ends. From then the rule holds again, whether or not
+   * the control plane is reachable to say so.
+   */
+  expiresAt?: string;
 }
 
 /** Per-rule mode. An observed rule matches and is recorded, but never decides. */

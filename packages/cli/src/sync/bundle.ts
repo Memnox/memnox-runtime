@@ -30,6 +30,7 @@ import {
 
 import { registerPolicyFile } from '../policy-registry';
 import { loadablePatterns } from './bundle-patterns';
+import { RUNTIME_CAPABILITIES } from './capabilities';
 import { callCloud } from './client';
 import { keepOrgMcpServers } from './org-mcp';
 import { keepOrgSkills } from './org-skills';
@@ -146,6 +147,8 @@ export async function pullBundle(
     baseUrl: account.baseUrl,
     path: `/v1/workspaces/${account.workspaceId}/bundle`,
     token: account.token,
+    // An exception that ends is sent only to a runtime that ends it, offline too.
+    capabilities: RUNTIME_CAPABILITIES,
     ...(held === undefined ? {} : { ifNoneMatch: held }),
   });
 

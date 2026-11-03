@@ -165,3 +165,72 @@ describe('a carve-out as a rule file carries it', () => {
     expect(() => validatePolicyDocument(document([{}]))).toThrow(PolicyValidationError);
   });
 });
+
+describe('an exception that ends', () => {
+  const ENDS = '2026-12-01T00:00:00.000Z';
+  const timed = new PolicyEngine([
+    {
+      ...denyPush,
+      match: {
+        actions: ['git.push'],
+        unless: [{ agents: ['release-bot'], expiresAt: ENDS }],
+      },
+    },
+  ]);
+
+  it('stands the rule aside until it ends', () => {
+    const before = timed.evaluate(
+      { action: 'git.push' },
+      { agentName: 'release-bot', now: new Date('2026-11-30T00:00:00.000Z') },
+    );
+
+    expect(before.effect).toBe(DECISION_EFFECT.ALLOW);
+  });
+
+  it('holds the rule again once it has ended, with no word from the plane', () => {
+    // A runtime offline for days would otherwise keep an approved exception for ever.
+    const after = timed.evaluate(
+      { action: 'git.push' },
+      { agentName: 'release-bot', now: new Date('2026-12-02T00:00:00.000Z') },
+    );
+
+    expect(after.effect).toBe(DECISION_EFFECT.DENY);
+  });
+
+  it('reads an end it cannot parse as already passed', () => {
+    const broken = new PolicyEngine([
+      {
+        ...denyPush,
+        match: {
+          actions: ['git.push'],
+          unless: [{ agents: ['release-bot'], expiresAt: 'soon' }],
+        },
+      },
+    ]);
+
+    expect(
+      broken.evaluate({ action: 'git.push' }, { agentName: 'release-bot' }).effect,
+    ).toBe(DECISION_EFFECT.DENY);
+  });
+
+  it('is read from a rule file with its end, and refused with a date that is not one', () => {
+    const document = (expiresAt: unknown) => ({
+      version: 1,
+      policies: [
+        {
+          name: 'no-push',
+          match: {
+            actions: ['git.push'],
+            unless: [{ agents: ['release-bot'], expiresAt }],
+          },
+          decision: { effect: 'deny' },
+        },
+      ],
+    });
+
+    expect(validatePolicyDocument(document(ENDS)).policies[0]?.match.unless).toEqual([
+      { agents: ['release-bot'], expiresAt: ENDS },
+    ]);
+    expect(() => validatePolicyDocument(document('soon'))).toThrow(PolicyValidationError);
+  });
+});

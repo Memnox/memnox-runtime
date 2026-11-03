@@ -326,6 +326,7 @@ describe('the census this machine sends', () => {
  * has had was in a hop that each side tested alone and neither tested together.
  */
 describe('a machine pulling from a control plane', () => {
+  let capabilities = '';
   let home: string;
   let server: Server;
   let baseUrl: string;
@@ -338,6 +339,7 @@ describe('a machine pulling from a control plane', () => {
     live.conditions[0]!.untilAt = Date.now() + 60 * 60 * 1000;
 
     server = createServer((request, response) => {
+      capabilities = String(request.headers['x-memnox-capabilities'] ?? '');
       response.setHeader('content-type', 'application/json');
       response.setHeader('etag', `"${live.hash}"`);
       if (request.headers['if-none-match'] === `"${live.hash}"`) {
@@ -364,6 +366,12 @@ describe('a machine pulling from a control plane', () => {
     token: 'tok_1',
     privateKey: 'unused here',
     enrolledAt: new Date().toISOString(),
+  });
+
+  it('says it can end an exception, so the plane sends it the ones that end', async () => {
+    await pullBundle(home, account());
+
+    expect(capabilities.split(',')).toContain('exception-expiry');
   });
 
   it('ends up enforcing what the workspace declared', async () => {

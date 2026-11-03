@@ -221,6 +221,7 @@ function carvedOut(
       carve.agents !== undefined ||
       carve.workingDirectories !== undefined;
     if (!named) return false;
+    if (!stillRunning(carve.expiresAt, context.now)) return false;
     if (carve.project !== undefined && carve.project !== request.projectId) return false;
     // A directory the machine did not report cannot be shown to be inside the exception.
     if (
@@ -234,6 +235,14 @@ function carvedOut(
       matchesAny(carve.workingDirectories, request.workingDirectory)
     );
   });
+}
+
+/** An end that cannot be read has ended, so a malformed date never keeps an exception open. */
+function stillRunning(expiresAt: string | undefined, now: Date | undefined): boolean {
+  if (expiresAt === undefined) return true;
+  const ends = Date.parse(expiresAt);
+  if (Number.isNaN(ends)) return false;
+  return ends > (now ?? new Date()).getTime();
 }
 
 function toMatchedPolicy(policy: Policy): MatchedPolicy {

@@ -30,6 +30,8 @@ interface CloudRequest {
   machineId?: string;
   /** Sent as `If-None-Match`, so an unchanged bundle costs one round trip. */
   ifNoneMatch?: string;
+  /** What of a bundle this runtime can honour, so the plane never sends it more. */
+  capabilities?: readonly string[];
   timeoutMs?: number;
 }
 
@@ -116,6 +118,9 @@ function headersFor(request: CloudRequest, hasBody: boolean): Record<string, str
   }
   if (request.ifNoneMatch !== undefined) {
     headers['if-none-match'] = `"${request.ifNoneMatch}"`;
+  }
+  if (request.capabilities !== undefined && request.capabilities.length > 0) {
+    headers['x-memnox-capabilities'] = request.capabilities.join(',');
   }
   if (hasBody) headers['content-type'] = 'application/json';
 
