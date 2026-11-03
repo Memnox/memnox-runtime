@@ -6,13 +6,13 @@ import { markRevoked, readAccount, writeAccount, accountPathFor } from '@memnox/
 import { onePass } from '../src/sync/heartbeat';
 import {
   applyBundle,
-  documentFrom,
   orgConditionsPath,
   orgPolicyPath,
   overlaysFrom,
   PULL_OUTCOME,
   type Bundle,
 } from '../src/sync/bundle';
+import { documentFrom } from '../src/sync/bundle-document';
 import {
   overlaysInForce,
   UNTIL_LIFTED,

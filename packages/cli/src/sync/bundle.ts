@@ -13,23 +13,19 @@ import {
   readJsonFile,
   writeOrgConditions,
   writeOrgProjects,
-  DECISION_EFFECT,
   HTTP,
-  POLICY_MODE,
   isCredentialRefused,
   type Account,
-  type Alternative,
   type DataPattern,
   type MachineClass,
   type OrgCondition,
   type PolicyCarveOut,
-  type PolicyMatch,
   type OrgConditionsFile,
   type Overlay,
 } from '@memnox/core';
 
 import { registerPolicyFile } from '../policy-registry';
-import { loadablePatterns } from './bundle-patterns';
+import { documentFrom, notEnforcedIn, type RuleNotEnforced } from './bundle-document';
 import { RUNTIME_CAPABILITIES } from './capabilities';
 import { callCloud } from './client';
 import { keepOrgMcpServers } from './org-mcp';
@@ -122,6 +118,8 @@ export interface PullResult {
   hash?: string;
   rules?: number;
   conditions?: number;
+  /** The workspace's rules this machine does not enforce as written, and what it does instead. */
+  notEnforced?: RuleNotEnforced[];
   /** Why a bundle was refused, in the words `doctor` prints. */
   because?: string;
 }
@@ -188,10 +186,11 @@ export async function applyBundle(
   const machineId = here.machineId ?? '';
   const path = orgPolicyPath(home);
   const staging = `${path}.incoming`;
+  const document = documentFrom(bundle, here.machineClass);
   await mkdir(dirname(path), { recursive: true, mode: OWNER_ONLY_DIR });
   await writeFile(
     staging,
-    JSON.stringify(documentFrom(bundle, here.machineClass), null, 2),
+    JSON.stringify(document, null, 2),
     {
       encoding: 'utf8',
       mode: OWNER_ONLY,
@@ -225,6 +224,7 @@ export async function applyBundle(
     hash: bundle.hash,
     rules: bundle.rules.length,
     conditions: bundle.conditions.length,
+    notEnforced: notEnforcedIn(document),
   };
 }
 
@@ -235,234 +235,6 @@ interface BundleMachine {
   machineId?: string;
   /** Without one, only rules that name no kind of machine apply, the narrowest reading. */
   machineClass?: MachineClass;
-}
-
-/** The bundle's rules as the policy document the gate already reads. */
-export function documentFrom(bundle: Bundle, machineClass?: MachineClass): unknown {
-  const classifications = loadablePatterns(bundle.classifications);
-  return {
-    version: 1,
-    // Carried here so the next pull sends it as `If-None-Match` with no second copy.
-    bundleHash: bundle.hash,
-    // The gate registers a policy file's patterns as it loads it, so every seam classifies with them.
-    ...(classifications.length === 0 ? {} : { classifications }),
-    policies: bundle.rules
-      .filter(canHonour)
-      .filter((rule) => holdsOn(rule, machineClass))
-      .flatMap((rule) => {
-        const decision = decisionFor(rule);
-        if (decision === null) return [];
-        return [
-          {
-            name: rule.id,
-            ...(rule.reason === undefined ? {} : { description: rule.reason }),
-            match: {
-              ...matchConditions(rule),
-              actions: actionsOf(rule),
-              ...scopeOf(rule),
-            },
-            decision,
-            ...provenanceOf(rule),
-          },
-        ];
-      }),
-  };
-}
-
-/**
- * Whether a rule holds on this kind of machine. The kind is fixed at enrolment, so the rule is
- * dropped here rather than matched on every call; a machine that never said holds only unscoped rules.
- */
-function holdsOn(rule: BundleRule, machineClass: MachineClass | undefined): boolean {
-  const classes = classesOf(rule);
-  if (classes.length === 0) return true;
-  return machineClass !== undefined && classes.includes(machineClass);
-}
-
-/** Marked as the workspace's, with its project and who decided it, for the gate and for `why`. */
-function provenanceOf(rule: BundleRule): Record<string, unknown> {
-  return {
-    workspace: true,
-    ...(rule.project === undefined ? {} : { project: rule.project }),
-    ...(rule.decidedBy === undefined ? {} : { decidedBy: rule.decidedBy }),
-    ...(rule.decidedAt === undefined ? {} : { decidedAt: rule.decidedAt }),
-  };
-}
-
-const PUBLISHED_REASON = 'the workspace publishes this rule';
-
-/**
- * The rule's decision as the gate reads it, or null where the rule is skipped. An observed
- * rule decides nothing, so it is written as published. Anything else restricted by a field
- * this gate cannot enforce is read strictly: a deny stays, an ask is refused, an allow is skipped.
- */
-function decisionFor(rule: BundleRule): Record<string, unknown> | null {
-  const published = rule.decision ?? { effect: rule.effect };
-  const effect = typeof published.effect === 'string' ? published.effect : rule.effect;
-  const reason = rule.reason ?? PUBLISHED_REASON;
-  const observed = published['mode'] === POLICY_MODE.OBSERVE;
-  const decision = {
-    effect,
-    reason,
-    ...alternativeOf(rule, published),
-    ...recordedFields(published),
-    ...(observed ? { mode: POLICY_MODE.OBSERVE } : {}),
-  };
-  if (observed || !restricted(published)) return decision;
-  // A missing allow never permits more, since the strictest matching rule wins.
-  if (effect === DECISION_EFFECT.ALLOW) return null;
-  if (effect !== DECISION_EFFECT.ASK) return decision;
-  return {
-    ...decision,
-    effect: DECISION_EFFECT.DENY,
-    reason: refusedAsk(reason, published),
-  };
-}
-
-/** Fields this gate enforces as written, each with the values it can enforce. */
-const ENFORCED_AS_WRITTEN: Readonly<Record<string, (value: unknown) => boolean>> = {
-  reason: () => true,
-  alternative: () => true,
-  mode: (value) => value === POLICY_MODE.ENFORCE,
-  // A hold asks whoever is at the terminal, so it can only honour naming nobody.
-  approvers: (value) => Array.isArray(value) && value.length === 0,
-  // A hold takes one answer.
-  minApprovals: (value) => value === 1,
-};
-
-/** Whether the decision names anything this gate would have to ignore to apply it. */
-function restricted(published: BundleDecision): boolean {
-  return Object.entries(published).some(([field, value]) => {
-    if (field === 'effect' || value === null || value === undefined) return false;
-    const enforced = ENFORCED_AS_WRITTEN[field];
-    return enforced === undefined || !enforced(value);
-  });
-}
-
-/** Approvers, quorum and rate limit, kept on the rule where they will validate, never enforced. */
-function recordedFields(published: BundleDecision): Record<string, unknown> {
-  const { approvers, minApprovals, rateLimit } = published;
-  const named =
-    Array.isArray(approvers) && approvers.every((each) => typeof each === 'string');
-  const ceiling =
-    rateLimit !== null &&
-    typeof rateLimit === 'object' &&
-    isPositiveInteger((rateLimit as Record<string, unknown>)['max']) &&
-    isPositiveInteger((rateLimit as Record<string, unknown>)['windowSeconds']);
-  return {
-    ...(named ? { approvers: [...(approvers as string[])] } : {}),
-    ...(isPositiveInteger(minApprovals) ? { minApprovals } : {}),
-    ...(ceiling ? { rateLimit: { ...(rateLimit as Record<string, unknown>) } } : {}),
-  };
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) > 0;
-}
-
-/** Why an ask became a refusal here, naming who the rule wanted asked where it named anybody. */
-function refusedAsk(reason: string, published: BundleDecision): string {
-  const approvers = published['approvers'];
-  const why =
-    Array.isArray(approvers) && approvers.length > 0
-      ? `only ${approvers.map(String).join(', ')} may approve it, and a question here goes to whoever answers first`
-      : 'the rule holds its question to something this machine cannot enforce';
-  return `${reason.replace(/\.\s*$/, '')}. Refused on this machine, because ${why}.`;
-}
-
-/** The whole alternative where it was published whole, or the action named on the rule. */
-function alternativeOf(
-  rule: BundleRule,
-  published: BundleDecision,
-): { alternative?: Alternative } {
-  const whole = published['alternative'];
-  if (whole !== null && typeof whole === 'object' && !Array.isArray(whole)) {
-    const { action, note, resource } = whole as Record<string, unknown>;
-    const readable =
-      typeof action === 'string' &&
-      action !== '' &&
-      typeof note === 'string' &&
-      note !== '' &&
-      (resource === undefined || typeof resource === 'string');
-    if (readable) {
-      return {
-        alternative: { action, note, ...(resource === undefined ? {} : { resource }) },
-      };
-    }
-  }
-  const named = typeof whole === 'string' && whole !== '' ? whole : rule.alternative;
-  return named === undefined ? {} : { alternative: { action: named, note: named } };
-}
-
-/** Every condition key this gate reads; the validator drops any other, which would widen the rule. */
-const MACHINE_CLASSES = 'machineClasses';
-
-const HONOURED_CONDITIONS: ReadonlySet<string> = new Set([
-  'environments',
-  'roles',
-  'principals',
-  'models',
-  'providers',
-  'dataClassifications',
-  'jurisdictions',
-  'branches',
-  'arguments',
-  'content',
-  'aboveAmount',
-  'windows',
-  'scope',
-  'state',
-  'unless',
-] satisfies (keyof PolicyMatch)[]);
-
-/** A rule naming a condition this gate would ignore is skipped: matching less, never more. */
-function canHonour(rule: BundleRule): boolean {
-  return Object.keys(matchConditions(rule)).every((key) => HONOURED_CONDITIONS.has(key));
-}
-
-/**
- * The conditions the gate matches on each call. The machine class is sent among them too, so a
- * runtime that never learned it skips the rule rather than holding a server's rule on a laptop;
- * here it is settled once, at apply time, and taken out of what the gate matches.
- */
-function matchConditions(rule: BundleRule): Record<string, unknown> {
-  const { [MACHINE_CLASSES]: _settledAtApply, ...rest } = rule.conditions ?? {};
-  return rest;
-}
-
-/** The classes a rule holds on, top level or among its conditions, whichever the plane sent. */
-function classesOf(rule: BundleRule): string[] {
-  const listed = rule.conditions?.[MACHINE_CLASSES];
-  const fromConditions = Array.isArray(listed)
-    ? listed.filter((each): each is string => typeof each === 'string')
-    : [];
-  return [...(rule.machineClasses ?? []), ...fromConditions];
-}
-
-/** The patterns a rule really matches, whichever spelling it was sent under. */
-function actionsOf(rule: BundleRule): string[] {
-  if (rule.actions !== undefined && rule.actions.length > 0) return [...rule.actions];
-  return [rule.scopedMatch ?? rule.match];
-}
-
-/** Only the scope a rule carries, so an unscoped rule reads exactly as it always did. */
-function scopeOf(rule: BundleRule): Record<string, unknown> {
-  const unless = [...carveOutsIn(rule.conditions), ...(rule.unless ?? [])];
-  return {
-    ...(rule.targets === undefined ? {} : { targets: [...rule.targets] }),
-    ...(rule.agents === undefined ? {} : { agents: [...rule.agents] }),
-    ...(rule.workingDirectories === undefined
-      ? {}
-      : { workingDirectories: [...rule.workingDirectories] }),
-    ...(unless.length === 0 ? {} : { unless: unless.map((carve) => ({ ...carve })) }),
-  };
-}
-
-/** A rule's own carve-outs and the approved exceptions beside them both hold, so neither is lost. */
-function carveOutsIn(conditions: Record<string, unknown> | undefined): PolicyCarveOut[] {
-  const own = conditions === undefined ? undefined : conditions['unless'];
-  // Shape is the validator's to check; anything but a list is left for it to refuse.
-  return Array.isArray(own) ? (own as PolicyCarveOut[]) : [];
 }
 
 /** Only the conditions that are this machine's: a freeze of one agent names its laptop. */

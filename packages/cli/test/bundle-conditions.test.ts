@@ -6,12 +6,12 @@ import { DECISION_EFFECT, LocalGate, loadPoliciesFromFile } from '@memnox/core';
 
 import {
   applyBundle,
-  documentFrom,
   orgPolicyPath,
   PULL_OUTCOME,
   type Bundle,
   type BundleRule,
 } from '../src/sync/bundle';
+import { documentFrom } from '../src/sync/bundle-document';
 
 /**
  * The team's copy of a rule a machine wrote for itself has to match exactly what the
@@ -138,22 +138,108 @@ describe('a published rule reaches the gate with every condition it was publishe
     expect(deploy('staging')).toBe(DECISION_EFFECT.ALLOW);
   });
 
-  /* The validator drops a match key it does not know, so a condition from a newer control
-     plane would be read as no condition at all: the rule is skipped instead. */
-  it('skips a rule naming a condition this gate cannot honour, rather than widening it', () => {
-    const document = documentFrom(
-      bundleOf([
-        {
-          ...CREDENTIALS_DENY,
-          id: 'r4',
-          match: 'memnox.requires-conditioned-rules',
-          actions: ['filesystem.read'],
-          conditions: { owners: ['ana'] },
-        },
-        CREDENTIALS_DENY,
-      ]),
-    ) as Written;
+  it('holds a rule to its classes and capabilities, which every machine used to skip', async () => {
+    const neverDelete: BundleRule = {
+      ...CREDENTIALS_DENY,
+      id: 'r5',
+      domain: '*',
+      match: 'memnox.requires-conditioned-rules',
+      actions: ['*'],
+      targets: undefined,
+      conditions: { classes: ['destructive'] },
+      reason: 'Never delete anything.',
+    };
+    const askBeforeDeploy: BundleRule = {
+      ...CREDENTIALS_DENY,
+      id: 'r6',
+      domain: '*',
+      effect: DECISION_EFFECT.ASK,
+      match: 'memnox.requires-conditioned-rules',
+      actions: ['*'],
+      targets: undefined,
+      conditions: { capabilities: ['deploy'] },
+      reason: 'Ask before deploying.',
+    };
 
-    expect(document.policies.map((policy) => policy.name)).toEqual([CREDENTIALS_DENY.id]);
+    const result = await applyBundle(home, bundleOf([neverDelete, askBeforeDeploy]));
+    expect(result.notEnforced).toEqual([]);
+    const gate = new LocalGate(await loadPoliciesFromFile(orgPolicyPath(home)), {
+      agentName: 'claude-code',
+    });
+    const decide = (action: string, toolClass: string): string =>
+      gate.evaluate({ action, toolClass }).effect;
+    expect(decide('shell.execute', 'destructive')).toBe(DECISION_EFFECT.DENY);
+    expect(decide('filesystem.read', 'read')).toBe(DECISION_EFFECT.ALLOW);
+    // The capability is read off the action itself, as on every call.
+    expect(decide('vercel.deploy', 'write')).toBe(DECISION_EFFECT.ASK);
+    expect(decide('filesystem.write', 'write')).toBe(DECISION_EFFECT.ALLOW);
+  });
+});
+
+/* The validator drops a match key it does not know, so a condition from a newer control plane
+   would be read as no condition at all. The rule is never written under its own name then: a
+   deny or an ask is asked about instead, wider and named apart, and every one is reported. */
+describe('a rule naming a condition this gate cannot read', () => {
+  const unreadable = (overrides: Partial<BundleRule>): BundleRule => ({
+    ...CREDENTIALS_DENY,
+    id: 'r4',
+    match: 'memnox.requires-conditioned-rules',
+    actions: ['filesystem.read'],
+    conditions: { owners: ['ana'] },
+    ...overrides,
+  });
+
+  it('is asked about instead, under a name of its own, and never written as the rule', () => {
+    const document = documentFrom(bundleOf([unreadable({}), CREDENTIALS_DENY])) as Written & {
+      notEnforced: unknown[];
+    };
+
+    expect(document.policies.map((policy) => policy.name)).toEqual([
+      'r4.asked-instead',
+      CREDENTIALS_DENY.id,
+    ]);
+    const [fallback] = document.policies as unknown as {
+      match: Record<string, unknown>;
+      decision: { effect: string; reason: string };
+    }[];
+    expect(fallback?.match).toEqual({ actions: ['filesystem.read'], targets: CREDENTIAL_TARGETS });
+    expect(fallback?.decision.effect).toBe(DECISION_EFFECT.ASK);
+    expect(fallback?.decision.reason).toContain('cannot read owners');
+    expect(fallback?.decision.reason).toContain('instead of enforcing the rule as written');
+    expect(document.notEnforced).toEqual([
+      { id: 'r4', effect: DECISION_EFFECT.DENY, keys: ['owners'], fallback: 'ask' },
+    ]);
+  });
+
+  it('asks nothing about a rule over every action, which would stop all work, and reports it', () => {
+    const document = documentFrom(bundleOf([unreadable({ actions: ['*'], targets: undefined })])) as Written & {
+      notEnforced: unknown[];
+    };
+    expect(document.policies).toEqual([]);
+    expect(document.notEnforced).toEqual([
+      { id: 'r4', effect: DECISION_EFFECT.DENY, keys: ['owners'], fallback: 'none' },
+    ]);
+  });
+
+  it('skips an allow, which permits nothing by being absent, and reports it', () => {
+    const document = documentFrom(bundleOf([unreadable({ effect: DECISION_EFFECT.ALLOW })])) as Written & {
+      notEnforced: unknown[];
+    };
+    expect(document.policies).toEqual([]);
+    expect(document.notEnforced).toEqual([
+      { id: 'r4', effect: DECISION_EFFECT.ALLOW, keys: ['owners'], fallback: 'none' },
+    ]);
+  });
+
+  it('is returned by the pull, so the heartbeat can say so', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-bundle-unreadable-'));
+    try {
+      const result = await applyBundle(home, bundleOf([unreadable({})]));
+      expect(result.notEnforced).toEqual([
+        { id: 'r4', effect: DECISION_EFFECT.DENY, keys: ['owners'], fallback: 'ask' },
+      ]);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });

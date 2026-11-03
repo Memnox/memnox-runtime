@@ -34,6 +34,7 @@ import {
 import { CLI_VERSION } from '../defaults';
 import { kindOf, listRecords, sponsoredBy } from '../agents/onboarding';
 import { orgPolicyPath, PULL_OUTCOME, pullBundle, type PullResult } from './bundle';
+import { notEnforcedIn, type RuleNotEnforced } from './bundle-document';
 import { callCloud, CloudUnreachable } from './client';
 import {
   applyAnswers,
@@ -106,6 +107,8 @@ interface BeatState {
   holding: PendingApproval[];
   /** Budgets counted across the workspace; a machine budget needs no round trip. */
   asking: Budget[];
+  /** Workspace rules this machine does not enforce as written, read off the rules on disk. */
+  notEnforced: RuleNotEnforced[];
 }
 
 /** What one pass does. The daemon's early passes send, and leave the pulls to the minute or a beat. */
@@ -348,6 +351,7 @@ async function readBeatState(input: {
     asking: fleetBudgets(await readBudgets(home)).filter(
       (budget) => windowHoursOf(budget) > 0,
     ),
+    notEnforced: notEnforcedIn(await readJsonFile<unknown>(orgPolicyPath(home))),
   };
 }
 
@@ -369,6 +373,8 @@ async function heartbeatBody(
     })),
     agents: await enrolledAgents(home, account),
     holding: state.holding.map(describeHeld),
+    // Always sent, empty included, so the workspace can tell this report from a runtime too old to make it.
+    rulesNotEnforced: state.notEnforced,
   };
 }
 

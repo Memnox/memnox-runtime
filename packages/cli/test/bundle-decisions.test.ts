@@ -6,13 +6,13 @@ import { DECISION_EFFECT, LocalGate, loadPoliciesFromFile } from '@memnox/core';
 
 import {
   applyBundle,
-  documentFrom,
   orgPolicyPath,
   PULL_OUTCOME,
   type Bundle,
   type BundleDecision,
   type BundleRule,
 } from '../src/sync/bundle';
+import { documentFrom } from '../src/sync/bundle-document';
 
 /**
  * A published rule's decision reaches the gate whole. The team copy used to keep the effect

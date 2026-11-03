@@ -18,7 +18,7 @@ import {
   type EnvironmentSnapshot,
   type MemnoxEvent,
 } from '@memnox/core';
-const BUNDLE_HASH = '9875db57c4f398bc4b4c99001d7e4f6ecde922c9aceaaa51c8e30751ae319033';
+const BUNDLE_HASH = 'a4a536cea6614d64eaf2d721c675349a7daf858d78f8855b964386a786b60190';
 
 import { applyBundle, orgPolicyPath, pullBundle, type Bundle } from '../src/sync/bundle';
 import type { Account } from '@memnox/core';
