@@ -23,9 +23,19 @@ export const SEAM_STATE = {
 
 export type SeamState = (typeof SEAM_STATE)[keyof typeof SEAM_STATE];
 
+/** What holds a surface: one of Memnox's own seams, or the agent's own hook calling the rules. */
+export const HELD_BY = {
+  SEAM: 'seam',
+  OWN_HOOK: 'own-hook',
+} as const;
+
+export type HeldBy = (typeof HELD_BY)[keyof typeof HELD_BY];
+
 export interface SeamCoverage {
   surface: SurfaceKind;
   state: SeamState;
+  /** Set when held, so a proof of a seam is never counted for a surface the agent's own hook holds. */
+  heldBy?: HeldBy;
   /** What is true, in one line. */
   detail: string;
   /** The command that closes it. Absent when there is nothing to do. */
@@ -98,7 +108,7 @@ function ownHookTools(kind: string, facts: CoverageFacts): HookedTools {
 function hookSeam(surface: SurfaceKind, hooked: HookedTools): SeamCoverage | null {
   const tools = hooked[surface];
   if (tools === undefined) return null;
-  return heldSeam(surface, `its own hook checks every ${tools}`);
+  return { ...heldSeam(surface, `its own hook checks every ${tools}`), heldBy: HELD_BY.OWN_HOOK };
 }
 
 export function coverageFor(
@@ -145,7 +155,7 @@ function desktopCoverage(): SeamCoverage {
 }
 
 function heldSeam(surface: SurfaceKind, detail: string): SeamCoverage {
-  return { surface, state: SEAM_STATE.HELD, detail };
+  return { surface, state: SEAM_STATE.HELD, heldBy: HELD_BY.SEAM, detail };
 }
 
 function openSeam(surface: SurfaceKind, detail: string, next?: string): SeamCoverage {

@@ -37,6 +37,7 @@ import {
   type Surface,
   ACTION,
   agentNameIn,
+  enforcementFailed,
 } from '@memnox/core';
 import { WINDOWS } from '@memnox/interceptors';
 import type { CliContext } from '../cli-context';
@@ -54,6 +55,7 @@ import { readHealth } from '../health-probe';
 import { proveEnforcement, type ProbeContext } from '../verify/enforcement';
 import { renderWindowsCoverage, windowsCoverageOf } from './doctor/windows';
 import { renderEnforcement } from '../verify/enforcement-report';
+import { proveAndRecord } from '../verify/proof-file';
 
 const SEVERITY_WIDTH = 10;
 const CHECK_WIDTH = 14;
@@ -140,12 +142,18 @@ async function runDoctorCommand(deps: DoctorDeps, options: DoctorOptions): Promi
   if (options.json !== true) context.flow.open('memnox doctor');
   // Before --wiring, because what actually happened matters more than what was configured.
   if (options.prove === true) {
-    const proofs = await deps.probe({
-      home: deps.home(),
-      dir: deps.cwd(),
-      env: process.env,
-    });
-    const status = renderEnforcement(context, proofs);
+    // Kept every run, so the heartbeat carries the newest evidence this computer has.
+    const record = await proveAndRecord(
+      { home: deps.home(), dir: deps.cwd(), env: process.env },
+      deps.probe,
+      () => deps.now().getTime(),
+    );
+    if (options.json === true) {
+      context.out.json(record);
+      if (enforcementFailed(record.seams)) process.exitCode = EXIT.FAILED;
+      return;
+    }
+    const status = renderEnforcement(context, record.seams);
     if (status !== EXIT.OK) process.exitCode = status;
     return;
   }

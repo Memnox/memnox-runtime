@@ -35,6 +35,7 @@ export * from './wrap-text';
 export * from './text-server-entries';
 export * from './coverage';
 export * from './enforcement';
+export * from './proof-record';
 export * from './alerts';
 export * from './share-card';
 export * from './health';

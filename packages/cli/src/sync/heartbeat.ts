@@ -3,10 +3,8 @@ import { join } from 'node:path';
 import {
   activitySince,
   discoverDefinitions,
-  ENFORCEMENT_MODE,
   fleetBudgets,
   goesToWorkspace,
-  loadOrCreateConfig,
   MEMNOX_HOME,
   NodeFindingsStore,
   NodeMachineReader,
@@ -14,7 +12,6 @@ import {
   PendingApprovals,
   plainAsk,
   redactSecrets,
-  protectionStopped,
   markRevoked,
   readAccount,
   readAcceptedSkills,
@@ -27,11 +24,14 @@ import {
   type Account,
   type Budget,
   type EnforcementMode,
+  type ProofRecord,
   type PendingApproval,
   type SkillFinding,
 } from '@memnox/core';
 
 import { CLI_VERSION } from '../defaults';
+import { currentSeamDigest, readProofRecord } from '../verify/proof-file';
+import { runningMode } from './running-mode';
 import { kindOf, listRecords, sponsoredBy } from '../agents/onboarding';
 import { orgPolicyPath, PULL_OUTCOME, pullBundle, type PullResult } from './bundle';
 import { notEnforcedIn, type RuleNotEnforced } from './bundle-document';
@@ -109,6 +109,10 @@ interface BeatState {
   asking: Budget[];
   /** Workspace rules this machine does not enforce as written, read off the rules on disk. */
   notEnforced: RuleNotEnforced[];
+  /** The last proof this computer ran on itself, as it reports it. */
+  proof: ProofRecord | null;
+  /** The enforcement path now, so the workspace can tell whether the proof still describes it. */
+  seamDigest: string | undefined;
 }
 
 /** What one pass does. The daemon's early passes send, and leave the pulls to the minute or a beat. */
@@ -326,11 +330,6 @@ async function beat(
   }
 }
 
-/** Off while `memnox stop` holds, since that is what every seam here is running. */
-async function runningMode(home: string): Promise<EnforcementMode> {
-  if (await protectionStopped(home)) return ENFORCEMENT_MODE.OFF;
-  return (await loadOrCreateConfig(home)).mode;
-}
 
 async function readBeatState(input: {
   home: string;
@@ -352,6 +351,19 @@ async function readBeatState(input: {
       (budget) => windowHoursOf(budget) > 0,
     ),
     notEnforced: notEnforcedIn(await readJsonFile<unknown>(orgPolicyPath(home))),
+    ...(await proofAndPath(home)),
+  };
+}
+
+/** The last proof and the path as it stands, read only where a proof exists, since a digest means nothing alone. */
+async function proofAndPath(
+  home: string,
+): Promise<{ proof: ProofRecord | null; seamDigest: string | undefined }> {
+  const proof = await readProofRecord(home);
+  if (proof === null) return { proof, seamDigest: undefined };
+  return {
+    proof,
+    seamDigest: await currentSeamDigest({ home, dir: home, env: process.env }),
   };
 }
 
@@ -375,6 +387,9 @@ async function heartbeatBody(
     holding: state.holding.map(describeHeld),
     // Always sent, empty included, so the workspace can tell this report from a runtime too old to make it.
     rulesNotEnforced: state.notEnforced,
+    // Reported by this computer about itself; the workspace says so wherever it is shown.
+    ...(state.proof === null ? {} : { proof: state.proof }),
+    ...(state.seamDigest === undefined ? {} : { seamDigest: state.seamDigest }),
   };
 }
 

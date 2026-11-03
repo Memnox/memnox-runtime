@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -81,13 +81,18 @@ const DENIED_MARKER = 'Denied by Memnox';
 export async function proveEnforcement(context: ProbeContext): Promise<SeamProof[]> {
   const sandbox = await plantSandbox();
   const env = sandboxEnv(context.env, sandbox);
-  return [
-    await proveMcp(sandbox, env),
-    await proveShell(context.home, sandbox, env),
-    proveGitHook(context.dir),
-    proveOsGuard(context.home),
-    proveEgress(context.env),
-  ];
+  try {
+    return [
+      await proveMcp(sandbox, env),
+      await proveShell(context.home, sandbox, env),
+      proveGitHook(context.dir),
+      proveOsGuard(context.home),
+      proveEgress(context.env),
+    ];
+  } finally {
+    // The rules planted here deny nothing anybody wants, but a probe leaves nothing behind.
+    await rm(sandbox, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -186,8 +191,9 @@ function speak(
 }
 
 /**
- * The shim, asked to run something the rule forbids: `git push --force`, a real action
- * with a real verb table entry, in a scratch directory with no remote, so an unenforced
+ * `git push --force`, a real action with a real verb table entry, run as `git` from PATH
+ * the way an agent's shell runs it, so a pass shows PATH reaches the interceptor and not
+ * only that the interceptor works. A scratch directory with no remote means an unenforced
  * run fails on its own rather than doing anything.
  */
 async function proveShell(
@@ -207,7 +213,7 @@ async function proveShell(
   }
 
   try {
-    const { stdout, stderr } = await run(binary, ['push', '--force', 'origin', 'main'], {
+    const { stdout, stderr } = await run('git', ['push', '--force', 'origin', 'main'], {
       timeout: PROBE_MS,
       cwd: sandbox,
       env: { ...env, MEMNOX_INTERCEPT: INTERCEPT_BINARY },
@@ -227,7 +233,7 @@ function refusedIn(seam: SeamProof['seam'], output: string): SeamProof {
   return {
     seam,
     state: PROOF.NOT_ENFORCED,
-    detail: 'a forbidden command was not refused',
+    detail: 'a forbidden command run from PATH was not refused, so the interceptors are not first on PATH or their rules did not load',
     next: 'memnox doctor --wiring',
   };
 }

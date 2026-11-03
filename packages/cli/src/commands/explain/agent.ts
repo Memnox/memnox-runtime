@@ -1,7 +1,5 @@
 /** One agent: what it reaches, what holds it, and the chains its tools add up to. */
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   combinedCapabilities,
   coverageFor,
@@ -24,17 +22,12 @@ import type {
 } from '@memnox/core';
 import type { CliContext } from '../../cli-context';
 import { TONE, type FlowRow } from '../../flow';
-import { readHealth } from '../../health-probe';
-import { guardProfilePath } from '../../memnox-paths';
-import { holdsOwnPolicyHook } from '../../protect/agent-hooks';
-import { DEFAULT_SHELL, loginPathConfigured } from '../../protect/shell-profile';
 import { offboardCommand, type NamedDormant } from '../../keeper/keep-dormant';
 import type { ScanSeams } from '../../machine-scan';
 import type { Style } from '../../style';
 import { renderAuthority, renderDestinations } from './authority-view';
 
 /** Any one of these set means egress is going through a proxy something can observe. */
-const PROXY_VARS = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy'] as const;
 
 interface RenderAgentInput {
   agent: DiscoveredAgent;
@@ -51,14 +44,6 @@ interface RenderAgentInput {
   asJson: boolean;
 }
 
-/** Where coverage is read from: this directory, this home and this environment. */
-interface CoverageFactsInput {
-  dir: string;
-  home: string;
-  env: NodeJS.ProcessEnv;
-  /** The agent's kind, since its own hook is in its own settings file. */
-  agent: string;
-}
 
 /** What a harness runs rather than what it is, and what holds the agent right now. */
 export function renderAgent(context: CliContext, input: RenderAgentInput): void {
@@ -246,20 +231,3 @@ export async function readLastProbedScan(
   return probed ?? null;
 }
 
-/** The facts coverage is decided from, read fresh, so wiring something up changes the answer. */
-export async function readCoverageFacts(
-  input: CoverageFactsInput,
-): Promise<CoverageFacts> {
-  const { dir, home, env, agent } = input;
-  const health = await readHealth(home, dir, env);
-  return {
-    interceptorsInstalled: health.interceptorsInstalled.length > 0,
-    interceptorsFirstOnPath: health.interceptorDirFirstOnPath,
-    gitHooksInstalled: existsSync(join(dir, '.git', 'hooks', 'pre-push')),
-    osGuardWritten: existsSync(guardProfilePath(home)),
-    egressProxySet: PROXY_VARS.some((name) => (env[name] ?? '') !== ''),
-    loginPathConfigured: await loginPathConfigured(env['SHELL'] ?? DEFAULT_SHELL, home),
-    rulesRegistered: health.registeredFiles.length > 0,
-    ownPolicyHook: await holdsOwnPolicyHook(home, agent),
-  };
-}
