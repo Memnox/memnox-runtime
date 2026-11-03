@@ -64,8 +64,10 @@ export interface ProjectOrganizationView {
   /** The cloud's id, which the project's memory is kept under. */
   id: string;
   name: string;
-  /** `host/owner/name`, which this clone's `origin` reduces to. */
+  /** The project's first repository, `host/owner/name`, which a screen names it by. */
   repository: string;
+  /** Every repository the project spans, this clone's `origin` among them. */
+  repositories: string[];
   description?: string;
   servers: string[];
   skills: string[];

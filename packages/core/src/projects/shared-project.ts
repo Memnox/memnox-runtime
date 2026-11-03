@@ -40,8 +40,13 @@ export interface OrgProject {
   /** The cloud's id, which project memory is keyed on, since a repository keeps it across edits. */
   id: string;
   name: string;
-  /** `host/owner/name`, lower case, as `sharedRepositoryOf` reduces a remote. */
+  /** The first of `repositories`, which a screen names the project by. */
   repository: string;
+  /**
+   * Every repository the project spans, `host/owner/name`, lower case, as
+   * `sharedRepositoryOf` reduces a remote. A clone of any of them is this project.
+   */
+  repositories: string[];
   description?: string;
   mcpServers: string[];
   skills: string[];
@@ -122,11 +127,11 @@ function orgProjectOf(value: unknown): OrgProject | null {
   if (typeof value !== 'object' || value === null) return null;
   // Cast is safe: every field is checked below before it is kept.
   const raw = value as Record<string, unknown>;
-  const { id, name, repository, description, rulePack, memory } = raw;
+  const { id, name, description, rulePack, memory } = raw;
   if (typeof id !== 'string' || id === '' || typeof name !== 'string') return null;
-  if (typeof repository !== 'string') return null;
-  // The cloud sends it reduced already; reducing again refuses a path a hand edit slipped in.
-  if (sharedRepositoryOf(repository) !== repository) return null;
+  const repositories = repositoriesOf(raw);
+  const [repository] = repositories ?? [];
+  if (repositories === null || repository === undefined) return null;
   if (typeof memory !== 'string' || !SHARED_MEMORIES.includes(memory)) return null;
   const mcpServers = textList(raw['mcpServers']);
   const skills = textList(raw['skills']);
@@ -136,6 +141,7 @@ function orgProjectOf(value: unknown): OrgProject | null {
     id,
     name,
     repository,
+    repositories,
     ...(typeof description === 'string' ? { description } : {}),
     mcpServers,
     skills,
@@ -144,6 +150,23 @@ function orgProjectOf(value: unknown): OrgProject | null {
     // Cast is safe: checked against the shared memory scopes above.
     memory: memory as SharedProjectMemory,
   };
+}
+
+/**
+ * The repositories a project spans: the list a current cloud sends, or the one
+ * `repository` an older cloud did. Each must reduce to itself, since the cloud
+ * sends them reduced already and reducing again refuses a path a hand edit slipped in.
+ */
+function repositoriesOf(raw: Record<string, unknown>): string[] | null {
+  const listed = raw['repositories'];
+  const first = raw['repository'];
+  const named = Array.isArray(listed) ? listed : [first];
+  if (!named.every((each) => typeof each === 'string' && sharedRepositoryOf(each) === each)) {
+    return null;
+  }
+  // Sent beside the list for older runtimes, so it must be the list's first, never a second story.
+  if (first !== undefined && first !== named[0]) return null;
+  return [...new Set(named as string[])];
 }
 
 function textList(value: unknown): string[] | null {
@@ -159,7 +182,7 @@ export function sharedProjectFor(
   repository: string | undefined,
 ): OrgProject | undefined {
   if (repository === undefined) return undefined;
-  return projects.find((project) => project.repository === repository);
+  return projects.find((project) => project.repositories.includes(repository));
 }
 
 /** What the organization hands this project once its names are looked up in the same bundle. */

@@ -67,6 +67,7 @@ describe('the project an action belongs to', () => {
         id: 'prj_1',
         name: 'Billing',
         repository: 'github.com/acme/billing',
+        repositories: ['github.com/acme/billing'],
         mcpServers: [],
         skills: [],
         rulePack: 'billing-pack',

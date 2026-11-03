@@ -23,6 +23,7 @@ const API: OrgProject = {
   id: 'proj_1',
   name: 'API',
   repository: 'github.com/acme/api',
+  repositories: ['github.com/acme/api'],
   mcpServers: ['linear', 'gone'],
   skills: ['release'],
   rulePack: 'api',
@@ -103,5 +104,40 @@ describe('shared projects from the bundle', () => {
     expect(await writeOrgProjects(home, [API])).toBe(true);
     expect(await writeOrgProjects(home, [API])).toBe(false);
     expect(await readOrgProjects(home)).toEqual([API]);
+  });
+});
+
+describe('a project spanning several repositories', () => {
+  const SPANNING = {
+    id: 'proj_2',
+    name: 'Shop',
+    repository: 'github.com/acme/shop-web',
+    repositories: ['github.com/acme/shop-web', 'github.com/acme/shop-api'],
+    mcpServers: [],
+    skills: [],
+    memory: 'project',
+  };
+
+  it('is the same project, under the same id, from a clone of any of them', () => {
+    const [project] = orgProjectsFrom([SPANNING]);
+    expect(project?.repositories).toEqual(SPANNING.repositories);
+    expect(sharedProjectFor(orgProjectsFrom([SPANNING]), 'github.com/acme/shop-api')?.id).toBe(
+      'proj_2',
+    );
+    expect(sharedProjectFor(orgProjectsFrom([SPANNING]), 'github.com/acme/shop-web')?.id).toBe(
+      'proj_2',
+    );
+  });
+
+  it('still reads a project an older cloud sent with one repository', () => {
+    const { repositories: _dropped, ...older } = SPANNING;
+    const [project] = orgProjectsFrom([older]);
+    expect(project?.repositories).toEqual(['github.com/acme/shop-web']);
+  });
+
+  it('leaves out one naming a path rather than a remote, rather than half laying it', () => {
+    expect(
+      orgProjectsFrom([{ ...SPANNING, repositories: ['github.com/acme/shop-web', '/home/ada/shop'] }]),
+    ).toEqual([]);
   });
 });

@@ -86,6 +86,7 @@ export function organizationView(
     id: project.id,
     name: project.name,
     repository: project.repository,
+    repositories: [...project.repositories],
     ...(project.description === undefined ? {} : { description: project.description }),
     servers: resolved.servers,
     skills: resolved.skills,
