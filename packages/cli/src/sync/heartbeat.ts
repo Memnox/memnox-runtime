@@ -25,6 +25,8 @@ import {
   type Budget,
   type EnforcementMode,
   type ProofRecord,
+  type HoldClaim,
+  holdImpact,
   type PendingApproval,
   type SkillFinding,
 } from '@memnox/core';
@@ -415,9 +417,16 @@ function describeHeld(each: PendingApproval): Record<string, unknown> {
   // Raised by a shell wrapper, a call has no words written yet, so they are written here.
   const plain = each.plain ?? plainAsk(each.request);
   // Masked again here, since a question raised before masking existed carries its words unmasked.
+  const impact = plain.impact ?? holdImpact(each.request);
   return {
     summary: redactSecrets(plain.summary),
     why: redactSecrets(plain.why),
+    // Each part with how it is known, so no surface shows an inferred claim as a fact.
+    impact: {
+      affected: redactedClaim(impact.affected),
+      undo: redactedClaim(impact.undo),
+      verified: impact.verified.map(redactedClaim),
+    },
     ...(plain.task === undefined ? {} : { task: redactSecrets(plain.task) }),
     ...(each.request.class === undefined ? {} : { class: each.request.class }),
     id: each.id,
@@ -432,6 +441,11 @@ function describeHeld(each: PendingApproval): Record<string, unknown> {
     // The rule by name, so the workspace can put the question to that rule's approvers.
     ...(each.request.rule === undefined ? {} : { ruleId: each.request.rule }),
   };
+}
+
+/** A claim as it leaves the machine, masked again since a target can carry a credential. */
+function redactedClaim(claim: HoldClaim): HoldClaim {
+  return { ...claim, text: redactSecrets(claim.text) };
 }
 
 /** The hash of what is already on disk, so an unchanged bundle costs one 304. */

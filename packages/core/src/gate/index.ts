@@ -17,6 +17,7 @@ export * from './allowances';
 export * from './self-protection';
 export * from './chat-approval';
 export * from './plain-ask';
+export * from './hold-impact';
 export * from './protected-paths';
 export * from './proposals';
 export * from './confirm-key';

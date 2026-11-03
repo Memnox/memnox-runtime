@@ -8,6 +8,7 @@ import {
   agentProofOf,
   seamConfigDigestOf,
   seamTestsOf,
+  type HeldBy,
   type SeamCoverage,
   type SeamProof,
 } from '../src/index';
@@ -18,7 +19,7 @@ import {
  * is a refusal on the route this agent's own calls take.
  */
 
-const held = (surface: SeamCoverage['surface'], heldBy = HELD_BY.SEAM): SeamCoverage => ({
+const held = (surface: SeamCoverage['surface'], heldBy: HeldBy = HELD_BY.SEAM): SeamCoverage => ({
   surface,
   state: SEAM_STATE.HELD,
   heldBy,
