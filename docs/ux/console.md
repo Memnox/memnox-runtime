@@ -2026,7 +2026,7 @@ Answered in the last hour
 
 ### Held call card
 
-`components/machines/held-card.tsx`, with words from `held-words.ts`, grouping from
+`components/held-calls/held-card.tsx`, with words from `held-words.ts`, grouping from
 `held-groups.ts` · reached from: "Waiting on you", the home block "Waiting on you", and an agent's
 own page where it is blocked.
 

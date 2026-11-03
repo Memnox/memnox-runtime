@@ -174,7 +174,7 @@ The bundle route now sends the exact bytes it signed, with `x-memnox-signature: 
 
 ### 5.3 The ask API
 
-`src/machines/held-ask.service.ts` (logic) and `held-ask.controller.ts` (shape checking only).
+`src/held-calls/held-ask.service.ts` (logic) and `held-calls.controller.ts` (shape checking only).
 
 **`POST /v1/workspaces/:ws/held-calls`** takes `operation, argsDigest, agent, sessionId, reason, operationId, waitMinutes`, and optionally `target`, `ruleId` and `callbackUrl`.
 
@@ -373,7 +373,7 @@ Event kinds a cloud agent produces: `agent.session.started`, `agent.action.recor
 
 - `src/crypto/answer-signing.ts`, `keys.controller.ts`, `crypto.providers.ts`
 - `src/bundle/asking-rule.ts`, `bundle.controller.ts`, `bundle.providers.ts`
-- `src/machines/held-ask.service.ts`, `held-ask.controller.ts`, `held-call.ts`, `held-call-store.ts`, `postgres-held-call-store.ts`, `held-call.service.ts`, `held-escalation.service.ts`, `machines.providers.ts`
+- `src/held-calls/held-ask.service.ts`, `held-calls.controller.ts`, `held-call.ts`, `held-call-store.ts`, `postgres-held-call-store.ts`, `held-call.service.ts`, `held-escalation.service.ts`, `machines.providers.ts`
 - `src/mcp/mcp.providers.ts`, `mcp.service.ts`, `mcp.ts`
 - `src/gateway/` (all new), `src/cloud-agents/` (all new)
 - `src/policies/policies.controller.ts`, `rule-capture.service.ts`, `policy-source.ts`
