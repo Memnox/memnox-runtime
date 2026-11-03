@@ -357,7 +357,7 @@ when it asks the voice, and carries out the answer itself.
   event carries `teamAnswer: { callId, answer, label }`, where `answer` is `once`, `session` or
   `deny`. Nothing is answered on this machine.
 - The device that asked carries it out with the workspace: a yes after Face ID or Touch ID,
-  signed over `memnox-confirm:v1:<callId>:<answer>` to `POST /v1/workspaces/:ws/me/held/:id`;
+  signed over `memnox-confirm:v1:<callId>:<answer>` to `POST /v1/workspaces/:ws/me/held-calls/:id/answer`;
   a no unsigned. Then it confirms the proposal here: a yes signed as every remote yes is, a no
   with no signature. Declining the proposal sends nothing to the workspace.
 
