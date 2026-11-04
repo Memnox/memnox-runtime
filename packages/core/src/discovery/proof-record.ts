@@ -5,13 +5,8 @@ import { SURFACE_KIND, type SurfaceKind } from './discovery.constants';
 import { PROOF, type SeamProof } from './enforcement';
 
 /**
- * What `memnox doctor --prove` found, kept as evidence this computer reports about itself.
- * It is never an independent verification: the machine ran the tests and wrote the answer.
- * Three words are kept apart, because each claims less than the next:
- *
- * - installed: something is in place in front of the surface for this agent;
- * - tested: the seam in front of it was asked to refuse an action, whatever came back;
- * - demonstrated: it refused, and the test went the way this agent's own calls go.
+ * What `memnox doctor --prove` found, which the computer reports about itself and nobody checks
+ * independently. Installed, tested and demonstrated are kept apart, each claiming less than the next.
  */
 
 export const PROOF_RECORD_VERSION = 1;
@@ -104,10 +99,8 @@ export function agentProofOf(
 }
 
 /**
- * A digest of every agent's enforcement path: what holds each of its surfaces, read with
- * the facts no process's own environment changes. Wrapping or unwrapping a config, adding
- * or removing a hook, taking the interceptors off the login PATH or emptying the rules all
- * change it, and so end the proof.
+ * A digest of what holds each agent's surfaces, read with facts no process's environment changes.
+ * Wrapping a config, adding a hook, moving PATH or emptying the rules changes it, and ends the proof.
  */
 export function seamConfigDigestOf(
   agents: readonly { id: string; coverage: readonly SeamCoverage[] }[],

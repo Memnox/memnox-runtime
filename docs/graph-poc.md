@@ -55,3 +55,39 @@ compiler needs and a running process does not.
   on the one it is writing. Cache the graph per repository head, since the scan
   is cheap but not free on every write. Keep the Graphify reader only if a
   feature needs its non import relations.
+
+## A second repository, and what it changed
+
+Run on `memnox-client` (`apps/` and `packages/`, 1,097 files), 4 November 2026,
+against the Graphify graph already in that repository, built 325 commits earlier.
+
+| | Builtin scan | Graphify graph |
+|---|---|---|
+| Time | 275 ms to read the files, 18 ms to scan | read from disk |
+| Import edges | 809 | 1,327 |
+| Edges both found | 157 | 157 |
+| Files depending on `apps/app/lib/api.ts` within 3 hops | 0 | 192 |
+
+The builtin scan reads relative imports only, and this repository imports
+through the `@/` path alias, so it found no dependent of the one module every
+console screen calls through. Graphify resolves the alias, and its graph is
+325 commits stale. Of its 6,703 links, 195 are not marked extracted, and the
+reader keeps none of them.
+
+**What this decides.** Neither source is yet good enough to put "what could be
+affected" in front of a person approving an action: one misses every aliased
+import, the other is as old as its last build. So the approval explanation
+names only the target the request carries, and no dependents. The next step is
+resolving `tsconfig` paths in the builtin scan, measured again here before any
+explanation uses it.
+
+**What was not measured.** A Python or a Go repository. The builtin scan reads
+JavaScript and TypeScript only, so for either language Graphify is the only
+source; it was not run here, and its coverage there is unverified.
+
+**What is built.** `graph-snapshot.ts` keeps a graph with the commit it was
+built at, says whether it is current, behind or dirty against the checkout,
+and drops credentials, agents' own settings files and Memnox's own state from
+any graph, since the Graphify graph in `memnox-client` had read a coding
+agent's local settings file. Graphify is never run by the runtime, and its
+semantic mode, which sends file contents to a model, is never used.

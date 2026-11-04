@@ -22,6 +22,13 @@ interface GraphifyLink {
   confidence?: unknown;
 }
 
+/** The commit a Graphify graph says it was built at, where it says one. */
+export function graphifyBuiltAt(parsed: unknown): string | undefined {
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const commit = (parsed as { built_at_commit?: unknown }).built_at_commit;
+  return typeof commit === 'string' && commit !== '' ? commit : undefined;
+}
+
 /**
  * A Graphify `graph.json` as a `CodeGraph`, keeping only extracted import
  * edges between two files. Undefined where the value is not that shape, so a

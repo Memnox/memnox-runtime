@@ -191,10 +191,8 @@ function speak(
 }
 
 /**
- * `git push --force`, a real action with a real verb table entry, run as `git` from PATH
- * the way an agent's shell runs it, so a pass shows PATH reaches the interceptor and not
- * only that the interceptor works. A scratch directory with no remote means an unenforced
- * run fails on its own rather than doing anything.
+ * `git push --force` run as `git` from PATH, the way an agent's shell runs it, so a pass shows PATH
+ * reaches the interceptor; with no remote, an unenforced run fails on its own and does nothing.
  */
 async function proveShell(
   home: string,

@@ -8,11 +8,8 @@ import { TESTS_STANDING, type WorkEvidence } from '../session/work-evidence';
 import type { HoldRequest } from './hold';
 
 /**
- * What a held action could affect, whether it can be undone, and what has
- * actually been verified, each said with how it is known. Recorded is what the
- * request itself carried; inferred is what Memnox reads from the kind of action,
- * which is only ever said as "may"; unknown is said as unknown. Written once
- * here, so every surface shows the same sentences and none can claim more.
+ * What a held action could affect, undo and has verified, each with how it is known: recorded,
+ * inferred and only ever said as "may", or unknown. Written once, so every surface says the same.
  */
 
 export const CLAIM_BASIS = {

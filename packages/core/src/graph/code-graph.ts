@@ -1,8 +1,6 @@
 /**
- * Which files in a repository import which, as a plain graph two sources can
- * fill: the builtin import scan, which needs nothing installed, and a Graphify
- * graph a person already built. The one question asked of it is which files
- * depend on the one an agent is about to change.
+ * Which files import which, filled by the builtin scan or a Graphify graph a person built,
+ * asked one question: which files depend on the one an agent is about to change.
  */
 
 export const CODE_GRAPH_SOURCE = {
