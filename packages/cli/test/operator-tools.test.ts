@@ -7,12 +7,21 @@ import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import {
   ACTION,
+  DECISION_EFFECT,
   DisplayRequests,
   renderNotes,
   SpokenInstructions,
   HOLD_ANSWER,
   MEMNOX_HOME,
+  MEMORY_KIND,
+  MEMORY_ORIGIN,
+  MEMORY_SCOPE,
+  MEMORY_STATUS,
   Milestones,
+  NodeSnapshotStore,
+  SqliteMemoryStore,
+  writeHub,
+  writeHubHealth,
   NodeGit,
   NodeWorktree,
   PendingApprovals,
@@ -27,6 +36,7 @@ import {
   SqliteEventStore,
   type HoldRequest,
   writeWorkspaceMemory,
+  writePolicyDocumentFile,
   type MemnoxEvent,
   VoiceFocusStore,
 } from '@memnox/core';
@@ -36,6 +46,7 @@ import {
   OPERATOR_TOOLS,
 } from '../src/session-tools/operator-tools';
 import { WaitingFeed } from '../src/daemon/waiting-feed';
+import { phoneMayNotAct } from '../src/daemon/done-lines';
 import { FOCUS_STARTED } from '../src/session-tools/focus';
 import { registerPolicyFile } from '../src/policy-registry';
 import { machinePolicyPath } from '../src/protect/machine-rules';
@@ -480,10 +491,260 @@ describe('a question about the workspace', () => {
       expect.arrayContaining(['memory', 'brief']),
     );
     expect(await callOperatorTool(deps, SEAMS, 'memory', {})).toMatchObject({
+      counts: { settled: 1, settledByKind: { ownership: 1 }, unconfirmed: 0 },
       held: 1,
       facts: [
         expect.stringContaining('The billing service is owned by Engineering. [f_owner;'),
       ],
+    });
+  });
+});
+
+describe('a question about the rules', () => {
+  it('counts them first, then reads a few plain lines at a time, filtered by effect or a word', async () => {
+    const deps = await depsAt();
+    const file = machinePolicyPath(deps.home);
+    await mkdir(join(file, '..'), { recursive: true });
+    const rules = Array.from({ length: 10 }, (_, at) => ({
+      name: `ask-shipit-${at}`,
+      match: { actions: [`shipit${at}`] },
+      decision: { effect: DECISION_EFFECT.ASK, reason: 'shipping needs a person' },
+    }));
+    await writePolicyDocumentFile(file, {
+      version: 1,
+      policies: [
+        {
+          name: 'no-push-main',
+          match: { actions: ['git.push*'], branches: ['main'], agents: ['codex-cli'] },
+          decision: { effect: DECISION_EFFECT.DENY, reason: 'main is protected' },
+        },
+        ...rules,
+      ],
+    });
+    await registerPolicyFile(deps.home, file);
+
+    const all = (await callOperatorTool(deps, SEAMS, 'rules_in_force', {})) as {
+      inForce: number;
+      byEffect: Record<string, number>;
+      rules: string[];
+      more: number;
+      next: string;
+    };
+    expect(all.inForce).toBeGreaterThanOrEqual(11);
+    expect(all.byEffect['ask']).toBeGreaterThanOrEqual(10);
+    expect(all.rules.length).toBeLessThan(all.inForce);
+    expect(all.more).toBe(all.inForce - all.rules.length);
+
+    const rest = (await callOperatorTool(deps, SEAMS, 'rules_in_force', {
+      cursor: all.next,
+    })) as { rules: string[] };
+    expect(rest.rules[0]).not.toBe(all.rules[0]);
+
+    const denied = (await callOperatorTool(deps, SEAMS, 'rules_in_force', {
+      effect: 'deny',
+      about: 'codex',
+    })) as { matching: number; rules: string[] };
+    expect(denied.matching).toBe(1);
+    expect(denied.rules[0]).toMatch(
+      /^no-push-main: deny, .*Because main is protected\. .*from added on this .*agents codex-cli/,
+    );
+
+    const deploys = (await callOperatorTool(deps, SEAMS, 'rules_in_force', {
+      about: 'shipit',
+    })) as { matching: number };
+    expect(deploys.matching).toBe(10);
+    expect(
+      await callOperatorTool(deps, SEAMS, 'rules_in_force', { effect: 'maybe' }),
+    ).toMatchObject({ said: expect.stringContaining('allow, ask or deny') });
+  });
+});
+
+describe('a question about what memory holds', () => {
+  async function withMemory(): Promise<SessionToolDeps> {
+    const deps = await depsAt();
+    // Ten skills in Claude Code's folder and one in Codex's, so a page of eight is never the total.
+    const skill = async (agent: string, name: string): Promise<void> => {
+      const dir = join(deps.home, agent, 'skills', name);
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, 'SKILL.md'),
+        `---\nname: ${name}\ndescription: The ${name} skill\n---\n\nDo ${name}.\n`,
+      );
+    };
+    for (let at = 0; at < 10; at += 1) await skill('.claude', `skill-${at}`);
+    await skill('.codex', 'review');
+    await writeHub(deps.home, {
+      version: 1,
+      servers: [
+        {
+          name: 'github',
+          description: 'Pull requests and issues',
+          transport: 'stdio',
+          command: 'gh-mcp',
+          env: {},
+          secrets: {},
+        },
+      ],
+      assignments: [{ server: 'github', agent: 'claude-code' }],
+      written: [],
+    });
+    await writeHubHealth(deps.home, {
+      github: {
+        state: 'healthy',
+        tools: [{ name: 'list_issues' }, { name: 'create_pull_request' }],
+      },
+    });
+    await new NodeSnapshotStore(join(deps.home, MEMNOX_HOME)).save({
+      takenAt: NOW.toISOString(),
+      agents: [
+        { id: 'agt_claude-code', kind: 'claude-code', surfaces: [] },
+        { id: 'agt_cursor', kind: 'cursor', surfaces: [] },
+      ],
+      servers: [
+        {
+          name: 'railway',
+          grantedBy: '~/.cursor/mcp.json',
+          agentIds: ['agt_cursor'],
+          tools: [{ name: 'deploy', effect: 'write' }],
+        },
+        {
+          name: 'mystery',
+          grantedBy: '~/.cursor/mcp.json',
+          agentIds: ['agt_cursor'],
+          tools: [],
+        },
+      ],
+      resources: [],
+    } as never);
+    return deps;
+  }
+
+  it('gives every exact count first, the numbers the memory map draws', async () => {
+    const deps = await withMemory();
+    expect(OPERATOR_TOOLS.map((tool) => tool.name)).toContain('memory_map');
+    const counts = (await callOperatorTool(deps, SEAMS, 'memory_map', {})) as {
+      holds: Record<string, number>;
+      skillsByAgent: Record<string, number>;
+      serversInHub: number;
+    };
+    expect(counts.holds).toMatchObject({
+      skills: 11,
+      servers: 3,
+      memories: 0,
+      sources: 0,
+    });
+    expect(counts.skillsByAgent).toEqual({ 'Claude Code': 10, Codex: 1 });
+    expect(counts.serversInHub).toBe(1);
+  });
+
+  it('pages skill names eight at a time with the total, never a cut list', async () => {
+    const deps = await withMemory();
+    const first = (await callOperatorTool(deps, SEAMS, 'memory_map', {
+      kind: 'skills',
+    })) as {
+      total: number;
+      byAgent: Record<string, number>;
+      names: string[];
+      more: number;
+      next: string;
+      read: string;
+    };
+    expect(first).toMatchObject({ total: 11, more: 3, next: '8' });
+    expect(first.names).toHaveLength(8);
+    expect(first.names[0]).toMatch(/^review\b.*\(Codex\)$/);
+    expect(first.read).toContain('never say the list was cut off');
+    const rest = (await callOperatorTool(deps, SEAMS, 'memory_map', {
+      kind: 'skills',
+      cursor: first.next,
+    })) as { names: string[]; more?: number };
+    expect(rest.names).toHaveLength(3);
+    expect(rest.more).toBeUndefined();
+    expect(
+      await callOperatorTool(deps, SEAMS, 'memory_map', {
+        kind: 'skills',
+        agent: 'codex',
+      }),
+    ).toMatchObject({
+      total: 11,
+      matching: 1,
+      names: [expect.stringMatching(/^review\b/)],
+    });
+  });
+
+  it('lists every server with its agents and what it can do, saying so only where nothing is known', async () => {
+    const deps = await withMemory();
+    const servers = (await callOperatorTool(deps, SEAMS, 'memory_map', {
+      kind: 'mcp',
+    })) as {
+      kind: string;
+      total: number;
+      inHub: number;
+      names: string[];
+    };
+    expect(servers).toMatchObject({ kind: 'servers', total: 3, inHub: 1 });
+    expect(servers.names).toEqual([
+      'github: Pull requests and issues; offers list_issues, create_pull_request (Claude Code; in the MCP Hub)',
+      'mystery: nothing known yet of what it can do (Cursor)',
+      'railway: offers deploy (Cursor)',
+    ]);
+    expect(
+      await callOperatorTool(deps, SEAMS, 'memory_map', {
+        kind: 'servers',
+        about: 'deploy',
+      }),
+    ).toMatchObject({ matching: 1, names: [expect.stringMatching(/^railway/)] });
+  });
+
+  it('counts what was learned apart from what is still unconfirmed, and reads the settled first', async () => {
+    const deps = await withMemory();
+    const store = SqliteMemoryStore.forHome(deps.home);
+    const learn = (subject: string, statement: string): string => {
+      const outcome = store.add(
+        {
+          kind: MEMORY_KIND.FACT,
+          statement,
+          subject,
+          scope: MEMORY_SCOPE.PERSONAL,
+          origin: MEMORY_ORIGIN.EXTRACTED,
+          tainted: false,
+          evidence: [],
+        },
+        NOW.toISOString(),
+      );
+      return 'added' in outcome ? outcome.added.id : '';
+    };
+    learn('Staging', 'Staging deploys run every night.');
+    const settled = learn('Releases', 'Releases are cut from main.');
+    store.decide(settled, MEMORY_STATUS.VERIFIED, {
+      by: 'person',
+      at: NOW.toISOString(),
+    });
+    store.close();
+
+    expect(await callOperatorTool(deps, SEAMS, 'memory_map', {})).toMatchObject({
+      holds: { memories: 1, unconfirmedMemories: 1 },
+    });
+    expect(
+      await callOperatorTool(deps, SEAMS, 'memory_map', { kind: 'facts' }),
+    ).toMatchObject({
+      kind: 'memories',
+      total: 2,
+      names: [
+        'Releases: Releases are cut from main. (fact)',
+        'Staging: Staging deploys run every night. (fact, unconfirmed)',
+      ],
+    });
+  });
+
+  it('hands the rules to the rules reader and refuses a kind it does not know', async () => {
+    const deps = await withMemory();
+    expect(
+      await callOperatorTool(deps, SEAMS, 'memory_map', { kind: 'rules' }),
+    ).toHaveProperty('inForce');
+    expect(
+      await callOperatorTool(deps, SEAMS, 'memory_map', { kind: 'weather' }),
+    ).toMatchObject({
+      said: expect.stringContaining('skills, servers'),
     });
   });
 });
@@ -866,6 +1127,30 @@ describe('telling an agent what the person said', () => {
     expect(answer).toMatchObject({ sent: false, how: 'not-allowed' });
     expect(answer.said).toContain('Write nothing at all this turn');
     expect(answer.said).toContain('ask you to try again');
+  });
+
+  it('offers a retry once a phone that may not act on the Mac is allowed, and never says it fails the same way', async () => {
+    const base = await waitingInEditor();
+    const deps: SessionToolDeps = {
+      ...base,
+      delivered: async (requestId) => {
+        await new DisplayRequests(base.home).deliver(requestId, {
+          outcome: 'failed',
+          at: NOW.toISOString(),
+          reason: phoneMayNotAct('iPhone'),
+        });
+        return new DisplayRequests(base.home).deliveryOf(requestId);
+      },
+    };
+    const id = await proposed(deps);
+    const answer = (await callOperatorTool(deps, SEAMS, 'send_instruction', {
+      instruction: id,
+    })) as { sent: boolean; how: string; why: string; said: string };
+    expect(answer).toMatchObject({ sent: false, how: 'failed' });
+    expect(answer.why).toContain('drive');
+    expect(answer.said).not.toContain('fails the same way');
+    expect(answer.said).toContain('try again');
+    expect(answer.said).toContain('never tell them to pair it again');
   });
 
   it('sends a used instruction again on a retry rather than reading it back', async () => {

@@ -67,16 +67,12 @@ interface AgentStanding {
 
 /** What the agents here can use, from the last scan and the CLIs Memnox watches. */
 export async function readReach(home: string): Promise<Reach> {
-  const snapshot = await new NodeSnapshotStore(join(home, MEMNOX_HOME))
-    .latest()
-    .catch(() => null);
-  const names = await readNames(home);
-  const agentName = (id: string, kind: string): string => names[id] ?? agentShown(kind);
+  const { snapshot, agentName } = await scanned(home);
   return {
     agents: (snapshot?.agents ?? []).map((agent) => agentName(agent.id, agent.kind)),
-    mcpServers: (snapshot?.servers ?? []).map((server) => ({
-      name: server.name,
-      agents: server.agentIds.map((id) => agentName(id, kindOf(snapshot, id))),
+    mcpServers: serversOf(snapshot, agentName).map(({ name, agents }) => ({
+      name,
+      agents,
     })),
     clis: (await watchedClis(home)).map((cli) => SPOKEN_CLI[cli] ?? cli),
     signedIn: await signedInOf(home),
@@ -89,6 +85,43 @@ export async function readReach(home: string): Promise<Reach> {
         ...(agent.host?.signer === undefined ? {} : { signedBy: agent.host.signer }),
       })),
   };
+}
+
+/** Each MCP server the last scan found, the agents that start it by name, and the tools it was seen to offer. */
+export async function readScannedServers(home: string): Promise<ScannedServer[]> {
+  const { snapshot, agentName } = await scanned(home);
+  return serversOf(snapshot, agentName);
+}
+
+export interface ScannedServer {
+  name: string;
+  agents: string[];
+  tools: string[];
+}
+
+async function scanned(home: string): Promise<{
+  snapshot: EnvironmentSnapshot | null;
+  agentName: (id: string, kind: string) => string;
+}> {
+  const snapshot = await new NodeSnapshotStore(join(home, MEMNOX_HOME))
+    .latest()
+    .catch(() => null);
+  const names = await readNames(home);
+  return {
+    snapshot,
+    agentName: (id, kind) => names[id] ?? agentShown(kind),
+  };
+}
+
+function serversOf(
+  snapshot: EnvironmentSnapshot | null,
+  agentName: (id: string, kind: string) => string,
+): ScannedServer[] {
+  return (snapshot?.servers ?? []).map((server) => ({
+    name: server.name,
+    agents: server.agentIds.map((id) => agentName(id, kindOf(snapshot, id))),
+    tools: server.tools.map((tool) => tool.name),
+  }));
 }
 
 /**

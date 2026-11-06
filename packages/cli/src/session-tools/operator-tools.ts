@@ -15,6 +15,8 @@ import { showAgentsTool } from './agents-tool';
 import { commandOutputTool, memnoxCommandTool } from './command-tool';
 import { tracesTool } from './traces-tool';
 import { aboutTool } from './about-tool';
+import { RULES_IN_FORCE_TOOL, rulesInForceTool } from './rules-tool';
+import { MEMORY_MAP_TOOL, memoryMapTool } from './memory-map-tool';
 import { briefTool, workspaceMemoryTool } from './memory-tools';
 import { PEOPLE_TOOL, peopleTool, sourcesTool } from './work-tools';
 import { PERSONAL_CALLS, PERSONAL_TOOLS } from './personal-catalogue';
@@ -81,7 +83,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ),
   readTool(
     'reach',
-    'What the agents on this machine can use: the agents themselves, each MCP server and which agents start it, and the CLIs Memnox watches, which any agent with a shell can run, and which of those are signed in, so an agent running them acts as the person, and for each agent whether it approves its own actions or asks first and where its program was installed from and who signed it. Answer "is Claude Code connected to Railway" and "which agents act without asking" from here. It knows only this machine, never the apps their workspace connected, such as Gmail, Slack or Linear, which my_accounts lists.',
+    'What the agents on this machine can use: the agents themselves, each MCP server and which agents start it, and the CLIs Memnox watches, which any agent with a shell can run, and which of those are signed in, so an agent running them acts as the person, and for each agent whether it approves its own actions or asks first and where its program was installed from and who signed it. Answer "is Claude Code connected to Railway" and "which agents act without asking" from here; how many MCP servers there are and what each can do is memory_map. It knows only this machine, never the apps their workspace connected, such as Gmail, Slack or Linear, which my_accounts lists.',
   ),
   readTool(
     'cloud_agents',
@@ -142,15 +144,22 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ),
   readTool(
     'memory',
-    `What the person's Memnox Cloud workspace has settled, as this ${MACHINE} last pulled it: decisions, policies, who approves what and who owns what, each with who confirmed it, when and where it came from, and how many facts the workspace holds. Answer "what is in my workspace", "what does the cloud know", "summarise our memory" and "who owns billing" from here, never from the console. Pass about with the key words of their question; leave it out for the newest.`,
+    `What the person's Memnox Cloud workspace has settled, as this ${MACHINE} last pulled it: decisions, policies, who approves what and who owns what, each with who confirmed it, when and where it came from, and how many facts the workspace holds. Also every unconfirmed note, read out of a connected tool or suggested by an agent and approved by nobody, in its own list. counts says how many of each, settled by kind and unconfirmed by the tool it came from, before any line. Answer "what is in my workspace", "what does the cloud know", "summarise our memory" and "who owns billing" from here, never from the console. Pass about with the key words of their question; leave it out for the newest. Lines come a budget at a time: pass next as cursor for more, and a line's id for that one whole.`,
     {
       about: {
         type: 'string',
         description:
           'words or paths the question is about, such as "payment retries" or "src/billing"; the newest when left out',
       },
+      id: { type: 'string', description: 'one memory to read whole, by its line id' },
+      cursor: {
+        type: 'string',
+        description: 'the next an earlier answer gave, for more',
+      },
     },
   ),
+  RULES_IN_FORCE_TOOL,
+  MEMORY_MAP_TOOL,
   readTool(
     'sources',
     `What people actually said, filed or wrote in the systems the workspace connects: Slack and Discord messages, Linear, Jira and GitHub issues, and documents, each with its title, a short excerpt, who wrote it, when and a link, as far as this ${MACHINE} is cleared to read. Each ticket opens with its status, priority and who it is assigned to. Answer "what did we say in Slack", "who said this", "what does Priya have to work on", "what tickets do I have", "how many tickets" and "what is the ticket about" from here, and find a ticket here before an agent works on it.`,
@@ -407,6 +416,8 @@ const OPERATOR_CALLS: Record<string, OperatorCall> = {
   about: (_deps, _seams, args) => aboutTool(args),
   memory: (deps, _seams, args) => workspaceMemoryTool(deps, args),
   sources: (deps, _seams, args) => sourcesTool(deps, args),
+  rules_in_force: (deps, _seams, args) => rulesInForceTool(deps, args),
+  memory_map: (deps, _seams, args) => memoryMapTool(deps, args),
   people: (deps, _seams, args) => peopleTool(deps, args),
   brief: (deps, _seams, args) => briefTool(deps, args),
   command_output: (deps, _seams, args) => commandOutputTool(deps, args),

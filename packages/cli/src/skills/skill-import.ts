@@ -39,7 +39,8 @@ export async function foundDefinitions(
   return discoverDefinitions(new NodeMachineReader(home), roots);
 }
 
-function agentKindOf(agent: string): string {
+/** A found folder names its agent by the folder, which a few agents spell differently from their kind. */
+export function agentKindOf(agent: string): string {
   return KIND_OF[agent] ?? agent;
 }
 

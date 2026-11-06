@@ -343,10 +343,34 @@ export async function workspaceMemoryTool(
     deps.workspaceName?.() ?? null,
     deps.personElsewhere?.() ?? false,
   ]);
+  // Read after memoryTool, which refreshed it, so the counts are of what its lines came from.
+  const held = await readSessionMemory(deps.home, deps.cwd, deps.now());
   // memoryTool always answers with an object; it is typed unknown only because tools answer anything.
   return {
     ...(name === null ? {} : { workspace: name }),
+    ...(held === null ? {} : { counts: memoryCounts(held.memory) }),
     ...(answer as object),
     ...(elsewhere ? { elsewhere: twoWorkspaces(name) } : {}),
   };
+}
+
+/** How much memory holds, said before any line, so a whole store is summed up without being read out. */
+function memoryCounts(memory: WorkspaceMemory): Record<string, unknown> {
+  const unconfirmed = memory.unconfirmed ?? [];
+  return {
+    settled: memory.facts.length,
+    settledByKind: tally(memory.facts.map((fact) => fact.kind)),
+    unconfirmed: unconfirmed.length,
+    unconfirmedFrom: tally(
+      unconfirmed.flatMap((each) =>
+        each.sources.length === 0 ? ['an agent or a connected tool'] : each.sources,
+      ),
+    ),
+  };
+}
+
+function tally(names: readonly string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const name of names) counts[name] = (counts[name] ?? 0) + 1;
+  return counts;
 }
