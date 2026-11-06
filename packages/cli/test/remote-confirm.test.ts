@@ -70,6 +70,14 @@ interface Held {
   device: DeviceRecord;
 }
 
+/** What a phone held before it paired holding everything, for the tests about one the Mac narrowed. */
+const NARROW = [
+  REMOTE_CAPABILITY.SEE,
+  REMOTE_CAPABILITY.ASK,
+  REMOTE_CAPABILITY.ANSWER,
+  REMOTE_CAPABILITY.STEER,
+];
+
 async function held(request: HoldRequest = PUSH): Promise<Held> {
   const home = await mkdtemp(join(tmpdir(), 'memnox-remote-confirm-'));
   const phone = personKey();
@@ -188,7 +196,7 @@ describe('a yes from a paired phone', () => {
     expect(said).toMatchObject({ ok: false, refused: true });
   });
 
-  it('refuses a rule proposal from a phone that was never given rules', async () => {
+  it('takes a rule proposal from a phone just paired, since a phone pairs holding rules', async () => {
     const call = await held();
     const proposal = await new Proposals(call.home).propose({
       change: {
@@ -211,6 +219,34 @@ describe('a yes from a paired phone', () => {
       principal: from(call.device),
     });
 
+    expect(said).toMatchObject({ ok: true });
+  });
+
+  it('refuses a rule proposal from a phone the Mac took rules back from', async () => {
+    const call = await held();
+    const device = { ...call.device, capabilities: [...NARROW] };
+    await new Devices(call.home).add(device);
+    const proposal = await new Proposals(call.home).propose({
+      change: {
+        kind: PROPOSAL_KIND.RULES,
+        file: join(call.home, 'memnox.policies.toml'),
+        rules: [],
+      },
+      rationale: 'always allow pushes',
+      proposedBy: 'memnox',
+      at: now(),
+      ttlMs: TEN_SECONDS,
+    });
+    const said = await confirmAnswer(call.home, {
+      subject: proposal.id,
+      answer: PROPOSAL_ANSWER.CONFIRMED,
+      signature: call.phone.signs(
+        confirmationMessage(proposal.id, PROPOSAL_ANSWER.CONFIRMED),
+      ),
+      at: now(),
+      principal: from(device),
+    });
+
     expect(said).toMatchObject({ ok: false, refused: true });
     expect((await new Proposals(call.home).read(proposal.id))?.answer).toBeUndefined();
   });
@@ -223,13 +259,14 @@ describe('driving the Mac from a phone', () => {
 
   it('needs mac, a signature over exactly that time, and at most fifteen minutes', async () => {
     const call = await held();
-    const device = withMac(call.device);
+    const narrowed = { ...call.device, capabilities: [...NARROW] };
+    const device = withMac(narrowed);
     const soon = '2026-10-05T10:10:00.000Z';
     const tooLate = '2026-10-05T10:30:00.000Z';
 
     expect(
       driveRefusal(
-        call.device,
+        narrowed,
         { until: soon, signature: call.phone.signs(driveMessage(device.id, soon)) },
         NOW,
       ),

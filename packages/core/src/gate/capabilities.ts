@@ -16,13 +16,11 @@ export { REMOTE_CAPABILITY, type RemoteCapability };
 export const ALL_REMOTE_CAPABILITIES: readonly RemoteCapability[] =
   Object.values(REMOTE_CAPABILITY);
 
-/** What a phone holds the moment it is paired; the rest is turned on from the Mac with Touch ID. */
-export const PHONE_DEFAULT_CAPABILITIES: readonly RemoteCapability[] = [
-  REMOTE_CAPABILITY.SEE,
-  REMOTE_CAPABILITY.ASK,
-  REMOTE_CAPABILITY.ANSWER,
-  REMOTE_CAPABILITY.STEER,
-];
+/**
+ * What a phone holds the moment it is paired: everything, so every approval, a rule change included, is answered
+ * with Face ID on the phone rather than waiting on the computer. A capability can still be taken back at the Mac.
+ */
+export const PHONE_DEFAULT_CAPABILITIES: readonly RemoteCapability[] = ALL_REMOTE_CAPABILITIES;
 
 /** The remote allowlist: a method missing here is refused from afar whatever the device holds. */
 const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {

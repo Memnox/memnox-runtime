@@ -259,7 +259,7 @@ describe('pairing a phone', () => {
 
     expect(accepted).toMatchObject({ ok: true, outcome: REMOTE_OUTCOME.PAIRED });
     expect(accepted.device).toMatchObject({ name: 'iPhone', kind: 'phone', fingerprint });
-    expect(accepted.device?.capabilities).toEqual(['see', 'ask', 'answer', 'steer']);
+    expect(accepted.device?.capabilities).toEqual(['see', 'ask', 'answer', 'steer', 'rules', 'rewind', 'mac']);
     expect(phone.read(at.relay.payloads(MAILBOX).slice(sent))).toEqual([
       {
         paired: true,
@@ -348,7 +348,7 @@ describe('pairing on a machine with no Mac key, such as a server reached over SS
     const accepted = await at.ask({ method: DAEMON_METHOD.PAIR_ACCEPT, pairingId, code });
 
     expect(accepted.device).toMatchObject({ name: 'Studio', kind: 'desktop' });
-    expect(accepted.device?.capabilities).toEqual(['see', 'ask', 'answer', 'steer']);
+    expect(accepted.device?.capabilities).toEqual(['see', 'ask', 'answer', 'steer', 'rules', 'rewind', 'mac']);
   });
 
   it('gives a device more on the word of this socket alone', async () => {
@@ -428,7 +428,7 @@ describe('a paired phone through its tunnel', () => {
     expect(heard).toEqual([expect.objectContaining({ id: 7, ok: true, speaks: true })]);
   });
 
-  it('tells the phone on its ping what it may do here, and changing rules is not among it', async () => {
+  it('tells the phone on its ping what it may do here, which includes changing rules', async () => {
     const at = await paired();
     // The tunnel hands back plain JSON, read here as the response it is.
     const [heard] = (await through(at, {
@@ -436,8 +436,7 @@ describe('a paired phone through its tunnel', () => {
       method: DAEMON_METHOD.PING,
     })) as DaemonResponse[];
 
-    expect(heard?.capabilities).toEqual(expect.arrayContaining(['see', 'answer']));
-    expect(heard?.capabilities).not.toContain('rules');
+    expect(heard?.capabilities).toEqual(expect.arrayContaining(['see', 'answer', 'rules']));
   });
 
   it('refuses a method off the allowlist, and one its capabilities do not cover', async () => {
@@ -680,7 +679,7 @@ describe('a drive that ends early tells the Mac with no until', () => {
     });
 
     expect(ungranted).toMatchObject({ ok: true, outcome: REMOTE_OUTCOME.UNGRANTED });
-    expect(ungranted.device?.capabilities).toEqual(['see', 'ask', 'answer', 'steer']);
+    expect(ungranted.device?.capabilities).toEqual(['see', 'ask', 'answer', 'steer', 'rules', 'rewind']);
     expect((await new Devices(at.home).find(at.deviceId))?.capabilities).not.toContain(
       'mac',
     );
@@ -709,7 +708,7 @@ describe('taking one capability back', () => {
     at.voice.close();
 
     expect(steer.outcome).toBe(REMOTE_OUTCOME.UNGRANTED);
-    expect(steer.device?.capabilities).toEqual(['see', 'ask', 'answer', 'mac']);
+    expect(steer.device?.capabilities).toEqual(['see', 'ask', 'answer', 'rules', 'rewind', 'mac']);
     expect(at.endpoint.driving(at.deviceId)).toBe(true);
     expect(drivenOn(at.island)).toHaveLength(1);
     expect(unknown.outcome).toBe(REMOTE_OUTCOME.REFUSED);

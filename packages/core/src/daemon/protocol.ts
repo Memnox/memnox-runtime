@@ -113,7 +113,7 @@ export const DAEMON_METHOD = {
   POLISH: 'polish',
   /** Starts the process that polishes dictation, as the key goes down, so the answer skips its cold start. */
   POLISH_WARM: 'polish-warm',
-  /** The person's own words typed into one session, verbatim and signed over `followUpMessage`, never read by the brain. */
+  /** The person's own words typed into one session, verbatim and never read by the brain; signed over `followUpMessage` only at the Mac. */
   FOLLOW_UP: 'follow-up',
   ...REMOTE_METHOD,
   ...SPEECH_METHOD,
@@ -165,7 +165,7 @@ export interface DaemonRequest extends ExtensionRequestFields {
   subject?: string;
   /** On CONFIRM: a hold answer for a held call, or confirmed / declined for a proposal. */
   answer?: string;
-  /** On CONFIRM: base64 DER ECDSA over the confirmation message. Absent on a refusal. On FOLLOW_UP: over `followUpMessage`. */
+  /** On CONFIRM: base64 DER ECDSA over the confirmation message. Absent on a refusal. On FOLLOW_UP at the Mac: over `followUpMessage`, since a phone is known by its Noise session. */
   signature?: string;
   /** On REGISTER_KEY: the base64 X9.63 P-256 point. */
   point?: string;

@@ -21,8 +21,8 @@ import { personKey, type PersonKey } from './phone-harness';
 import { KEY, MACHINE } from '../src/this-machine';
 
 /**
- * Words typed on a phone into one session: they reach it as they are, and only under that phone's
- * Face ID over exactly that session and those words.
+ * Words typed on a phone into one session: they reach it as they are, from the paired phone whose
+ * Noise session carried them and with no Face ID, while the Mac's local socket still needs a signature.
  */
 
 const NOW = '2026-10-15T10:00:00.000Z';
@@ -96,33 +96,31 @@ describe('a follow up typed on a phone', () => {
     });
   });
 
-  it('refuses words with no signature, and sends nothing', async () => {
+  it('takes words with no signature from the phone its Noise session names', async () => {
     const p = await phone();
     const answer = await followUpAnswer(request({}), p.deps, p.principal);
+    expect(answer).toEqual({ id: 7, ok: true, outcome: 'queued' });
+    expect(p.sent).toHaveLength(1);
+  });
+
+  it('refuses a phone that no longer holds steer, and sends nothing', async () => {
+    const p = await phone([REMOTE_CAPABILITY.SEE, REMOTE_CAPABILITY.ASK]);
+    const answer = await followUpAnswer(request({}), p.deps, p.principal);
     expect(answer.ok).toBe(false);
-    expect(answer.reason).toContain('Face ID on iPhone');
+    expect(answer.reason).toContain('iPhone to be allowed to steer');
     expect(p.sent).toEqual([]);
   });
 
-  it('refuses a signature over other words or another session', async () => {
+  it('refuses a signature over other words or another session at the Mac', async () => {
     const p = await phone();
     const otherWords = p.key.signs(followUpMessage(SESSION, 'git push --force'));
     const otherSession = p.key.signs(followUpMessage('ses_other', WORDS));
+    expect((await followUpAnswer(request({ signature: otherWords }), p.deps)).ok).toBe(
+      false,
+    );
     expect(
-      (await followUpAnswer(request({ signature: otherWords }), p.deps, p.principal)).ok,
+      (await followUpAnswer(request({ signature: otherSession }), p.deps)).ok,
     ).toBe(false);
-    expect(
-      (await followUpAnswer(request({ signature: otherSession }), p.deps, p.principal))
-        .ok,
-    ).toBe(false);
-    expect(p.sent).toEqual([]);
-  });
-
-  it('refuses a phone that signed but no longer holds steer', async () => {
-    const p = await phone([REMOTE_CAPABILITY.SEE, REMOTE_CAPABILITY.ASK]);
-    const signature = p.key.signs(followUpMessage(SESSION, WORDS));
-    const answer = await followUpAnswer(request({ signature }), p.deps, p.principal);
-    expect(answer.ok).toBe(false);
     expect(p.sent).toEqual([]);
   });
 

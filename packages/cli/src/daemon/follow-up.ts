@@ -5,7 +5,6 @@ import {
   holds,
   REMOTE_CAPABILITY,
   SpokenInstructions,
-  verifiesSigned,
   type DaemonRequest,
   type DaemonResponse,
   type DeviceRecord,
@@ -21,7 +20,8 @@ import { KEY, MACHINE, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * The person's own words typed into one session from a phone's composer or the Mac: sent as they
- * are with no brain reading them first, and only under a signature over that session and those words.
+ * are with no brain reading them first. A phone is known by the Noise session it spoke on, so it needs
+ * no Face ID to type, while the Mac's local socket still needs a signature over that session and those words.
  */
 
 /** Long enough for any follow up a person types, short enough that a pasted file is refused rather than typed. */
@@ -93,7 +93,7 @@ export async function followUpAnswer(
     const where =
       principal === undefined
         ? `${KEY} on this ${MACHINE}`
-        : `Face ID on ${principal.device.name}`;
+        : `${principal.device.name} to be allowed to steer`;
     return refused(request, `Sending words to an agent needs ${where}.`);
   }
   const agent = await deps.agentOf(sessionId);
@@ -116,17 +116,14 @@ export async function followUpAnswer(
   return { id: request.id, ok: true, outcome };
 }
 
-/** The device whose key signed the words: only the phone they came from, or any trusted device at the Mac. */
+/** Who sent the words: the phone whose Noise session carried them, or any trusted device that signed them at the Mac. */
 async function signerOf(
   home: string,
   request: DaemonRequest,
   principal?: RemotePrincipal,
 ): Promise<DeviceRecord | null> {
+  if (principal !== undefined) return principal.device;
   if (request.signature === undefined) return null;
   const message = followUpMessage(request.sessionId ?? '', request.said ?? '');
-  if (principal === undefined)
-    return new Devices(home).signerOf(message, request.signature);
-  return verifiesSigned(principal.device.signingPoint, message, request.signature)
-    ? principal.device
-    : null;
+  return new Devices(home).signerOf(message, request.signature);
 }
