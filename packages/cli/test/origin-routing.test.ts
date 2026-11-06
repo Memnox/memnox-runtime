@@ -17,6 +17,7 @@ import {
   type DaemonEvent,
   type DaemonResponse,
   type DeviceRecord,
+  type RemoteCapability,
   type DisplayKind,
 } from '@memnox/core';
 import { NOT_ALLOWED_ON_MAC, OPEN_THE_MAC } from '../src/daemon/done-lines';
@@ -46,7 +47,10 @@ class Lines implements Peer {
   }
 }
 
-function phone(capabilities = [...PHONE_DEFAULT_CAPABILITIES]): DeviceRecord {
+/** A phone the Mac took mac back from, since a phone pairs holding everything and these tests are about one without it. */
+const WITHOUT_MAC = PHONE_DEFAULT_CAPABILITIES.filter((each) => each !== REMOTE_CAPABILITY.MAC);
+
+function phone(capabilities: RemoteCapability[] = [...WITHOUT_MAC]): DeviceRecord {
   return {
     id: 'dev_phone',
     name: 'iPhone',

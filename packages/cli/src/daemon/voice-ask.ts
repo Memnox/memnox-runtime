@@ -2,6 +2,8 @@ import {
   AgentQuestions,
   ASK_INTENT,
   DAEMON_EVENT,
+  holds,
+  REMOTE_CAPABILITY,
   VoiceFocusStore,
   type DaemonAskChunk,
   type DaemonRequest,
@@ -9,6 +11,7 @@ import {
   type SessionView,
 } from '@memnox/core';
 import type { AddressLimit } from './address-limit';
+import type { RemotePrincipal } from './confirm';
 import { answeredContext, answeredSince } from './answered-drafts';
 import {
   askContext,
@@ -18,6 +21,7 @@ import {
   lookingAtContext,
   openSessionContext,
   phoneContext,
+  type PhoneStanding,
   windowContext,
   FINISHED_NOTE,
   heldCallsContext,
@@ -124,8 +128,8 @@ export class VoiceAsk {
   private lookingAtWindow: string | undefined;
   /** The session the person has open on the phone, which the next turn is a follow up on. */
   private openSession: string | undefined;
-  /** Whether they speak through a phone, which never starts a session. */
-  private fromPhone = false;
+  /** What the phone they speak through may do on the Mac, or null when they speak on the Mac. */
+  private phone: PhoneStanding | null = null;
 
   constructor(private readonly deps: AskDeps) {
     this.speculation = new Speculation(
@@ -140,11 +144,12 @@ export class VoiceAsk {
     request: DaemonRequest,
     said: string,
     mirror?: (chunk: DaemonAskChunk) => void,
+    principal?: RemotePrincipal,
   ): Promise<void> {
     this.lookingAt = request.lookingAt;
     this.lookingAtWindow = request.lookingAtWindow;
     this.openSession = request.sessionId;
-    this.fromPhone = request.origin !== undefined;
+    this.phone = request.origin === undefined ? null : standingOf(principal);
     // Before the brain runs a tool, since a start reads it to refuse a question from a phone.
     await noteAskedFrom(this.deps.home, request.origin?.deviceId, this.deps.now()).catch(
       () => undefined,
@@ -333,7 +338,7 @@ export class VoiceAsk {
     const spoke = exchanges.filter((each) => each.unasked !== true).at(-1)?.at;
     const context = [
       momentContext(new Date(moment), spoke),
-      phoneContext(this.fromPhone),
+      phoneContext(this.phone),
       lookingAtContext(this.lookingAt),
       windowContext(this.lookingAtWindow),
       profileContext(profile.facts, offered),
@@ -364,4 +369,13 @@ export class VoiceAsk {
       );
     return view;
   }
+}
+
+/** What the phone may do on the Mac, from the session the endpoint proved rather than anything it sent. */
+function standingOf(principal: RemotePrincipal | undefined): PhoneStanding | null {
+  if (principal === undefined) return null;
+  return {
+    mayActOnMac: holds(principal.device, REMOTE_CAPABILITY.MAC),
+    driving: principal.driving,
+  };
 }

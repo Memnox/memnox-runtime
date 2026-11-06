@@ -43,11 +43,21 @@ export const GREETED_NOTE = `[Memnox, not the person] ${THE_DESKTOP_START} alrea
 export const FINISHED_NOTE =
   '[Memnox, not the person] They stopped there and said nothing more, so this is all of it: answer it now and do not call keep_listening.';
 
+/** What the phone that asked may do on the Mac, read from the session that proved it, never from what it sent. */
+export interface PhoneStanding {
+  mayActOnMac: boolean;
+  driving: boolean;
+}
+
 /** Said ahead of a phone's question, so the brain never offers a start the tools would refuse. */
-export function phoneContext(fromPhone: boolean): string {
-  return fromPhone
-    ? `[Memnox, not the person] They are speaking through their phone, away from ${THE_DESKTOP}, so a new session they ask for waits on their Face ID there.`
-    : '';
+export function phoneContext(phone: PhoneStanding | null): string {
+  if (phone === null) return '';
+  const away = `[Memnox, not the person] They are speaking through their phone, away from ${THE_DESKTOP}, so a new session they ask for waits on their Face ID there.`;
+  if (!phone.mayActOnMac)
+    return `${away} This phone may not act on ${THE_DESKTOP} yet, so typing, opening or starting anything there is refused until they allow it on ${THE_DESKTOP} with ${KEY_THEIRS} and then drive ${THE_DESKTOP} from the phone. It is already paired, so never send them to pair it.`;
+  return phone.driving
+    ? `${away} The phone is driving ${THE_DESKTOP} now, so what it asks ${THE_DESKTOP} to do runs at once.`
+    : `${away} The phone may act on ${THE_DESKTOP} but is not driving it now, so each thing it asks ${THE_DESKTOP} to do waits on their Face ID on the phone.`;
 }
 
 /** An app name is a few words; anything longer is not one and is left out. */

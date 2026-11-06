@@ -22,10 +22,16 @@ import {
   type RemoteCapability,
 } from '@memnox/core';
 import { displayName, readNames } from '../agents/names';
-import { doneText, macRationale, NOT_ALLOWED_ON_MAC, OPEN_THE_MAC } from './done-lines';
+import {
+  doneText,
+  macRationale,
+  NOT_ALLOWED_ON_MAC,
+  OPEN_THE_MAC,
+  phoneMayNotAct,
+} from './done-lines';
 import { write, type Peer } from './socket-write';
 import { settled } from './waiting-feed';
-import { DESKTOP_APP, THE_DESKTOP } from '../this-machine';
+import { DESKTOP_APP } from '../this-machine';
 
 /**
  * Where an answer goes when a phone asked: words to the phone, hands on the Mac. A show only the
@@ -293,7 +299,7 @@ export class OriginRouter {
         event,
         deviceId,
         NOT_ALLOWED_ON_MAC,
-        `${device.name} may not act on ${THE_DESKTOP}`,
+        phoneMayNotAct(device.name),
       );
     }
     await this.propose(event, device);

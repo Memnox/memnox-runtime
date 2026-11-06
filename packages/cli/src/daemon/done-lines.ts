@@ -11,7 +11,20 @@ import { KEY, MACHINE, THE_DESKTOP } from '../this-machine';
 export const OPEN_THE_MAC = `Open Memnox on your ${MACHINE} to do that`;
 
 /** Said when the phone was never allowed to act on the Mac. */
-export const NOT_ALLOWED_ON_MAC = `This phone may not act on your ${MACHINE} yet. Allow it from ${THE_DESKTOP} with ${KEY} first`;
+export const NOT_ALLOWED_ON_MAC = `This phone may not act on your ${MACHINE} yet. Allow it from ${THE_DESKTOP} with ${KEY}, then drive it from here`;
+
+/** The words that mark a refusal as a phone not yet allowed, which allowing it ends, unlike a fault. */
+const MAY_NOT_ACT = 'may not act on';
+
+/** Why a paired phone's request was refused, said as the permission to give, since pairing again changes nothing. */
+export function phoneMayNotAct(phone: string): string {
+  return `${phone} ${MAY_NOT_ACT} ${THE_DESKTOP} yet: it is paired, but acting here is a permission of its own. Allow it from ${THE_DESKTOP} with ${KEY}, then drive ${THE_DESKTOP} from the phone`;
+}
+
+/** Whether a refusal was a phone not yet allowed to act, which a retry after allowing it gets past. */
+export function isPhoneMayNotAct(reason: string | undefined): boolean {
+  return reason?.includes(MAY_NOT_ACT) === true;
+}
 
 /** How the Mac said a look ended, beside the deliveries a typed instruction has. */
 export const SEEN = 'seen';

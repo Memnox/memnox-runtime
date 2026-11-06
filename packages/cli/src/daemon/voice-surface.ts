@@ -416,7 +416,7 @@ export class VoiceSurface {
     const { now } = this.deps;
     const mirror = mirrorFor(principal, request, { mac: () => this.macPeers(), now });
     try {
-      await this.asking.ask(socket, asked, said, mirror?.chunk.bind(mirror));
+      await this.asking.ask(socket, asked, said, mirror?.chunk.bind(mirror), principal);
     } finally {
       ask.endedAt = this.deps.now();
       mirror?.end();
