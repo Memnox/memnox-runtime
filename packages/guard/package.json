@@ -1,6 +1,6 @@
 {
   "name": "@memnox/guard",
-  "version": "0.14.2",
+  "version": "0.15.0",
   "description": "Allow, ask or deny before each tool call of an agent running in the cloud, decided in its own process from the workspace's rules, with asks answered by a person.",
   "keywords": [
     "ai-agents",
