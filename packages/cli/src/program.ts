@@ -44,6 +44,7 @@ import { registerRunCommand } from './commands/run.command';
 import { registerMcpCommand } from './commands/mcp.command';
 import { registerRepoCommand } from './commands/repo.command';
 import { registerTaskCommand } from './commands/task.command';
+import { registerProfileCommand } from './commands/profile.command';
 import { registerMissionCommand } from './commands/mission.command';
 import { registerModeCommand } from './commands/mode.command';
 import { registerAllowCommand } from './commands/allow.command';
@@ -116,6 +117,7 @@ function registerTerminalCommands(program: Command, context: CliContext): void {
   registerAllowCommand(program, context);
   registerAutopilotCommand(program, context);
   registerTaskCommand(program, context);
+  registerProfileCommand(program, context);
   registerMissionCommand(program, context);
   registerRepoCommand(program, context);
   registerSetupCommand(program, context);

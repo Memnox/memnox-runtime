@@ -77,7 +77,11 @@ function answerScreen(
   if (isLanMethod(request.method)) return lanAnswer(home, request, new Date());
   if (isPersonalSyncMethod(request.method))
     return personalSyncAnswer(request, syncDepsFor(home));
-  if (isProfilesMethod(request.method)) return profilesAnswer(home, request, new Date());
+  if (isProfilesMethod(request.method))
+    return profilesAnswer(home, request, new Date(), {
+      cards: () => views.list(),
+      remote,
+    });
   if (isIndexMethod(request.method))
     return communityIndexAnswer(home, request, { now: new Date(), remote });
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);

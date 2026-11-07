@@ -1,6 +1,25 @@
-import { PROFILES_METHOD, type DaemonRequest, type DaemonResponse } from '@memnox/core';
-import { applyProfile, readProfileViews } from '../profiles/profile-apply';
-import { profileFrom, removeProfile, writeProfile } from '../profiles/profile-store';
+import {
+  PROFILES_METHOD,
+  type DaemonRequest,
+  type DaemonResponse,
+  type SessionCard,
+} from '@memnox/core';
+import { applyProfile } from '../profiles/profile-apply';
+import {
+  bindAgentProfile,
+  unbindAgentProfile,
+  unbindEveryAgentOf,
+} from '../profiles/profile-bind';
+import {
+  readProfilesWithConnections,
+  type ConnectionDeps,
+} from '../profiles/profile-connections';
+import {
+  profileFrom,
+  profileNamed,
+  removeProfile,
+  writeProfile,
+} from '../profiles/profile-store';
 import { responsiblePersonHere } from '../profiles/responsible-person';
 
 /**
@@ -16,45 +35,93 @@ export function isProfilesMethod(method: string): boolean {
 
 type Answered = Omit<DaemonResponse, 'id'>;
 
+/** What the daemon hands a profile answer beyond the clock; a test leaves both out. */
+interface ProfilesSeams {
+  cards?: () => Promise<SessionCard[]>;
+  /** A paired phone asked, rather than this computer. */
+  remote?: boolean;
+}
+
+interface Answering extends ConnectionDeps {
+  remote: boolean;
+}
+
 /** Every answer carries the profiles as they now stand, so a screen redraws from one answer. */
 export async function profilesAnswer(
   home: string,
   request: DaemonRequest,
   now: Date,
+  seams: ProfilesSeams = {},
 ): Promise<DaemonResponse> {
-  const answered = await answerOf(home, request, now).catch((err: unknown): Answered =>
+  const deps: Answering = {
+    now,
+    cards: seams.cards ?? (async (): Promise<SessionCard[]> => []),
+    remote: seams.remote === true,
+  };
+  const answered = await answerOf(home, request, deps).catch((err: unknown): Answered =>
     refused(err instanceof Error ? err.message : String(err)),
   );
   if (!answered.ok) return { id: request.id, ...answered };
-  return { id: request.id, ...answered, profiles: await readProfileViews(home) };
+  return {
+    id: request.id,
+    ...answered,
+    profiles: await readProfilesWithConnections(home, deps),
+  };
 }
 
 async function answerOf(
   home: string,
   request: DaemonRequest,
-  now: Date,
+  deps: Answering,
 ): Promise<Answered> {
+  const now = deps.now;
   switch (request.method) {
-    case PROFILES_METHOD.PROFILE_PUT: {
-      const read = profileFrom(request.profileDraft, now.toISOString());
-      if ('problems' in read) return refused(read.problems.join(' '));
-      await writeProfile(home, {
-        ...read.profile,
-        responsiblePerson:
-          read.profile.responsiblePerson ?? (await responsiblePersonHere(home)),
-      });
-      return { ok: true };
-    }
+    case PROFILES_METHOD.PROFILE_PUT:
+      return put(home, request, now);
     case PROFILES_METHOD.PROFILE_REMOVE:
-      if (request.profileName === undefined) return refused('Name the profile.');
-      return (await removeProfile(home, request.profileName))
-        ? { ok: true }
-        : refused(`No profile is called ${request.profileName}.`);
+      return remove(home, request.profileName);
     case PROFILES_METHOD.PROFILE_APPLY:
       return apply(home, request, now);
+    case PROFILES_METHOD.PROFILE_BIND:
+      return outcomeOf(
+        await bindAgentProfile(
+          home,
+          { profile: request.profileName, agent: request.agentId, remote: deps.remote },
+          deps,
+        ),
+      );
+    case PROFILES_METHOD.PROFILE_UNBIND:
+      return outcomeOf(await unbindAgentProfile(home, request.agentId, deps));
     default:
       return { ok: true };
   }
+}
+
+async function put(home: string, request: DaemonRequest, now: Date): Promise<Answered> {
+  const read = profileFrom(request.profileDraft, now.toISOString());
+  if ('problems' in read) return refused(read.problems.join(' '));
+  await writeProfile(home, {
+    ...read.profile,
+    responsiblePerson:
+      read.profile.responsiblePerson ?? (await responsiblePersonHere(home)),
+  });
+  return { ok: true };
+}
+
+/** Forgetting a profile puts every agent bound to it back on its own default. */
+async function remove(home: string, named: string | undefined): Promise<Answered> {
+  if (named === undefined) return refused('Name the profile.');
+  const profile = await profileNamed(home, named);
+  if (profile === undefined || !(await removeProfile(home, named)))
+    return refused(`No profile is called ${named}.`);
+  await unbindEveryAgentOf(home, profile.id);
+  return { ok: true };
+}
+
+function outcomeOf(outcome: { refused: string } | object): Answered {
+  return 'refused' in outcome && typeof outcome.refused === 'string'
+    ? refused(outcome.refused)
+    : { ok: true };
 }
 
 async function apply(home: string, request: DaemonRequest, now: Date): Promise<Answered> {

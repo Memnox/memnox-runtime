@@ -254,6 +254,8 @@
       "profile-put",
       "profile-remove",
       "profile-apply",
+      "profile-bind",
+      "profile-unbind",
       "index-list",
       "index-install",
       "index-source-set"

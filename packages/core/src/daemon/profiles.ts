@@ -1,3 +1,5 @@
+import type { AgentConnection } from '../agents/agent-connection';
+
 /**
  * Profiles as every screen reads and applies them: one named bundle of Skills Hub skills, MCP Hub
  * servers and a rule pack, such as Backend Engineering, kept under the Memnox home. Applying one
@@ -13,6 +15,10 @@ export const PROFILES_METHOD = {
   PROFILE_REMOVE: 'profile-remove',
   /** Proposes giving an agent the profile's servers and skills, in a project, and its rule pack's rules. */
   PROFILE_APPLY: 'profile-apply',
+  /** Binds a kept profile to one agent found here; its ledger key stays `agt_<kind>`. */
+  PROFILE_BIND: 'profile-bind',
+  /** Takes a binding off, which puts the agent back on its default profile. */
+  PROFILE_UNBIND: 'profile-unbind',
 } as const;
 
 /** A rule pack as a profile carries it: its name and its TOML, imported as any pack is. */
@@ -64,6 +70,10 @@ export interface ProfileView extends ProfileJob {
   updatedAt: string;
   /** Names the hubs no longer hold, or a pack that no longer loads, each in a sentence. */
   missing: string[];
+  /** The agent's own default, computed for an agent nobody bound and never stored. */
+  isDefault?: true;
+  /** How it reaches the agents it works through; empty is a profile with no agent behind it. */
+  connections: AgentConnection[];
 }
 
 /** What applying a profile raised, so a screen says it in a line and opens the cards. */
@@ -82,10 +92,12 @@ export interface ProfileApplied {
 export interface ProfilesRequestFields {
   /** On PROFILE_PUT. */
   profileDraft?: ProfileDraft;
-  /** On PROFILE_REMOVE, PROFILE_APPLY and AGENT_LAUNCH: the profile, by id or by name. */
+  /** On PROFILE_REMOVE, PROFILE_APPLY, PROFILE_BIND and AGENT_LAUNCH: the profile, by id or by name. */
   profileName?: string;
   /** On PROFILE_APPLY: the agent, by kind. */
   profileAgent?: string;
+  /** On PROFILE_BIND and PROFILE_UNBIND: the agent, by id, kind or the name it goes by. */
+  agentId?: string;
   /** On PROFILE_APPLY: the repository its skills are written into and its rules hold in, as an absolute path; absent is the home folder and the whole machine. */
   profileProject?: string;
 }

@@ -9,6 +9,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
 import {
+  agentIdFor,
   DISCOVERED_AGENT_KIND,
   ENV_AGENT_NAME,
   isEmptyScope,
@@ -31,9 +32,11 @@ import {
   Missions,
   type Mission,
   type SessionHost,
+  sessionRoleOf,
 } from '@memnox/core';
 import { DEFAULT_AGENT_NAME, repositoryRootOf } from '@memnox/interceptors';
 import { transcriptPathFor } from '../../memnox-paths';
+import { boundProfileOf } from '../../profiles/profile-bind';
 import { NodeGit, NodeWorktree } from '../../node-git';
 import { familiarityOf, untrustedHint, type Familiarity } from './familiar';
 import {
@@ -230,6 +233,7 @@ async function settle(
   const { options, deps } = input;
   const { home, sessionId, agent, root, env } = base;
   const untrusted = options.untrusted === true;
+  await roleFromProfile(home, agent, env);
   // First, so a mistyped or closed mission is said before anything is kept for this run.
   const mission = await joinMission(home, sessionId, options.mission, env);
   // Declared before the agent starts, because every drift check compares against it.
@@ -245,6 +249,17 @@ async function settle(
   const transcript =
     options.transcript === true ? transcriptPathFor(home, sessionId) : undefined;
   return { declared, mission, kept, sandbox, transcript };
+}
+
+/** A bound profile's role fills in only where neither --role nor the environment named one. */
+async function roleFromProfile(
+  home: string,
+  agent: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const bound = await boundProfileOf(home, agentIdFor(agent));
+  const role = sessionRoleOf({ inherited: env[ENV_AGENT_ROLE], profile: bound?.role });
+  if (role !== undefined) env[ENV_AGENT_ROLE] = role;
 }
 
 /**
