@@ -55,6 +55,11 @@ export const SESSION_TOOL_ANNOTATIONS: Readonly<Record<string, McpToolAnnotation
   // Rules on the app call it carries, and every act waits on the person's signature.
   app_run: WRITES,
   rewind: DESTROYS,
+  my_work: READS,
+  // Each adds a line to the agent's own work record, which changes nothing it may do.
+  report_progress: WRITES,
+  mark_blocked: WRITES,
+  request_handoff: WRITES,
 };
 
 /** Every workspace tool carries it, so one the cloud adds needs no runtime release. */

@@ -17,6 +17,7 @@ import { fingerprintTool } from './fingerprint-tool';
 import { workTool } from './work-tools';
 import { suggestTool } from './suggest-tool';
 import { appRunTool, appsTool } from './app-calls';
+import { AGENT_WORK_CALLS, AGENT_WORK_TOOLS } from './agent-work-tools';
 
 /** One argument a tool takes: a string, or a list of small objects, such as a walk through's pages. */
 export type ToolProperty =
@@ -268,6 +269,7 @@ export const SESSION_TOOLS: readonly ToolDefinition[] = [
     },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   },
+  ...AGENT_WORK_TOOLS,
 ];
 
 /** Answers one call by name, or null for a name this server never offered. */
@@ -303,6 +305,8 @@ export async function callTool(
     case 'rewind':
       return rewindTool(deps, seams, args);
     default:
-      return null;
+      return Object.hasOwn(AGENT_WORK_CALLS, name)
+        ? (AGENT_WORK_CALLS[name]?.(deps, args) ?? null)
+        : null;
   }
 }

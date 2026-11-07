@@ -153,7 +153,7 @@ async function call(
 }
 
 describe('the session tools', () => {
-  it('offers exactly why, status, replay, decisions, memory, brief, work, fingerprint, memnox_suggest, apps, app_run and rewind', () => {
+  it('offers exactly why, status, replay, decisions, memory, brief, work, fingerprint, memnox_suggest, apps, app_run, rewind, my_work, report_progress, mark_blocked and request_handoff', () => {
     expect(SESSION_TOOLS.map((tool) => tool.name)).toEqual([
       'why',
       'status',
@@ -167,6 +167,10 @@ describe('the session tools', () => {
       'apps',
       'app_run',
       'rewind',
+      'my_work',
+      'report_progress',
+      'mark_blocked',
+      'request_handoff',
     ]);
   });
 
@@ -187,6 +191,9 @@ describe('the session tools', () => {
       'memnox_suggest',
       'app_run',
       'rewind',
+      'report_progress',
+      'mark_blocked',
+      'request_handoff',
     ]);
     expect(
       acting.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name),

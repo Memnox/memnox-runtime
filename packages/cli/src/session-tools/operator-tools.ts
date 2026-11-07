@@ -53,6 +53,7 @@ import { HANDOVER_CALLS, HANDOVER_TOOLS } from './handover-tools';
 import { WORKSPACE_ASK_CALLS, WORKSPACE_ASK_TOOLS } from './workspace-ask-tools';
 import { HEARD_WORD_CALLS, HEARD_WORD_TOOLS } from './heard-words-tools';
 import { PROFILE_CALLS, PROFILE_TOOLS } from './profile-tools';
+import { OPERATOR_WORK_CALLS, OPERATOR_WORK_TOOLS } from './operator-work-tools';
 import { AGENT_ARG, proposeTool, SAID_ARG } from './operator-args';
 import { readTool, SESSION_ARG, type ToolDefinition } from './session-tools';
 import { TOOL_ARG } from './session-tools.constants';
@@ -330,6 +331,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ...PROFILE_TOOLS,
   ...FOLDER_TOOLS,
   ...HANDOVER_TOOLS,
+  ...OPERATOR_WORK_TOOLS,
   ...WORKSPACE_ASK_TOOLS,
   ...PERSONAL_TOOLS,
   LOOK_TOOL,
@@ -436,6 +438,7 @@ const OPERATOR_CALLS: Record<string, OperatorCall> = {
   ...PROFILE_CALLS,
   ...FOLDER_CALLS,
   ...HANDOVER_CALLS,
+  ...OPERATOR_WORK_CALLS,
   ...WORKSPACE_ASK_CALLS,
   ...LOOK_CALLS,
   ...ANSWER_AGENT_CALLS,

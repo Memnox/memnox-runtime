@@ -5,13 +5,22 @@ import { describe, expect, it } from 'vitest';
 import {
   AgentWorks,
   DAEMON_METHOD,
+  SESSION_VAR,
   SessionTasks,
+  startedWork,
   withHandoffRequest,
   type DaemonRequest,
   type DaemonResponse,
 } from '@memnox/core';
 import { profilesAnswer } from '../src/daemon/profiles-answer';
 import { workAnswer } from '../src/daemon/work-answer';
+import {
+  markBlockedTool,
+  myWorkTool,
+  reportProgressTool,
+  requestHandoffTool,
+} from '../src/session-tools/agent-work-tools';
+import type { SessionToolDeps } from '../src/session-tools/read-tools';
 import { joinWork } from '../src/work/join-work';
 
 /**
@@ -150,5 +159,69 @@ describe('agent work on this machine', () => {
     expect(closed.agentWork?.[0]?.status).toBe('done');
     const again = await ask(home, { method: DAEMON_METHOD.WORK_STOP, workId: work.id });
     expect(again.ok).toBe(false);
+  });
+});
+
+describe('the agent side of its work, through memnox-session', () => {
+  async function working(): Promise<{
+    home: string;
+    deps: SessionToolDeps;
+    workId: string;
+  }> {
+    const { home } = await machine();
+    const started = await ask(home, {
+      method: DAEMON_METHOD.WORK_START,
+      workProfile: 'default-claude-code',
+      workTarget: 'LIN-5',
+    });
+    expect(started.ok).toBe(false);
+    const work = startedWork(
+      {
+        profileId: 'default-claude-code',
+        responsiblePerson: 'ana',
+        target: { source: 'linear', externalId: 'LIN-5' },
+      },
+      NOW.toISOString(),
+    );
+    await new AgentWorks(home).write(work);
+    // Cast is safe: the work tools read only these fields of their deps.
+    const deps = {
+      home,
+      agent: 'claude-code',
+      env: { [SESSION_VAR]: 'ses_9' },
+      now: () => NOW,
+    } as unknown as SessionToolDeps;
+    return { home, deps, workId: work.id };
+  }
+
+  it('reads the work its person pointed it at, and reports on it', async () => {
+    const { home, deps, workId } = await working();
+    const mine = (await myWorkTool(deps)) as { work: { id: string }[] };
+    expect(mine.work.map((each) => each.id)).toEqual([workId]);
+    await reportProgressTool(deps, { note: 'tests pass', refs: 'commit:abc,bogus:1' });
+    await markBlockedTool(deps, { note: 'needs a key' });
+    const kept = await new AgentWorks(home).read(workId);
+    expect(kept?.status).toBe('blocked');
+    expect(kept?.progress.map((each) => [each.by, each.note])).toEqual([
+      ['ses_9', 'tests pass'],
+      ['ses_9', 'needs a key'],
+    ]);
+    expect(kept?.progress[0]?.refs).toEqual([{ kind: 'commit', id: 'abc' }]);
+  });
+
+  it('can claim done and ask to hand on, but never close or move the work itself', async () => {
+    const { home, deps, workId } = await working();
+    const done = (await reportProgressTool(deps, {
+      note: 'finished',
+      state: 'done',
+    })) as {
+      status: string;
+    };
+    expect(done.status).toBe('active');
+    await reportProgressTool(deps, { note: 'finished', state: 'done_claimed' });
+    await requestHandoffTool(deps, { to_profile: 'reviewer', reason: 'ready' });
+    const kept = await new AgentWorks(home).read(workId);
+    expect(kept?.status).toBe('handoff_requested');
+    expect(kept?.profileId).toBe('default-claude-code');
   });
 });
