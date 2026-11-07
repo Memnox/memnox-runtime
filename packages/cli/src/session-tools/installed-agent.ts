@@ -3,6 +3,7 @@ import { accessSync, constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { INSTALL_PLACES, STARTABLE_AGENT, type StartableAgent } from '@memnox/core';
+import { MACHINE } from '../this-machine';
 
 /**
  * Whether an agent the person asked to start is installed on this Mac, found the way the new
@@ -20,7 +21,7 @@ export function notInstalled(
   return {
     missing: STARTABLE_AGENT[agent],
     installed,
-    said: `The ${STARTABLE_AGENT[agent]} command is nowhere on this Mac, neither on PATH nor where it is usually installed, so that agent cannot be started from a terminal. Say so plainly, and offer one from installed if there is one.`,
+    said: `The ${STARTABLE_AGENT[agent]} command is nowhere on this ${MACHINE}, neither on PATH nor where it is usually installed, so that agent cannot be started from a terminal. Say so plainly, and offer one from installed if there is one.`,
   };
 }
 

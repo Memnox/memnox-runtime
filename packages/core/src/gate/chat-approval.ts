@@ -3,6 +3,7 @@
  * always asked in the session and in their DM where they asked for that. Only the person
  * types a prompt or answers a DM, so a yes the agent writes itself never counts.
  */
+import { desktopApp } from '../constants/machine-word.constants';
 import { digest } from '../domain/digest';
 import { HOLD_ANSWER, type HoldAnswer, type HoldRequest } from './hold';
 import { ANSWER_PLACE, PendingApprovals, type PendingApproval } from './pending';
@@ -18,6 +19,7 @@ import {
   APPROVAL_ROUTE,
   type ApprovalRoute,
 } from '../constants/approval-route.constants';
+import { withoutTrailing } from '../domain/plain-text';
 
 /** Long enough for somebody to come back from a meeting, short enough to be about now. */
 export const CHAT_APPROVAL_MS = 30 * 60 * 1000;
@@ -301,9 +303,12 @@ function elsewhere(
   held: PendingApproval,
   whose: 'their' | 'your',
   joined: 'and' | 'or',
+  os: string,
 ): string | null {
   const places = [
-    ...(held.alsoOn?.includes(ANSWER_PLACE.MAC) === true ? ['the Memnox Mac app'] : []),
+    ...(held.alsoOn?.includes(ANSWER_PLACE.MAC) === true
+      ? [`the Memnox ${desktopApp(os)}`]
+      : []),
     ...(held.alsoOn?.includes(ANSWER_PLACE.PAIRED) === true
       ? [`${whose} paired phone`]
       : []),
@@ -387,7 +392,7 @@ function saidWithNo(held: PendingApproval): string {
   const reason =
     held.answerReason === undefined
       ? ''
-      : ` They said: ${held.answerReason.replace(/[.!?]+$/, '')}.`;
+      : ` They said: ${withoutTrailing(held.answerReason, '.!?')}.`;
   const instead =
     held.request.alternative === undefined ? '' : ` ${held.request.alternative}`;
   return `${reason}${instead}`;
@@ -397,9 +402,9 @@ function saidWithNo(held: PendingApproval): string {
  * The question in the person's own words, shown to them by the host rather than left for
  * the agent to relay, because an agent that ends its turn quietly leaves nobody asked.
  */
-export function heldNotice(held: PendingApproval): string {
+export function heldNotice(held: PendingApproval, os: string): string {
   const plain = plainOf(held);
-  const away = elsewhere(held, 'your', 'and');
+  const away = elsewhere(held, 'your', 'and', os);
   const dm =
     away === null
       ? ''
@@ -415,9 +420,9 @@ export function heldNotice(held: PendingApproval): string {
 }
 
 /** What the agent is told when its question is held: how to ask, and how to wait. */
-export function heldText(held: PendingApproval): string {
+export function heldText(held: PendingApproval, os: string): string {
   const plain = plainOf(held);
-  const away = elsewhere(held, 'their', 'or');
+  const away = elsewhere(held, 'their', 'or', os);
   const dm = away !== null;
   const ask = hasPicker(held)
     ? [pickerAsk(held)]

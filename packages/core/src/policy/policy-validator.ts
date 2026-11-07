@@ -13,6 +13,12 @@ import type {
 } from './policy';
 import { POLICY_DOCUMENT_VERSION, POLICY_MODE } from './policy';
 import { validateClassifications } from './classification-validator';
+import {
+  asNonEmptyString,
+  asOptionalStringArray,
+  asRecord,
+  asStringArray,
+} from './validator-fields';
 
 /**
  * Turning a hand-written rule file into rules the engine can hold, every problem listed.
@@ -239,10 +245,19 @@ function asCarveOut(raw: unknown, at: string, issues: string[]): PolicyCarveOut 
     issues.push(`${at} must name a project, agents or workingDirectories`);
     return null;
   }
+  const expiresAt = entry['expiresAt'];
+  if (
+    expiresAt !== undefined &&
+    (typeof expiresAt !== 'string' || Number.isNaN(Date.parse(expiresAt)))
+  ) {
+    issues.push(`${at}.expiresAt must be a date when present`);
+    return null;
+  }
   return {
     ...(project === undefined ? {} : { project }),
     ...(agents === undefined ? {} : { agents }),
     ...(workingDirectories === undefined ? {} : { workingDirectories }),
+    ...(expiresAt === undefined ? {} : { expiresAt }),
   };
 }
 
@@ -443,41 +458,6 @@ function asOptionalThreshold(
     return undefined;
   }
   return input;
-}
-
-function asRecord(
-  input: unknown,
-  path: string,
-  issues: string[],
-): Record<string, unknown> | null {
-  if (input && typeof input === 'object' && !Array.isArray(input)) {
-    return input as Record<string, unknown>;
-  }
-  issues.push(`${path} must be an object`);
-  return null;
-}
-
-function asNonEmptyString(input: unknown, path: string, issues: string[]): string | null {
-  if (typeof input === 'string' && input.trim().length > 0) return input.trim();
-  issues.push(`${path} must be a non-empty string`);
-  return null;
-}
-
-function asStringArray(input: unknown, path: string, issues: string[]): string[] | null {
-  if (Array.isArray(input) && input.every((item) => typeof item === 'string')) {
-    return input as string[];
-  }
-  issues.push(`${path} must be a string array`);
-  return null;
-}
-
-function asOptionalStringArray(
-  input: unknown,
-  path: string,
-  issues: string[],
-): string[] | undefined {
-  if (input === undefined || input === null) return undefined;
-  return asStringArray(input, path, issues) ?? undefined;
 }
 
 /**

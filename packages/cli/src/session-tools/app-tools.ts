@@ -31,6 +31,7 @@ import {
   SAID,
   TOOL_ARG,
 } from './session-tools.constants';
+import { MACHINE, THE_DESKTOP, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * The agents' own desktop apps, Claude, Codex, Cursor and Hermes: opened on a repository with a
@@ -240,14 +241,12 @@ export async function controlAppTool(
 
 const NEEDS_ACTION =
   'Pass action: "stop" for a reply in progress, or "close" for its window.';
-const CONTROL_UNCONFIRMED =
-  'Handed to the Mac, which has not said it worked yet. Say you asked it to; never that it is done.';
+const CONTROL_UNCONFIRMED = `Handed to ${THE_DESKTOP}, which has not said it worked yet. Say you asked it to; never that it is done.`;
 const APP_STOPPED =
   'Its reply in progress was stopped, and the chat is as it was. Say it is stopped in a few words.';
 const APP_CLOSED =
   'Its window is closed; the app keeps the chat, so it can be opened again. Say it is closed in a few words.';
-const APP_NOT_CONTROLLED =
-  'The Mac could not do it: why says the reason. Say sorry in a few words and the reason in plain words.';
+const APP_NOT_CONTROLLED = `${THE_DESKTOP_START} could not do it: why says the reason. Say sorry in a few words and the reason in plain words.`;
 
 /** What the brain may say, from what the Mac reported, with what the screen showed after. */
 function openedAs(
@@ -392,7 +391,7 @@ function spoken(name: string): string {
 }
 
 function noSuchApp(name: string): string {
-  return `No app called ${name} is installed on this Mac, so nothing was typed. Say so in a sentence and ask which app they meant.`;
+  return `No app called ${name} is installed on this ${MACHINE}, so nothing was typed. Say so in a sentence and ask which app they meant.`;
 }
 
 /** What to say when the agent has no desktop app on this Mac, with the agents that do. */
@@ -406,7 +405,7 @@ export function noApp(
   return {
     missing: `the ${DESKTOP_APPS[agent].name} app`,
     installed,
-    said: `The ${DESKTOP_APPS[agent].name} desktop app is not installed on this Mac. Say so plainly, and offer its terminal agent instead, or another app from installed.`,
+    said: `The ${DESKTOP_APPS[agent].name} desktop app is not installed on this ${MACHINE}. Say so plainly, and offer its terminal agent instead, or another app from installed.`,
   };
 }
 
@@ -419,24 +418,17 @@ export function resolveInstalledApp(agent: StartableAgent): string | null {
 }
 
 const NEEDS_MESSAGE = 'Pass message: what to type, in their words.';
-const APP_TYPED =
-  'The app is open and the Mac typed their words into its message box and sent them, so it is answering now. Say so in a few words, like "Sent to Claude." Never say it is done.';
+const APP_TYPED = `The app is open and ${THE_DESKTOP} typed their words into its message box and sent them, so it is answering now. Say so in a few words, like "Sent to Claude." Never say it is done.`;
 const APP_OPENED =
   'The app opened on that repository. Say so in a few words, like "Hermes is open in memnox runtime.", and ask what they would like it to do.';
 const APP_OPENED_NO_FOLDER =
   'The app is open, on no folder since they named none. Say so in a few words, like "Claude is open.", and ask what they would like it to do; never name a repository.';
 const APP_PREFILLED =
   'The app opened on that repository with their words already in its chat, where it waits for them to press Return, since the app asks before running a prompt it was handed. Say that in one sentence, like "Cursor is open with your question in its chat; press Return there to send it." Never ask what it should do, and never offer to send it again.';
-const CURSOR_PREFILLED =
-  'Cursor has their words in its agent chat, but the Mac could not see them go, so they may be waiting there for Return. Say that in one sentence, like "It is in Cursor\'s chat; press Return there if it has not started." Never say it was sent, and never offer to type it again.';
-const APP_PREFILLED_SENT =
-  'The app opened, its own link put their words in its chat, and the Mac read them there and sent them, so it is answering now. Say so in a few words, like "Sent to Cursor." Never say it is done, and never ask them to press Return.';
-const APP_CLIPBOARD =
-  'The app is open, but the Mac could not type into it, and it already told them out loud the words are on the clipboard and how to paste them. Write nothing more.';
+const CURSOR_PREFILLED = `Cursor has their words in its agent chat, but ${THE_DESKTOP} could not see them go, so they may be waiting there for Return. Say that in one sentence, like "It is in Cursor's chat; press Return there if it has not started." Never say it was sent, and never offer to type it again.`;
+const APP_PREFILLED_SENT = `The app opened, its own link put their words in its chat, and ${THE_DESKTOP} read them there and sent them, so it is answering now. Say so in a few words, like "Sent to Cursor." Never say it is done, and never ask them to press Return.`;
+const APP_CLIPBOARD = `The app is open, but ${THE_DESKTOP} could not type into it, and it already told them out loud the words are on the clipboard and how to paste them. Write nothing more.`;
 // The Mac was allowed to type and found nowhere to, so a later "what do you need" is never answered with a permission.
-const APP_CLIPBOARD_WHY =
-  'The app is open, but the Mac found nowhere in it to type, and it already told them out loud the words are on the clipboard and how to paste them. Write nothing more now. Memnox is allowed to type, so if they ask why or what it needs, give the reason in why in plain words and never say it needs a permission or anything switched on.';
-const UNCONFIRMED =
-  'Handed to the Mac to open, which has not confirmed yet. Say it is opening; never that it is working.';
-const NOT_OPENED =
-  'The Mac could not open the app. Say sorry in a few words and say why in plain words; nothing was sent.';
+const APP_CLIPBOARD_WHY = `The app is open, but ${THE_DESKTOP} found nowhere in it to type, and it already told them out loud the words are on the clipboard and how to paste them. Write nothing more now. Memnox is allowed to type, so if they ask why or what it needs, give the reason in why in plain words and never say it needs a permission or anything switched on.`;
+const UNCONFIRMED = `Handed to ${THE_DESKTOP} to open, which has not confirmed yet. Say it is opening; never that it is working.`;
+const NOT_OPENED = `${THE_DESKTOP_START} could not open the app. Say sorry in a few words and say why in plain words; nothing was sent.`;

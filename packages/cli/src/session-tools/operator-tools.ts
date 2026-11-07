@@ -15,6 +15,8 @@ import { showAgentsTool } from './agents-tool';
 import { commandOutputTool, memnoxCommandTool } from './command-tool';
 import { tracesTool } from './traces-tool';
 import { aboutTool } from './about-tool';
+import { RULES_IN_FORCE_TOOL, rulesInForceTool } from './rules-tool';
+import { MEMORY_MAP_TOOL, memoryMapTool } from './memory-map-tool';
 import { briefTool, workspaceMemoryTool } from './memory-tools';
 import { PEOPLE_TOOL, peopleTool, sourcesTool } from './work-tools';
 import { PERSONAL_CALLS, PERSONAL_TOOLS } from './personal-catalogue';
@@ -54,6 +56,7 @@ import { PROFILE_CALLS, PROFILE_TOOLS } from './profile-tools';
 import { AGENT_ARG, proposeTool, SAID_ARG } from './operator-args';
 import { readTool, SESSION_ARG, type ToolDefinition } from './session-tools';
 import { TOOL_ARG } from './session-tools.constants';
+import { KEY_THEIRS, MACHINE, NO_KEY, THE_DESKTOP } from '../this-machine';
 
 /**
  * The tools the voice's brain is given, and the one rule over them: it reads everything and
@@ -80,7 +83,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ),
   readTool(
     'reach',
-    'What the agents on this machine can use: the agents themselves, each MCP server and which agents start it, and the CLIs Memnox watches, which any agent with a shell can run, and which of those are signed in, so an agent running them acts as the person, and for each agent whether it approves its own actions or asks first and where its program was installed from and who signed it. Answer "is Claude Code connected to Railway" and "which agents act without asking" from here. It knows only this machine, never the apps their workspace connected, such as Gmail, Slack or Linear, which my_accounts lists.',
+    'What the agents on this machine can use: the agents themselves, each MCP server and which agents start it, and the CLIs Memnox watches, which any agent with a shell can run, and which of those are signed in, so an agent running them acts as the person, and for each agent whether it approves its own actions or asks first and where its program was installed from and who signed it. Answer "is Claude Code connected to Railway" and "which agents act without asking" from here; how many MCP servers there are and what each can do is memory_map. It knows only this machine, never the apps their workspace connected, such as Gmail, Slack or Linear, which my_accounts lists.',
   ),
   readTool(
     'cloud_agents',
@@ -141,18 +144,25 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ),
   readTool(
     'memory',
-    'What the person\'s Memnox Cloud workspace has settled, as this Mac last pulled it: decisions, policies, who approves what and who owns what, each with who confirmed it, when and where it came from, and how many facts the workspace holds. Answer "what is in my workspace", "what does the cloud know", "summarise our memory" and "who owns billing" from here, never from the console. Pass about with the key words of their question; leave it out for the newest.',
+    `What the person's Memnox Cloud workspace has settled, as this ${MACHINE} last pulled it: decisions, policies, who approves what and who owns what, each with who confirmed it, when and where it came from, and how many facts the workspace holds. Also every unconfirmed note, read out of a connected tool or suggested by an agent and approved by nobody, in its own list. counts says how many of each, settled by kind and unconfirmed by the tool it came from, before any line. Answer "what is in my workspace", "what does the cloud know", "summarise our memory" and "who owns billing" from here, never from the console. Pass about with the key words of their question; leave it out for the newest. Lines come a budget at a time: pass next as cursor for more, and a line's id for that one whole.`,
     {
       about: {
         type: 'string',
         description:
           'words or paths the question is about, such as "payment retries" or "src/billing"; the newest when left out',
       },
+      id: { type: 'string', description: 'one memory to read whole, by its line id' },
+      cursor: {
+        type: 'string',
+        description: 'the next an earlier answer gave, for more',
+      },
     },
   ),
+  RULES_IN_FORCE_TOOL,
+  MEMORY_MAP_TOOL,
   readTool(
     'sources',
-    'What people actually said, filed or wrote in the systems the workspace connects: Slack and Discord messages, Linear, Jira and GitHub issues, and documents, each with its title, a short excerpt, who wrote it, when and a link, as far as this Mac is cleared to read. Each ticket opens with its status, priority and who it is assigned to. Answer "what did we say in Slack", "who said this", "what does Priya have to work on", "what tickets do I have", "how many tickets" and "what is the ticket about" from here, and find a ticket here before an agent works on it.',
+    `What people actually said, filed or wrote in the systems the workspace connects: Slack and Discord messages, Linear, Jira and GitHub issues, and documents, each with its title, a short excerpt, who wrote it, when and a link, as far as this ${MACHINE} is cleared to read. Each ticket opens with its status, priority and who it is assigned to. Answer "what did we say in Slack", "who said this", "what does Priya have to work on", "what tickets do I have", "how many tickets" and "what is the ticket about" from here, and find a ticket here before an agent works on it.`,
     {
       about: {
         type: 'string',
@@ -177,7 +187,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   PEOPLE_TOOL,
   readTool(
     'brief',
-    'Ask the workspace, live, about paths, services or a repository: the decisions that bear on them, who owns them, which agent holds them and what landed there lately. Falls back to what this Mac pulled when the cloud cannot be reached, and says so.',
+    `Ask the workspace, live, about paths, services or a repository: the decisions that bear on them, who owns them, which agent holds them and what landed there lately. Falls back to what this ${MACHINE} pulled when the cloud cannot be reached, and says so.`,
     {
       paths: {
         type: 'string',
@@ -327,8 +337,7 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   ANSWER_AGENT_TOOL,
   {
     name: 'answer_question',
-    description:
-      'Pass the person\'s answer to a question an agent is asking them in its own picker, such as "which database should I use". Their answer is their choice, so it goes at once with no read back and no Touch ID; the agent carries on with it. Pass the option they meant by its label, or their own words when it is none of them.',
+    description: `Pass the person's answer to a question an agent is asking them in its own picker, such as "which database should I use". Their answer is their choice, so it goes at once with no read back and ${NO_KEY}; the agent carries on with it. Pass the option they meant by its label, or their own words when it is none of them.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -352,12 +361,12 @@ export const OPERATOR_TOOLS: readonly ToolDefinition[] = [
   },
   proposeTool(
     'propose_resume',
-    'Resume a paused session the person asked to carry on. Nothing restarts until they confirm with Touch ID on the Mac, so say that.',
+    `Resume a paused session the person asked to carry on. Nothing restarts until they confirm with ${KEY_THEIRS} on ${THE_DESKTOP}, so say that.`,
     { agent: AGENT_ARG, session: SESSION_ARG, said: SAID_ARG },
   ),
   proposeTool(
     'propose_answer',
-    'Answer a held call with what the person said. "deny" takes effect at once. "once" and "session" wait for Touch ID on the Mac, so say that the person has to confirm.',
+    `Answer a held call with what the person said. "deny" takes effect at once. "once" and "session" wait for ${KEY_THEIRS} on ${THE_DESKTOP}, so say that the person has to confirm.`,
     {
       call: { type: 'string', description: 'the held call id, from "waiting"' },
       answer: { type: 'string', description: 'once, session or deny' },
@@ -407,6 +416,8 @@ const OPERATOR_CALLS: Record<string, OperatorCall> = {
   about: (_deps, _seams, args) => aboutTool(args),
   memory: (deps, _seams, args) => workspaceMemoryTool(deps, args),
   sources: (deps, _seams, args) => sourcesTool(deps, args),
+  rules_in_force: (deps, _seams, args) => rulesInForceTool(deps, args),
+  memory_map: (deps, _seams, args) => memoryMapTool(deps, args),
   people: (deps, _seams, args) => peopleTool(deps, args),
   brief: (deps, _seams, args) => briefTool(deps, args),
   command_output: (deps, _seams, args) => commandOutputTool(deps, args),
@@ -463,8 +474,7 @@ export async function callOperatorTool(
   }
 }
 
-const ABOUT_OPERATOR =
-  'You are the voice of Memnox, speaking with the person who runs these agents. Answer out loud: short sentences, the answer first, numbers said plainly, never a list read aloud. Read the machine through these tools before you answer, and never guess. What an agent changed is in changes, with the lines of one file when you pass its path; what it reached outside this machine is in outside. Several sessions can be open at once, even for one agent: call sessions first, pass the session id to every other tool, and when the person did not say which, take the one they last wrote to, its spokenToAt, and say so. When the person answers a held call or asks for a rule, in whatever words, call propose_answer or propose_rule. When they want an agent to do something, call propose_instruction, read it back, and send_instruction only after their yes. You can never allow anything yourself: every allow waits for the person to confirm with Touch ID on the Mac, so tell them that.';
+const ABOUT_OPERATOR = `You are the voice of Memnox, speaking with the person who runs these agents. Answer out loud: short sentences, the answer first, numbers said plainly, never a list read aloud. Read the machine through these tools before you answer, and never guess. What an agent changed is in changes, with the lines of one file when you pass its path; what it reached outside this machine is in outside. Several sessions can be open at once, even for one agent: call sessions first, pass the session id to every other tool, and when the person did not say which, take the one they last wrote to, its spokenToAt, and say so. When the person answers a held call or asks for a rule, in whatever words, call propose_answer or propose_rule. When they want an agent to do something, call propose_instruction, read it back, and send_instruction only after their yes. You can never allow anything yourself: every allow waits for the person to confirm with ${KEY_THEIRS} on ${THE_DESKTOP}, so tell them that.`;
 
 export const OPERATOR_CATALOGUE: ToolCatalogue = {
   info: { name: 'memnox-operator', version: '1' },

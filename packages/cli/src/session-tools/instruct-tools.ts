@@ -27,10 +27,12 @@ import { scopeOf } from './session-scope';
 import { turnOverByTranscript } from './sessions-tool';
 import { withBrief } from './work-tools';
 import { isHermesSession } from '../daemon/hermes-view';
+import { isPhoneMayNotAct } from '../daemon/done-lines';
 import { typedInItsApp } from './app-follow-up';
 import { HERMES_SAID, resumeHermes, type ResumeHermes } from './hermes-instruct';
 import { FINDS_ITS_TAB } from './session-tools.constants';
 import { agentInForeground } from './agent-foreground';
+import { KEY_THEIRS, THE_DESKTOP, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * Telling an agent what the person said out loud, read back first since a recognizer hears
@@ -64,21 +66,17 @@ const EDITORS = /code|cursor|windsurf/i;
 const SAID: Record<Route, string> = {
   queued:
     'It is working, so Memnox hands this over at its next step, beside its work: it never appears in the message box, and nothing needs typing. Say that in one sentence, like "Claude Code is busy, so I have handed it over, and it will pick it up at its next step."',
-  typed:
-    'The Mac typed it into its prompt, sent it and read the tab back to see it land, so it is starting on it now. Say so in a few words.',
-  prefilled:
-    'The Mac typed it into its message box in the editor, sent it and saw the box take it, so it is starting on it now. Say so in a few words.',
+  typed: `${THE_DESKTOP_START} typed it into its prompt, sent it and read the tab back to see it land, so it is starting on it now. Say so in a few words.`,
+  prefilled: `${THE_DESKTOP_START} typed it into its message box in the editor, sent it and saw the box take it, so it is starting on it now. Say so in a few words.`,
   later:
     'It is idle where Memnox cannot type, so it has not got this yet: it only reads it when the person next prompts that session. Never say it will pick it up at its next step or on its own. Say in one sentence that it has not reached it yet, and offer to type it in there for them now. On a yes, show it with display open and call send_instruction again. It runs in a terminal or an editor, never in a desktop app, since one there is typed into before this is said, so never call type_in_app for it: that types into a different chat. A session just started may not have come up yet, so if it is still not reached, say so and offer to try again in a moment. Never ask them to send it themselves.',
 };
 
 /** Sent, but the Mac could not read it back, so it is never called done. */
-const SENT_UNCHECKED =
-  'The Mac typed it in and sent it, but could not read it back to see it land. Say it went in and that you could not confirm it yet; never say it is done or that the agent started.';
+const SENT_UNCHECKED = `${THE_DESKTOP_START} typed it in and sent it, but could not read it back to see it land. Say it went in and that you could not confirm it yet; never say it is done or that the agent started.`;
 
 /** The Mac kept the person's window, so the words wait for the session's next prompt. */
-const WAITING =
-  'It is idle in a chat panel the Mac could not reach, so it has not got this yet: it only reads it when the person next prompts that session. Never say it will pick it up at its next step or on its own. Say so in one sentence and offer to type it in there for them now; on a yes, do it. Never ask them to send it themselves.';
+const WAITING = `It is idle in a chat panel ${THE_DESKTOP} could not reach, so it has not got this yet: it only reads it when the person next prompts that session. Never say it will pick it up at its next step or on its own. Say so in one sentence and offer to type it in there for them now; on a yes, do it. Never ask them to send it themselves.`;
 
 /** What the brain is told when the Mac said typing did not land, so it never says it did. */
 const NOT_TYPED: Record<
@@ -88,17 +86,16 @@ const NOT_TYPED: Record<
   >,
   string
 > = {
-  clipboard:
-    'The Mac could not type it in safely, so the words are on their clipboard, and it has already said sorry and told them out loud how to paste it. Do not say sorry again, mention the clipboard or say it was sent: only ask, in one short question, whether to open the session, and keep listening for the answer.',
-  failed:
-    'The Mac could not type it in, and nothing was sent anywhere. Do not say it is on its way or started. Say sorry in a few words and give the reason in why in plain words, never another cause such as focus, a tab not responding or needing a click. Sending it to this session again fails the same way, so never offer to retry it. Offer, as one question, the one thing that works: to start a new session with these same words as its task, where they work, such as inside VS Code when they asked for it there, which propose_start does.',
-  'not-allowed':
-    'The Mac is not allowed to type yet, and it has already told them out loud how to allow it and that the words are on their clipboard. Write nothing at all this turn: every word you add repeats what they just heard. Only when they later say they switched it on, or ask you to try again, call propose_instruction with the same words and then send_instruction at once, with nothing said in between.',
+  clipboard: `${THE_DESKTOP_START} could not type it in safely, so the words are on their clipboard, and it has already said sorry and told them out loud how to paste it. Do not say sorry again, mention the clipboard or say it was sent: only ask, in one short question, whether to open the session, and keep listening for the answer.`,
+  failed: `${THE_DESKTOP_START} could not type it in, and nothing was sent anywhere. Do not say it is on its way or started. Say sorry in a few words and give the reason in why in plain words, never another cause such as focus, a tab not responding or needing a click. Sending it to this session again fails the same way, so never offer to retry it. Offer, as one question, the one thing that works: to start a new session with these same words as its task, where they work, such as inside VS Code when they asked for it there, which propose_start does.`,
+  'not-allowed': `${THE_DESKTOP_START} is not allowed to type yet, and it has already told them out loud how to allow it and that the words are on their clipboard. Write nothing at all this turn: every word you add repeats what they just heard. Only when they later say they switched it on, or ask you to try again, call propose_instruction with the same words and then send_instruction at once, with nothing said in between.`,
 };
 
+/** The phone that asked is paired but not yet allowed to act here, which allowing it ends, so a retry is right then. */
+const PHONE_NOT_ALLOWED = `Nothing was typed, because the phone they spoke through is not allowed to act on ${THE_DESKTOP} yet. That is a permission, never a fault or a pairing: the phone is already paired. Say in one sentence that they allow it on ${THE_DESKTOP} with ${KEY_THEIRS} and then drive ${THE_DESKTOP} from the phone, and never tell them to pair it again. Once they say they allowed it, or ask you to try again, call propose_instruction with the same words and send_instruction at once, with nothing said in between, since this refusal does not repeat once it is allowed.`;
+
 /** The Mac never answered, so all that is known is that it was handed over. */
-const UNCONFIRMED =
-  'Handed to the Mac to type into its prompt, which has not confirmed it landed yet. Say it is going in now; never say it was typed, sent or started.';
+const UNCONFIRMED = `Handed to ${THE_DESKTOP} to type into its prompt, which has not confirmed it landed yet. Say it is going in now; never say it was typed, sent or started.`;
 
 const NEEDS_MESSAGE = "Pass message: the instruction in the person's words.";
 
@@ -340,9 +337,11 @@ function notTyped(
       ...why,
     });
   }
-  const said = isNotTyped(delivery.outcome)
-    ? unlessMacTold(delivery, NOT_TYPED[delivery.outcome])
-    : UNCONFIRMED;
+  const said = isPhoneMayNotAct(delivery.reason)
+    ? PHONE_NOT_ALLOWED
+    : isNotTyped(delivery.outcome)
+      ? unlessMacTold(delivery, NOT_TYPED[delivery.outcome])
+      : UNCONFIRMED;
   return { sent: false, session: sessionId, how: delivery.outcome, ...why, said };
 }
 

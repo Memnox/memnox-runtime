@@ -1,7 +1,16 @@
+import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_SERVER_KEY, MCP_CONFIG_LOCATIONS, type Account } from '@memnox/core';
+import {
+  DEFAULT_SERVER_KEY,
+  DISCOVERED_AGENT_KIND,
+  MCP_CONFIG_LOCATIONS,
+  type Account,
+} from '@memnox/core';
+
+import { BRIDGE_AUTHORIZATION_ENV } from '../mcp/remote-bridge';
 
 import { undecline } from './declined';
 import {
@@ -20,6 +29,7 @@ import {
   withManagedServer,
   withoutManagedServer,
 } from './managed-server';
+import { managedBridgeFor, type BridgeLaunch, type ManagedEntry } from './managed-shape';
 import {
   onboardBackupPath,
   readRecord,
@@ -57,6 +67,31 @@ export interface OnboardResult {
 interface AgentConfig {
   product: string;
   path: string;
+  agent?: string;
+}
+
+/** The bridge's own bin, which npm puts on the person's PATH, for a memnox run from somewhere that ships no script. */
+const BRIDGE_BINARY = 'memnox-mcp-remote';
+
+/**
+ * The node running this memnox and the bridge script beside it, both by absolute path, since Claude Desktop starts
+ * a server with almost no PATH and `#!/usr/bin/env node` would find no node there.
+ */
+function bridgeLaunch(): BridgeLaunch {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const script = ['bin/mcp-remote.js', '../bin/mcp-remote.js']
+    .map((relative) => join(here, relative))
+    .find((path) => existsSync(path));
+  return script === undefined
+    ? { command: BRIDGE_BINARY, args: [] }
+    : { command: process.execPath, args: [script] };
+}
+
+/** What this agent's config can hold: a URL for most, and a command to start for Claude Desktop, which takes no URL. */
+function entryFor(config: AgentConfig, mcpUrl: string, token: string): ManagedEntry {
+  return config.agent === DISCOVERED_AGENT_KIND.CLAUDE_DESKTOP
+    ? managedBridgeFor(mcpUrl, token, bridgeLaunch(), BRIDGE_AUTHORIZATION_ENV)
+    : managedServerFor(mcpUrl, token);
 }
 
 /** The file onboarding would rewrite, or why there is not one. */
@@ -84,7 +119,7 @@ export async function manageable(
   const trial = withManagedServer(
     raw,
     serversKeyFor(raw, config.path),
-    managedServerFor('https://example.invalid/mcp', 'trial'),
+    entryFor(config, 'https://example.invalid/mcp', 'trial'),
     config.path,
   );
   if (trial.next === null) {
@@ -121,7 +156,7 @@ async function configFor(
     const path = join(location.scope === 'home' ? home : project, location.relative);
     try {
       await readFile(path, 'utf8');
-      return { product: location.product, path };
+      return { product: location.product, path, agent: location.agent };
     } catch {
       // Not on this machine: keep looking, since one product ships more than one location.
       continue;
@@ -175,7 +210,7 @@ export async function onboardAgent(input: OnboardInput): Promise<OnboardResult> 
   const rewritten = withManagedServer(
     read.raw,
     read.serversKey,
-    managedServerFor(enrolled.mcpUrl, enrolled.token),
+    entryFor(read.config, enrolled.mcpUrl, enrolled.token),
     read.config.path,
   );
   if (rewritten.next === null) {

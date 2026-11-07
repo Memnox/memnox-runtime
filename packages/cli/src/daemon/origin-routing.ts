@@ -10,6 +10,7 @@ import {
   MAC_READS,
   NOTICE_KIND,
   PHONE_OWN_DISPLAYS,
+  phoneHears,
   PROPOSAL_KIND,
   Proposals,
   REMOTE_CAPABILITY,
@@ -18,11 +19,19 @@ import {
   type DaemonResponse,
   type DeviceRecord,
   type DisplayKind,
+  type RemoteCapability,
 } from '@memnox/core';
 import { displayName, readNames } from '../agents/names';
-import { doneText, macRationale, NOT_ALLOWED_ON_MAC, OPEN_THE_MAC } from './done-lines';
+import {
+  doneText,
+  macRationale,
+  NOT_ALLOWED_ON_MAC,
+  OPEN_THE_MAC,
+  phoneMayNotAct,
+} from './done-lines';
 import { write, type Peer } from './socket-write';
 import { settled } from './waiting-feed';
+import { DESKTOP_APP } from '../this-machine';
 
 /**
  * Where an answer goes when a phone asked: words to the phone, hands on the Mac. A show only the
@@ -83,6 +92,21 @@ export function heardRemotely(event: DaemonEvent): boolean {
     event.phoneTurn === undefined &&
     event.voiceOn === undefined
   );
+}
+
+/** What one subscriber asked for and, on a phone, what it holds. */
+export interface Listener {
+  activity: boolean;
+  /** Undefined on the Mac's own socket, which hears everything it asked for. */
+  holds?: readonly RemoteCapability[];
+}
+
+/** Whether a subscriber is sent an event: ACTIVITY only once asked for, and a phone only what it may see. */
+export function listenerHears(event: DaemonEvent, listener: Listener): boolean {
+  // Asked for, because an app built before ACTIVITY speaks a kind it does not know, every second.
+  if (event.kind === DAEMON_EVENT.ACTIVITY && !listener.activity) return false;
+  if (listener.holds === undefined) return true;
+  return heardRemotely(event) && phoneHears(event.kind, listener.holds);
 }
 
 /** A show naming a session, which the phone that asked for it may open on its own screen. */
@@ -263,7 +287,7 @@ export class OriginRouter {
   ): Promise<void> {
     const device = await new Devices(this.deps.home).find(deviceId);
     if (device === null || mac.length === 0) {
-      return this.refuse(event, deviceId, OPEN_THE_MAC, 'the Mac app is not open');
+      return this.refuse(event, deviceId, OPEN_THE_MAC, `the ${DESKTOP_APP} is not open`);
     }
     const reads = event.display !== undefined && MAC_READS.includes(event.display);
     // A new session always waits on Face ID, since a drive grant never covers starting one.
@@ -275,7 +299,7 @@ export class OriginRouter {
         event,
         deviceId,
         NOT_ALLOWED_ON_MAC,
-        `${device.name} may not act on the Mac`,
+        phoneMayNotAct(device.name),
       );
     }
     await this.propose(event, device);

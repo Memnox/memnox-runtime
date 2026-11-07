@@ -1,5 +1,7 @@
 import type { HoldRequest } from './hold';
 import { redactSecrets } from '../domain/redact';
+import { holdImpact, type HoldImpact } from './hold-impact';
+import type { WorkEvidence } from '../session/work-evidence';
 
 /**
  * A held call in the words a person reads it in: who wants to do what, why they are being
@@ -15,6 +17,8 @@ export interface PlainAsk {
   why: string;
   /** The person's own ask this session, quoted, so the action has its reason beside it. */
   task?: string;
+  /** What it could affect, whether it can be undone, and what was verified, each with how it is known. */
+  impact?: HoldImpact;
 }
 
 /** Long enough to recognise the ask, short enough to sit on one line of a phone screen. */
@@ -123,8 +127,11 @@ export function taskShown(statement: string): string | undefined {
 }
 
 export function plainAsk(
-  request: Pick<HoldRequest, 'agent' | 'operation' | 'target' | 'reason'>,
+  request: Pick<HoldRequest, 'agent' | 'operation' | 'target' | 'reason'> &
+    Partial<Pick<HoldRequest, 'class'>>,
   task?: string,
+  /** What the session recorded about its tests, where the caller has it. */
+  work?: WorkEvidence,
 ): PlainAsk {
   // This wording reaches the control plane and a DM, so no credential in a target or a prompt rides along.
   const shownTask = task === undefined ? undefined : taskShown(redactSecrets(task));
@@ -134,5 +141,6 @@ export function plainAsk(
     doing: action,
     why: redactSecrets(whyShown(request.reason)),
     ...(shownTask === undefined ? {} : { task: shownTask }),
+    impact: holdImpact(request, work),
   };
 }

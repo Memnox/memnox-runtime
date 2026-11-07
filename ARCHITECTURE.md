@@ -320,7 +320,8 @@ installed, the keeper puts a missing one back unless `memnox mcp session off` re
 
 ## A paired phone, and why the tunnel ends in the daemon
 
-A phone can see and steer this machine from anywhere, through a blind relay in Memnox Cloud.
+A phone can see and steer this machine from anywhere, through a blind relay in Memnox Cloud, and
+from the same network with no account at all, once the person turns the local network on.
 `docs/remote-contract.md` is the protocol and `docs/threat-model.md` says what the cloud learns.
 The tunnel ends in the daemon rather than the Mac app, because the daemon is the authority and the
 app may not be running.
@@ -329,9 +330,12 @@ app may not be running.
 |---|---|---|
 | the device registry | `core/src/gate/devices.ts`, `devices.json` | every key that signs for the person: `this-mac`, mirrored from `confirm-key.json` and still trusted on first use, and each phone with its Noise key and capabilities |
 | the capability table | `core/src/gate/capabilities.ts` | which method and which proposal each capability covers, as data; a method missing from it is never remote |
-| the relay link | `cli/src/remote/relay-link.ts` | the one outbound WebSocket, with the `mch_` token, backing off when it drops; the only network module beside `sync/client.ts` |
+| the relay link | `cli/src/remote/relay-link.ts` | the one outbound WebSocket, with the `mch_` token, backing off when it drops; the only outbound network module beside `sync/client.ts` |
+| the local network | `cli/src/remote/lan-link.ts`, `lan-frames.ts`, `local-network.ts` | a TCP listener on this machine's RFC 1918 addresses only, carrying the relay's own messages behind a four byte length; at most 16 connections and 4 from one address, 10 handshakes a minute from one address, a public peer refused outright, and a session keyed by its connection rather than the mailbox it writes, so nobody on the network can step into a relay session |
+| the announcement | `cli/src/remote/mdns.ts` | `_memnox._tcp` over Bonjour under a random `memnox-xxxxxxxx` name that is also its host name, answering only private askers and saying goodbye when it stops |
+| the setting | `core/src/config`, `cli/src/daemon/lan-answer.ts` | `lan = true` in `config.toml`, no `config set` key: `lan-set` turns it off at once and turns it on only as a `lan` proposal the Mac signs, which a phone may never sign or ask for |
 | Noise | `cli/src/remote/noise.ts` over `native/noise` | snow, loaded only once a phone is involved; the iPhone links the same build |
-| pairing | `cli/src/remote/pairing.ts`, `pairings.ts` | XXpsk0 with the QR's one time secret, the phone's proof, the six digits, and a device written only on the Mac's signed `pair-accept` |
+| pairing | `cli/src/remote/pairing.ts`, `pairings.ts` | XXpsk0 with the QR's one time secret, the phone's proof, the six digits, and a device written only on the Mac's signed `pair-accept`; with the local network on and nobody signed in, the mailbox is made here, the QR is version 2 and names only the local network, and the device gets no relay token |
 | a phone's session | `cli/src/remote/remote-session.ts` | an IK handshake against the registry, then JSON lines exactly as on the socket; a frame before a finished handshake is dropped |
 | the endpoint | `cli/src/remote/endpoint.ts` | checks each remote request against the device's capabilities before the voice surface sees it, and revokes, grants, drives and wakes |
 | folder listing | `cli/src/daemon/folder-listing.ts` | `files-list` under `see`: one folder under the home as names, kinds, sizes and dates, folders first, hidden entries out, at most 500; refused outside the home after links are followed, in a hidden folder, or where the credential rules and the untrusted run's keychains say credentials sit |
@@ -340,7 +344,9 @@ app may not be running.
 | the voice hold | `cli/src/remote/voice-hold.ts` | which phone speaks: one whose app is open with a live `subscribe` stream, that drives, has a question in flight, or ended one or its stream under thirty seconds ago, the latest wins, and a revoked one gives it back at once; every event then carries `heardOn` so the Mac stays silent, and the Mac app alone hears `voiceOn` when it moves |
 | the answering phone | `cli/src/remote/answer-on.ts` | which paired phone a yes waits on: the asking phone for a `mac` proposal, else the one paired last that holds what the yes takes; every held call and proposal in the waiting feed carries it as `answerOn`, so the Mac leaves a spoken yes to its Face ID rather than Touch ID, and a phone with no `subscribe` stream is woken for it |
 
-It is off until sync is enrolled and a phone is paired, so nothing changes for a Mac with no phone.
+The relay is off until sync is enrolled and a phone is paired, and the local network until the
+person signs it on, so nothing changes for a Mac with no phone. With the local network on, a pairing
+registers no personal space: the relay rides along only for a person already signed in.
 A remote yes is always signed by that phone's key, which is why `withinSession` is honoured for the
 local socket only. `scripts/relay-stub.mjs` and `scripts/phone-sim.mjs` pair a phone in a terminal
 against a real daemon.

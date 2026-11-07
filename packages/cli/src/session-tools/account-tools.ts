@@ -14,6 +14,7 @@ import {
 import { OPERATOR_AGENT } from './propose-tools';
 import { twoWorkspaces } from './memory-tools';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
+import { KEY_THEIRS, MACHINE, THE_KEY } from '../this-machine';
 
 /**
  * The accounts the person signed in to, by voice: which they are, signing out of one, and saying
@@ -23,8 +24,7 @@ import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 const CONFIRM_TTL_MS = minutesToMs(5);
 const GITHUB = 'github';
 
-const NO_SEAM =
-  "This Mac cannot reach the person's own accounts. Say so in a sentence; never pretend it was done.";
+const NO_SEAM = `This ${MACHINE} cannot reach the person's own accounts. Say so in a sentence; never pretend it was done.`;
 
 /** Every account their sign ins reached, and whether each is known to be theirs. */
 export async function myAccountsTool(deps: SessionToolDeps): Promise<unknown> {
@@ -100,8 +100,7 @@ export function notTiedNote(accounts: readonly CheckedAccount[]): {
 }
 
 /** An account nothing ties to them yet is a detail, and the voice kept making it a reason not to send. */
-const NOT_TIED_YET =
-  'An account marked unverified or unknown reads and sends like any other: the Touch ID on their first send ties it to them. Never say it needs confirming, never offer to confirm it, and never hold anything up for it.';
+const NOT_TIED_YET = `An account marked unverified or unknown reads and sends like any other: ${THE_KEY} on their first send ties it to them. Never say it needs confirming, never offer to confirm it, and never hold anything up for it.`;
 
 /**
  * The person's own Memnox sign in, started on the daemon as the Account row starts it, with its page opened
@@ -111,7 +110,7 @@ export async function memnoxSignInTool(deps: SessionToolDeps): Promise<unknown> 
   if (deps.memnoxSignIn === undefined)
     return {
       done: false,
-      said: 'This Mac cannot start the sign in from here. Say so in a sentence.',
+      said: `This ${MACHINE} cannot start the sign in from here. Say so in a sentence.`,
     };
   const standing = await deps.memnoxSignIn();
   if (standing === null) {
@@ -142,7 +141,7 @@ export async function memnoxSignInTool(deps: SessionToolDeps): Promise<unknown> 
     started: true,
     code: code.userCode,
     said: opened
-      ? `A page opened in their browser to approve signing in to Memnox, showing the code ${code.userCode}. Once they approve it they are signed in as themselves and this Mac is connected too, with nothing to type. Say so in a sentence, and never send them to the Account row or a terminal.`
+      ? `A page opened in their browser to approve signing in to Memnox, showing the code ${code.userCode}. Once they approve it they are signed in as themselves and this ${MACHINE} is connected too, with nothing to type. Say so in a sentence, and never send them to the Account row or a terminal.`
       : `The sign in started, but no page could be opened. Say the code ${code.userCode} and that it is approved at ${code.page ?? 'the Memnox sign in page'}.`,
   };
 }
@@ -198,7 +197,7 @@ export async function confirmAccountTool(
   });
   return {
     proposed: proposal.id,
-    said: `Read it back: ${label} is theirs. It holds once they confirm with Touch ID.`,
+    said: `Read it back: ${label} is theirs. It holds once they confirm with ${KEY_THEIRS}.`,
   };
 }
 

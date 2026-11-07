@@ -3,9 +3,15 @@
  * meets it. Read from disk, never from a model; the one network call is a logged in machine's
  * bounded ask at a session's start, and its failure says nothing rather than holding the session.
  */
+import { basename, relative } from 'node:path';
+
 import {
   ACTION,
   boundaryContext,
+  factOrigin,
+  fitLines,
+  noteRead,
+  oneMemoryLine,
   candidatesAbout,
   describeCandidate,
   describeFact,
@@ -129,7 +135,7 @@ export async function answerSessionStart(
   const fingerprint = await fingerprintHere(repository, deps.agent);
   const text = linesOf([
     boundaryContext({ mode, rules, containment }),
-    await memoryLine(deps.home),
+    await memoryLine(deps, start.sessionId, cwd, repository),
     await workBriefLine(deps.home, deps.env),
     await workspaceBrief,
     fingerprint.told,
@@ -226,11 +232,65 @@ async function workBriefLine(home: string, env: NodeJS.ProcessEnv): Promise<stri
   return brief === null ? '' : renderWorkBrief(brief);
 }
 
-/** Said once a session, so an agent knows to ask what was settled before it plans a change. */
-async function memoryLine(home: string): Promise<string> {
-  const memory = await readWorkspaceMemory(home).catch(() => null);
+/** The start brief's budget in tokens, small because it is read before every turn of the session. */
+const START_BRIEF_TOKENS = 300;
+
+/** Records the memories a session was shown, so a later answer counts them rather than repeating them. */
+async function markPageShown(
+  deps: SessionContextDeps,
+  sessionId: string,
+  ids: readonly string[],
+): Promise<void> {
+  const store = new SessionContextStore(deps.home);
+  await store.write(
+    sessionId,
+    markShown(await store.read(sessionId), ids, deps.now().toISOString()),
+  );
+}
+
+/**
+ * Said once a session: the settled facts about this repository and the folder it starts in, one
+ * line each inside a small budget and marked shown, then how to ask for the rest by subject or id.
+ */
+async function memoryLine(
+  deps: SessionContextDeps,
+  sessionId: string,
+  cwd: string,
+  root: string | null,
+): Promise<string> {
+  const memory = await readWorkspaceMemory(deps.home).catch(() => null);
   if (memory === null || memory.facts.length === 0) return '';
-  return `Your workspace has settled ${memory.facts.length} decision(s), policies and owners. Before you change code, ask the memnox-session "brief" tool about the paths, or "memory" about the subject, and cite what it says.`;
+  const ask = `Your workspace has settled ${memory.facts.length} decision(s), policies and owners. Before you change code, ask the memnox-session "brief" tool about the paths, or "memory" about the subject, and cite what it says.`;
+  if (root === null) return ask;
+  const here = relative(root, cwd);
+  const found = factsAbout(memory, {
+    words: [basename(root)],
+    paths: here === '' || here.startsWith('..') ? [basename(root)] : [here],
+  });
+  const page = fitLines(
+    found.map(({ fact }) => ({
+      id: `${FACT_ID_PREFIX}${fact.id}`,
+      line: `- ${oneMemoryLine(fact.statement, fact.id, factOrigin(fact))}`,
+    })),
+    START_BRIEF_TOKENS,
+  );
+  if (page.lines.length === 0) return ask;
+  await markPageShown(
+    deps,
+    sessionId,
+    page.lines.map((each) => each.id),
+  );
+  const text = [
+    `Settled about ${basename(root)}, ${page.lines.length} of ${found.length}:`,
+    ...page.lines.map((each) => each.line),
+    ask,
+  ].join('\n');
+  await noteRead(deps.home, {
+    tool: 'session-start',
+    returnedText: text,
+    fullText: [...found.map(describeFact), ask].join('\n'),
+  });
+  return text;
 }
 
 /**

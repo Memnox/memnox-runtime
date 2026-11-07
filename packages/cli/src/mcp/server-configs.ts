@@ -89,7 +89,7 @@ async function readConfig(path: string): Promise<ConfigFile | null> {
   return { path, raw, format, config, key, servers, urlOnly: [] };
 }
 
-async function readIfPresent(path: string): Promise<string | null> {
+export async function readIfPresent(path: string): Promise<string | null> {
   try {
     return await readFile(path, 'utf8');
   } catch (err) {

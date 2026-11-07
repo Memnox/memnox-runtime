@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { AGENT_ID, SPEAKER, type ConversationLine } from '@memnox/core';
 import { readWholeConversation } from './transcript';
 
@@ -229,7 +229,7 @@ const CLAUDE_LOG = {
 function claudeSessions(root: string, since: string): DesktopSession[] {
   const found: DesktopSession[] = [];
   for (const file of filesUnder(root, CLAUDE_DEPTH)) {
-    const name = file.split('/').pop() ?? '';
+    const name = basename(file);
     if (
       !name.startsWith(CLAUDE_LOG.RECORD_PREFIX) ||
       !name.endsWith(CLAUDE_LOG.RECORD_SUFFIX)

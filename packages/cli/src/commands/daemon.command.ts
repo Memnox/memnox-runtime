@@ -5,6 +5,7 @@ import type { Command } from 'commander';
 import {
   LEDGER_SCAN_LIMIT,
   LocalGate,
+  projectLookup,
   readAccount,
   readBudgets,
   readFleetSpend,
@@ -27,6 +28,7 @@ import { HeartbeatBeats } from '../sync/beat';
 import { syncLoop } from '../sync/heartbeat';
 import { installService, serviceState, uninstallService } from '../daemon/service';
 import { refreshVscodeTerminals } from '../protect/vscode-terminals';
+import { startMemoryWatch } from '../memory/memory-daemon';
 
 /** Optional by design: with no daemon each seam evaluates in its own process and stays governed. */
 export function registerDaemonCommand(
@@ -178,6 +180,8 @@ async function runLoop(
   // Local, and so whether or not the machine is enrolled: this is what setup asked it to hold.
   const keeper = new BoundaryKeeper(home(), { log });
   keeper.start();
+  // Local too: the person's own sources are read again when a file in them changes.
+  const memory = startMemoryWatch(home(), log);
   // In the background, since an editor CLI can take seconds and the socket is already answering.
   void refreshVscodeTerminals(home(), log).catch((err: unknown) =>
     log(`The Memnox extension was not checked in the editors: ${String(err)}`),
@@ -190,6 +194,7 @@ async function runLoop(
     const stop = (): void => {
       sync.stop();
       keeper.stop();
+      memory.stop();
       void Promise.all([state.daemon.close(), egress.stop()]).then(() => resolve());
     };
     process.once('SIGINT', stop);
@@ -323,6 +328,7 @@ async function buildLoop(
   const later: LoopState['later'] = {};
   const daemon = new MemnoxDaemon({
     ...(gate === undefined ? {} : { gate }),
+    projectAt: projectLookup(home),
     ...spending,
     remote: { beats },
     pauses: new SessionPauses(home),

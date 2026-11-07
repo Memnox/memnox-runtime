@@ -465,7 +465,7 @@ export async function authorizerFor(
     },
     context.home,
   );
-  return new HookAuthorizer(gate === null ? {} : { gate });
+  return HookAuthorizer.forHome(context.home, gate);
 }
 
 /** Best effort: the verdict has been reached, and a ledger that stops the agent is removed. */

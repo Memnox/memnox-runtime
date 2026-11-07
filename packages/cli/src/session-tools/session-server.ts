@@ -2,15 +2,11 @@
  * The session server's wire: MCP over newline-delimited JSON on stdio, answering
  * `initialize`, `tools/list` and `tools/call`, and asking the person through the host where it can.
  */
-import {
-  describeFingerprint,
-  LineBuffer,
-  readCodeFingerprint,
-  readWorkspaceMemoryCached,
-} from '@memnox/core';
+import { describeFingerprint, LineBuffer, readCodeFingerprint } from '@memnox/core';
 import { repositoryRootOf } from '@memnox/interceptors';
 
 import { answerText } from './bounded';
+import { readSessionMemory } from './local-memory';
 import type { SessionToolDeps, ToolArgs } from './read-tools';
 import type { RewindSeams } from './rewind-tool';
 import { callTool, SESSION_TOOLS, type ToolDefinition } from './session-tools';
@@ -227,7 +223,8 @@ const ABOUT_SESSION =
  * context (Cursor, Windsurf) still learns to ask what its workspace settled before it edits.
  */
 async function instructionsFor(deps: SessionToolDeps): Promise<string> {
-  const memory = await readWorkspaceMemoryCached(deps.home).catch(() => null);
+  const held = await readSessionMemory(deps.home, deps.cwd, deps.now()).catch(() => null);
+  const memory = held === null ? null : held.memory;
   const settled =
     memory === null || memory.facts.length === 0
       ? ''

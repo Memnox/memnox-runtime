@@ -16,6 +16,7 @@ import {
   MOST_BOUNDARY_CHARS,
   MOST_DECISIONS_PER_CALL,
   MOST_FACTS_PER_CALL,
+  readReadTokens,
   writeWorkspaceMemory,
   WORK_BRIEF_VAR,
   WorkBriefs,
@@ -367,6 +368,47 @@ describe('what the workspace settled, where the agent meets it', () => {
 
     expect(text).toContain('Your workspace has settled 1 decision(s)');
     expect(text).toContain('"brief"');
+  });
+
+  it('lists the facts about where the session starts in a small budget, and never again after', async () => {
+    const deps = await connected([
+      ...Array.from({ length: 30 }, (_, at) => settled(`f${at}`)),
+      settled('f_billing', {
+        subject: 'billing',
+        statement: 'Billing has its own rule.',
+      }),
+    ]);
+    const start = { sessionId: 's1', cwd: join(deps.cwd, 'src', 'payments') };
+
+    const text = (
+      JSON.parse(await answerSessionStart(start, deps)) as {
+        hookSpecificOutput: { additionalContext: string };
+      }
+    ).hookSpecificOutput.additionalContext;
+    const listed = text.split('\n').filter((line) => line.startsWith('- Payments rule'));
+
+    expect(text).toMatch(/Settled about repo, \d+ of 30:/);
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.length).toBeLessThan(30);
+    expect(listed[0]).toMatch(/\[f\d+; a decision, confirmed by ada@acme\.test\]$/);
+    expect(text).not.toContain('Billing has its own rule');
+    expect(await readReadTokens(deps.home)).toMatchObject({
+      tools: { 'session-start': { reads: 1 } },
+    });
+
+    const write = await decisionsAt(
+      {
+        sessionId: 's1',
+        subjects: [
+          { action: 'filesystem.write', target: `${deps.cwd}/src/payments/charge.ts` },
+        ],
+      },
+      deps,
+    );
+    for (const line of listed) {
+      const statement = line.slice(2).split(' [')[0] ?? '';
+      expect(write ?? '').not.toContain(`"${statement}"`);
+    }
   });
 
   it('says nothing about a workspace when this machine never pulled one', async () => {

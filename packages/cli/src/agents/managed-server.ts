@@ -4,7 +4,7 @@ import {
   MANAGED_SERVER,
   managedServerFor,
   type ConfigFormat,
-  type ManagedServer,
+  type ManagedEntry,
   type RewriteResult,
 } from './managed-shape';
 import {
@@ -47,7 +47,7 @@ export function canRewrite(path: string): boolean {
 export function withManagedServer(
   raw: string,
   serversKey: string,
-  server: ManagedServer,
+  server: ManagedEntry,
   path = '.json',
 ): RewriteResult {
   const format = configFormatOf(path);
@@ -63,11 +63,19 @@ export function withManagedServer(
 function write(
   raw: string,
   serversKey: string,
-  server: ManagedServer,
+  server: ManagedEntry,
   format: ConfigFormat,
 ): RewriteResult {
-  if (format === CONFIG_FORMAT.TOML) return withManagedTomlServer(raw, server);
-  if (format === CONFIG_FORMAT.YAML) return withManagedYamlServer(raw, server);
+  if (format !== CONFIG_FORMAT.JSON && 'command' in server) {
+    return {
+      next: null,
+      because: 'only a JSON config is given the command that starts Memnox',
+    };
+  }
+  if ('url' in server && format === CONFIG_FORMAT.TOML)
+    return withManagedTomlServer(raw, server);
+  if ('url' in server && format === CONFIG_FORMAT.YAML)
+    return withManagedYamlServer(raw, server);
 
   return withManagedJsonServer(raw, serversKey, server);
 }

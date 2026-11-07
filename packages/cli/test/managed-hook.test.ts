@@ -97,38 +97,42 @@ describe('memnox protect --managed', () => {
     expect(seat).toBe(HOOK_SEAT.MANAGED);
   });
 
-  it('stages the file and names the sudo command where root owns it, leaving the user copy', async () => {
-    const { home, managedDir, target } = await machine();
-    await installClaudeHook(home);
-    await chmod(managedDir, 0o500);
-    const { context: run, said } = context();
+  // Windows chmod cannot take write access off a folder, so the managed folder stays writable.
+  it.skipIf(process.platform === 'win32')(
+    'stages the file and names the sudo command where root owns it, leaving the user copy',
+    async () => {
+      const { home, managedDir, target } = await machine();
+      await installClaudeHook(home);
+      await chmod(managedDir, 0o500);
+      const { context: run, said } = context();
 
-    try {
-      await runManagedHook(
-        run,
-        { reverting: false, exclusive: false },
-        {
-          home: () => home,
-          target: () => target,
-        },
+      try {
+        await runManagedHook(
+          run,
+          { reverting: false, exclusive: false },
+          {
+            home: () => home,
+            target: () => target,
+          },
+        );
+      } finally {
+        await chmod(managedDir, 0o700);
+      }
+
+      expect(existsSync(target)).toBe(false);
+      const staged = join(
+        home,
+        '.memnox',
+        'managed',
+        'claude-code',
+        'managed-settings.json',
       );
-    } finally {
-      await chmod(managedDir, 0o700);
-    }
-
-    expect(existsSync(target)).toBe(false);
-    const staged = join(
-      home,
-      '.memnox',
-      'managed',
-      'claude-code',
-      'managed-settings.json',
-    );
-    expect(await readFile(staged, 'utf8')).toContain(COMMAND);
-    expect(said()).toContain(`sudo install -m 0644 "${staged}" "${target}"`);
-    // No moment with neither copy in place: the user one stays until the managed one is live.
-    expect(await readFile(userSettings(home), 'utf8')).toContain('memnox-edit-hook');
-  });
+      expect(await readFile(staged, 'utf8')).toContain(COMMAND);
+      expect(said()).toContain(`sudo install -m 0644 "${staged}" "${target}"`);
+      // No moment with neither copy in place: the user one stays until the managed one is live.
+      expect(await readFile(userSettings(home), 'utf8')).toContain('memnox-edit-hook');
+    },
+  );
 
   it('takes the user copy out on the second run, once the staged file is installed', async () => {
     const { home, target } = await machine();

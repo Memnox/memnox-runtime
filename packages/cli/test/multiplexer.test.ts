@@ -92,7 +92,8 @@ async function inAPane(
   return { deps, ran };
 }
 
-describe('an agent in a tmux pane', () => {
+// The terminal harness holds a process on a pty through script, pgrep and ps, which Windows has none of.
+describe.skipIf(process.platform === 'win32')('an agent in a tmux pane', () => {
   it('is typed into through tmux, with no app and no window brought forward', async () => {
     const { deps, ran } = await inAPane('> run the tests\n');
     const instruction = await new SpokenInstructions(deps.home).propose({

@@ -1,0 +1,172 @@
+import {
+  agentsOf,
+  daysToMs,
+  EVENT_SURFACE,
+  LEDGER_SCAN_LIMIT,
+  MCP_HEALTH,
+  MCP_SCOPE,
+  planSync,
+  readHub,
+  readHubHealth,
+  readOrgServers,
+  secretsOfServer,
+  withOrganization,
+  type HubHealth,
+  type Hub,
+  type HubServer,
+  type McpHubEntryView,
+  type McpHubServerView,
+  type McpHubView,
+  type McpProjectAssignment,
+  type MemnoxEvent,
+  type SecretStore,
+  type SyncPlan,
+} from '@memnox/core';
+import { withEvents } from '../event-store';
+import { readHubConfigs } from './hub-writer';
+
+/**
+ * The hub as a screen draws it, read from the hub file, the agents' configs, the last tests and
+ * the ledger. Each secret is reported as held or not; its value is never read into the view.
+ */
+
+const WEEK_DAYS = 7;
+const MCP_OPERATION_PREFIX = 'mcp.';
+
+interface HubViewInput {
+  secrets: SecretStore;
+  now: Date;
+}
+
+export async function readHubView(
+  home: string,
+  { secrets, now }: HubViewInput,
+): Promise<McpHubView> {
+  const [own, org, health, configs, calls] = await Promise.all([
+    readHub(home),
+    readOrgServers(home),
+    readHubHealth(home),
+    readHubConfigs(home, home),
+    callsSince(home, new Date(now.getTime() - daysToMs(WEEK_DAYS))),
+  ]);
+  const hub = withOrganization(own, org);
+  const agents = configs.flatMap((config) =>
+    config.agent === undefined ? [] : [{ agent: config.agent, path: config.path }],
+  );
+  const servers: McpHubServerView[] = [];
+  for (const server of hub.servers) {
+    const personal = own.servers.includes(server);
+    const given = personal
+      ? agentsOf(hub, server.name)
+      : orgAgentsOf(hub, server, agents);
+    const projects = projectsOf(hub, server.name, given);
+    servers.push({
+      ...serverFields(server, health),
+      scope: personal ? MCP_SCOPE.PERSONAL : MCP_SCOPE.ORGANIZATION,
+      agents: given,
+      ...(projects.length === 0 ? {} : { projects }),
+      secretsHeld: await heldOf(server, secrets),
+      callsThisWeek: calls.get(server.name) ?? 0,
+    });
+  }
+  return { servers, agents, ...entriesOf(planSync(hub, configs)) };
+}
+
+/** An organization server handed to every agent is shown on the agents here, not on every kind there is. */
+function orgAgentsOf(
+  hub: Hub,
+  server: HubServer,
+  here: readonly { agent: string }[],
+): string[] {
+  const present = new Set(here.map((each) => each.agent));
+  return agentsOf(hub, server.name).filter((agent) => present.has(agent));
+}
+
+/** Each assignment held to one repository, for the agents the server is shown on. */
+function projectsOf(
+  hub: Hub,
+  server: string,
+  shown: readonly string[],
+): McpProjectAssignment[] {
+  return hub.assignments.flatMap((each) =>
+    each.server !== server || each.project === undefined || !shown.includes(each.agent)
+      ? []
+      : [{ agent: each.agent, project: each.project }],
+  );
+}
+
+type ServerFields = Omit<
+  McpHubServerView,
+  'scope' | 'agents' | 'projects' | 'secretsHeld' | 'callsThisWeek'
+>;
+
+function serverFields(server: HubServer, health: HubHealth): ServerFields {
+  const last = health[server.name] ?? { state: MCP_HEALTH.UNKNOWN };
+  const tools = last.tools ?? [];
+  return {
+    name: server.name,
+    ...(server.description === undefined ? {} : { description: server.description }),
+    transport: server.transport,
+    ...(server.command === undefined ? {} : { command: server.command }),
+    ...(server.args === undefined ? {} : { args: [...server.args] }),
+    ...(server.url === undefined ? {} : { url: server.url }),
+    envNames: Object.keys(server.env),
+    ...(server.headers === undefined ? {} : { headerNames: Object.keys(server.headers) }),
+    // Every server the hub writes is behind the proxy, a remote one reached by it over HTTP.
+    governed: true,
+    toolCount: tools.length,
+    ...(tools.length === 0 ? {} : { tools }),
+    health: {
+      state: last.state,
+      ...(last.checkedAt === undefined ? {} : { checkedAt: last.checkedAt }),
+      ...(last.error === undefined ? {} : { error: last.error }),
+    },
+  };
+}
+
+/** Whether each named secret is in the OS store; the value is looked at and dropped here. */
+async function heldOf(
+  server: HubServer,
+  secrets: SecretStore,
+): Promise<Record<string, boolean>> {
+  const held: Record<string, boolean> = {};
+  for (const name of secretsOfServer(server))
+    // A store that cannot be read holds nothing as far as the screen can tell, which is what it shows.
+    held[name] = (await secrets.get(name).catch(() => undefined)) !== undefined;
+  return held;
+}
+
+function entriesOf(plan: SyncPlan): Pick<McpHubView, 'found' | 'drifted' | 'skipped'> {
+  const found: McpHubEntryView[] = [];
+  const drifted: McpHubEntryView[] = [];
+  const skipped: McpHubEntryView[] = [];
+  for (const file of plan.files) {
+    const where = {
+      path: file.path,
+      ...(file.agent === undefined ? {} : { agent: file.agent }),
+    };
+    found.push(...file.found.map((name) => ({ ...where, name })));
+    drifted.push(...file.drifted.map(({ name, kind }) => ({ ...where, name, kind })));
+    skipped.push(...file.skipped.map(({ name, reason }) => ({ ...where, name, reason })));
+  }
+  return { found, drifted, skipped };
+}
+
+/** Calls through the proxy per server this week; the proxy names the server as each row's target. */
+async function callsSince(home: string, since: Date): Promise<Map<string, number>> {
+  // No ledger yet is a machine where nothing has called a server, so it counts as none.
+  const events = await withEvents(home, (store) =>
+    store.query({
+      surface: EVENT_SURFACE.MCP,
+      since: since.toISOString(),
+      limit: LEDGER_SCAN_LIMIT,
+    }),
+  ).catch((): MemnoxEvent[] => []);
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    if (!event.operation.startsWith(MCP_OPERATION_PREFIX) || event.target === undefined)
+      continue;
+    counts.set(event.target, (counts.get(event.target) ?? 0) + 1);
+  }
+  return counts;
+}

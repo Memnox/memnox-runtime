@@ -6,16 +6,16 @@ import { markRevoked, readAccount, writeAccount, accountPathFor } from '@memnox/
 import { onePass } from '../src/sync/heartbeat';
 import {
   applyBundle,
-  documentFrom,
   orgConditionsPath,
   orgPolicyPath,
   overlaysFrom,
   PULL_OUTCOME,
   type Bundle,
 } from '../src/sync/bundle';
+import { documentFrom } from '../src/sync/bundle-document';
 import {
-  ORG_CONDITION_GRACE_MS,
   overlaysInForce,
+  UNTIL_LIFTED,
   readOverlays,
   stateLabelsOf,
   WORKSPACE_WIDE,
@@ -65,22 +65,31 @@ describe('the account file', () => {
     expect(await readAccount(home)).toBeNull();
   });
 
-  it('is owner-only, because anything that reads it can act as this machine', async () => {
-    const keys = machineKeypair();
-    await writeAccount(
-      home,
-      accountFrom(
-        { baseUrl: 'https://api.example' },
-        keys,
-        { machineId: 'mch_1', token: 'mch_secret', mode: 'observe', workspaceId: 'ws_1' },
-        '2026-09-05T12:00:00.000Z',
-      ),
-    );
+  // Windows has no POSIX mode bits, so 0o600 reads back as 0o666.
+  it.skipIf(process.platform === 'win32')(
+    'is owner-only, because anything that reads it can act as this machine',
+    async () => {
+      const keys = machineKeypair();
+      await writeAccount(
+        home,
+        accountFrom(
+          { baseUrl: 'https://api.example' },
+          keys,
+          {
+            machineId: 'mch_1',
+            token: 'mch_secret',
+            mode: 'observe',
+            workspaceId: 'ws_1',
+          },
+          '2026-09-05T12:00:00.000Z',
+        ),
+      );
 
-    const mode = (await stat(accountPathFor(home))).mode & 0o777;
+      const mode = (await stat(accountPathFor(home))).mode & 0o777;
 
-    expect(mode).toBe(0o600);
-  });
+      expect(mode).toBe(0o600);
+    },
+  );
 
   it('keeps the private key here and nowhere else', async () => {
     const keys = machineKeypair();
@@ -270,7 +279,8 @@ describe('applying a bundle', () => {
     expect(overlays[0]?.validUntil).toBe(new Date(hour).toISOString());
   });
 
-  it('bounds an open-ended condition from the last sync, so it can be renewed', () => {
+  it('holds an open-ended condition until it is lifted, however long the plane is unreachable', () => {
+    // A declared freeze used to lapse a day after the last sync, so going offline lifted it.
     const at = 1_000_000;
     const overlays = overlaysFrom(
       bundle({
@@ -279,7 +289,7 @@ describe('applying a bundle', () => {
       at,
     );
 
-    expect(Date.parse(overlays[0]?.validUntil ?? '')).toBe(at + ORG_CONDITION_GRACE_MS);
+    expect(overlays[0]?.validUntil).toBe(UNTIL_LIFTED);
     expect(overlays[0]?.source).toBe('the workspace');
   });
 

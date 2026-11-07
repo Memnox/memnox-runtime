@@ -13,7 +13,9 @@ import type { SessionToolDeps } from './read-tools';
  * Every repository a session has run in, the repositories beside them, and every one in the
  * folders people keep code in, so a project nobody has opened with an agent yet is still found.
  */
-export async function knownRepositories(deps: SessionToolDeps): Promise<string[]> {
+export async function knownRepositories(
+  deps: Pick<SessionToolDeps, 'home'>,
+): Promise<string[]> {
   const roots = new Set<string>(repositoriesUnder(deps.home));
   for (const host of await new SessionHosts(deps.home).all()) {
     if (host.cwd !== undefined && isAbsolute(host.cwd))

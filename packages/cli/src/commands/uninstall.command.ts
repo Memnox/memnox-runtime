@@ -50,6 +50,16 @@ import {
 import { POLICY_FILES } from '../policy-path';
 import { uninstallService } from '../daemon/service';
 import { removeEverywhere } from '../session-tools/session-entry';
+import {
+  CLI_REMOVAL,
+  MANAGED_REMOVAL,
+  removeLocalClaudeHooks,
+  removeManagedClaudeHook,
+  removeOrphanWorkspaceServers,
+  removeTheGlobalCli,
+  type CliRemoval,
+  type CliSeams,
+} from '../protect/uninstall-leftovers';
 
 interface UninstallDeps {
   home?: () => string;
@@ -60,6 +70,10 @@ interface UninstallDeps {
   now?: () => Date;
   /** Injected so a test never asks the real service manager to stop anything. */
   unservice?: typeof uninstallService;
+  /** Claude Code's managed settings file, injected so a test never needs root; null where there is none. */
+  managedTarget?: () => string | null;
+  /** Where the CLI package is looked for, injected so a test never removes the real one. */
+  cli?: Partial<CliSeams>;
 }
 
 /**
@@ -109,7 +123,10 @@ export function registerUninstallCommand(
   program
     .command('uninstall')
     .description('Remove the interceptors, the hooks and the wrapping from this machine')
-    .option('--purge', 'also delete ~/.memnox, including the history and your rules')
+    .option(
+      '--purge',
+      'also delete ~/.memnox, including the history and your rules, and the memnox package itself',
+    )
     .action(async (options: UninstallOptions) => runUninstall(context, deps, options));
 }
 
@@ -138,7 +155,9 @@ async function runUninstall(
     ...(await handBackTheAgents(context, home)),
     ...(await removeTheInterceptors(context, home)),
     ...(await removeTheEditorHooks(context, home)),
+    ...(await removeTheOtherClaudeHooks(context, deps, home, dir)),
     ...(await removeTheSessionTools(context, home)),
+    ...(await removeTheOrphanServers(context, home)),
     ...(await removeTheDaemonService(context, deps, home)),
   ];
   await removeThePathLine(context, deps, home);
@@ -149,7 +168,68 @@ async function runUninstall(
   );
 
   if (options.purge !== true) return reportKept(context, home, taken);
-  return reportPurged(context, home, dir);
+  // Before the home goes, since a copy inside it is told apart by where it lives.
+  const cli = await removeTheGlobalCli(home, deps.cli);
+  return reportPurged(context, home, dir, cli);
+}
+
+/**
+ * The hook in Claude Code's personal settings, at home and in this repository, and in its managed settings where
+ * it was moved there, which the hook removal above never reads.
+ */
+async function removeTheOtherClaudeHooks(
+  context: CliContext,
+  deps: UninstallDeps,
+  home: string,
+  dir: string,
+): Promise<string[]> {
+  const local = await removeLocalClaudeHooks(home, dir);
+  if (local.length > 0) {
+    context.flow.step('Claude Code local hook', `taken out of ${local.join(' and ')}`);
+  }
+  const target = deps.managedTarget === undefined ? undefined : deps.managedTarget();
+  const managed = await removeManagedClaudeHook(target);
+  if (managed === MANAGED_REMOVAL.REMOVED) {
+    context.flow.step('Claude Code managed hook', 'taken out of its managed settings');
+  }
+  if (managed === MANAGED_REMOVAL.NEEDS_ROOT) {
+    context.flow.step(
+      'Claude Code managed hook',
+      'still in its managed settings, which only root can write',
+    );
+    context.flow.aside(
+      'Run "sudo memnox protect --revert-managed" before this, then uninstall again.',
+    );
+  }
+  return [
+    ...(local.length > 0 ? ['the Claude Code local hook'] : []),
+    ...(managed === MANAGED_REMOVAL.REMOVED ? ['the Claude Code managed hook'] : []),
+  ];
+}
+
+/** A workspace server whose onboarding record was lost, which the hand back could not find to put back. */
+async function removeTheOrphanServers(
+  context: CliContext,
+  home: string,
+): Promise<string[]> {
+  const from = await removeOrphanWorkspaceServers(home);
+  if (from.length === 0) return [];
+  context.flow.step('Workspace server', `taken out of ${from.join(' and ')}`);
+  return ['the workspace server'];
+}
+
+/** The package line of the purge, said as what happened to it. */
+function describeCli(cli: CliRemoval): string {
+  switch (cli.state) {
+    case CLI_REMOVAL.UNLINKED:
+      return `the link at ${cli.where ?? ''} is gone, and the checkout it pointed at stays`;
+    case CLI_REMOVAL.UNINSTALLED:
+      return `removed from ${cli.where ?? ''}`;
+    case CLI_REMOVAL.WITH_HOME:
+      return 'the copy the Mac app kept, gone with the home';
+    case CLI_REMOVAL.NOT_FOUND:
+      return 'not found under npm, so remove it the way you installed it';
+  }
 }
 
 /**
@@ -348,6 +428,7 @@ async function reportPurged(
   context: CliContext,
   home: string,
   dir: string,
+  cli: CliRemoval,
 ): Promise<void> {
   const { flow, style } = context;
   await rm(join(home, MEMNOX_HOME), { recursive: true, force: true });
@@ -355,6 +436,7 @@ async function reportPurged(
   const rules = POLICY_FILES.map((name) => join(dir, name)).filter(existsSync);
   flow.rows('Deleted', [
     { label: 'home', value: join(home, MEMNOX_HOME) },
+    { label: 'package', value: describeCli(cli) },
     ...rules.map((path) => ({
       label: 'kept',
       value: `${path}, because it is yours and probably committed`,

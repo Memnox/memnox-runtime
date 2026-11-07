@@ -5,7 +5,6 @@ import {
   holds,
   REMOTE_CAPABILITY,
   SpokenInstructions,
-  verifiesSigned,
   type DaemonRequest,
   type DaemonResponse,
   type DeviceRecord,
@@ -17,10 +16,12 @@ import { sendInstructionTool } from '../session-tools/instruct-tools';
 import type { RemotePrincipal } from './confirm';
 import type { OriginRouter } from './origin-routing';
 import type { SessionViews } from './session-view';
+import { KEY, MACHINE, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * The person's own words typed into one session from a phone's composer or the Mac: sent as they
- * are with no brain reading them first, and only under a signature over that session and those words.
+ * are with no brain reading them first. A phone is known by the Noise session it spoke on, so it needs
+ * no Face ID to type, while the Mac's local socket still needs a signature over that session and those words.
  */
 
 /** Long enough for any follow up a person types, short enough that a pasted file is refused rather than typed. */
@@ -60,6 +61,8 @@ interface Sent {
   sent?: boolean;
   how?: string;
   why?: string;
+  /** What the voice would have said back, the only reason some refusals carry. */
+  said?: string;
 }
 
 /** The routes send_instruction names, read as the three a screen can say. */
@@ -89,13 +92,13 @@ export async function followUpAnswer(
   if (signer === null || !holds(signer, REMOTE_CAPABILITY.STEER)) {
     const where =
       principal === undefined
-        ? 'Touch ID on this Mac'
-        : `Face ID on ${principal.device.name}`;
+        ? `${KEY} on this ${MACHINE}`
+        : `${principal.device.name} to be allowed to steer`;
     return refused(request, `Sending words to an agent needs ${where}.`);
   }
   const agent = await deps.agentOf(sessionId);
   if (agent === null)
-    return refused(request, 'That session is not on this Mac any more.');
+    return refused(request, `That session is not on this ${MACHINE} any more.`);
   const instruction = await new SpokenInstructions(deps.home).propose({
     sessionId,
     agent,
@@ -105,22 +108,22 @@ export async function followUpAnswer(
   const sent = ((await deps.send(instruction.id)) ?? {}) as Sent;
   const outcome = sent.how === undefined ? undefined : OUTCOME_OF[sent.how];
   if (sent.sent !== true || outcome === undefined) {
-    return refused(request, sent.why ?? 'The Mac could not hand that to the agent.');
+    return refused(
+      request,
+      sent.why ?? sent.said ?? `${THE_DESKTOP_START} could not hand that to the agent.`,
+    );
   }
   return { id: request.id, ok: true, outcome };
 }
 
-/** The device whose key signed the words: only the phone they came from, or any trusted device at the Mac. */
+/** Who sent the words: the phone whose Noise session carried them, or any trusted device that signed them at the Mac. */
 async function signerOf(
   home: string,
   request: DaemonRequest,
   principal?: RemotePrincipal,
 ): Promise<DeviceRecord | null> {
+  if (principal !== undefined) return principal.device;
   if (request.signature === undefined) return null;
   const message = followUpMessage(request.sessionId ?? '', request.said ?? '');
-  if (principal === undefined)
-    return new Devices(home).signerOf(message, request.signature);
-  return verifiesSigned(principal.device.signingPoint, message, request.signature)
-    ? principal.device
-    : null;
+  return new Devices(home).signerOf(message, request.signature);
 }

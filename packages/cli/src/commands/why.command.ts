@@ -23,13 +23,17 @@ import {
   type SqliteEventStore,
   type MemnoxEvent,
   delegationChain,
+  decidedLine,
+  leadUpTo,
+  workspaceRuleOf,
+  type LeadUp,
+  type WorkspaceRule,
 } from '@memnox/core';
 import type { CliContext } from '../cli-context';
 import { withEvents } from '../event-store';
 import type { FlowRow } from '../flow';
 import { renderContext } from './why/context';
-import { leadUpTo, renderLeadUp, type LeadUp } from './why/lead-up';
-import { decidedLine, workspaceRuleOf, type WorkspaceRule } from './why/workspace-rule';
+import { renderLeadUp } from './why/lead-up';
 
 /** How long `gh` is given to answer, because `why` is read while somebody waits. */
 const FORGE_TIMEOUT_MS = 3_000;

@@ -42,6 +42,22 @@ describe('who a proxied request came from', () => {
     });
   });
 
+  it('carries the session key beside the agent, and a dotted agent name stays whole', () => {
+    const key = 'ab'.repeat(32);
+    const url = proxyUrlFor(8888, { sessionId: 'ses_abc', agent: 'claude.code', key });
+
+    expect(callerOf({ 'proxy-authorization': basicOf(url) })).toEqual({
+      sessionId: 'ses_abc',
+      agent: 'claude.code',
+      key,
+    });
+    expect(
+      callerOf({
+        'proxy-authorization': basicOf(proxyUrlFor(1, { agent: 'claude.code' })),
+      }),
+    ).toEqual({ agent: 'claude.code' });
+  });
+
   it('is nobody in particular when the client sent no credentials', () => {
     expect(proxyUrlFor(8888)).toBe('http://127.0.0.1:8888');
     expect(callerOf({})).toEqual({});

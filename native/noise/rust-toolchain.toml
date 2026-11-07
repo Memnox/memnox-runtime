@@ -1,0 +1,4 @@
+# One Rust for the runtime, the desktop and the phones that build this crate; rustup installs it on first use.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"

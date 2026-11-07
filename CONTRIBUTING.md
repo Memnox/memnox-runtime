@@ -10,25 +10,64 @@ table of where to make each kind of change.
 
 ## Getting set up
 
+### What to install first
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| **Node** | 24, as `.nvmrc` says (22 also works) | the same | the same |
+| **pnpm** | `corepack enable`, which picks the version `packageManager` pins | the same | the same |
+| **Build tools** | `xcode-select --install`, which also gives you git | `sudo apt install build-essential git zip unzip` (Fedora: `dnf install gcc gcc-c++ make git zip unzip`) | [Git for Windows](https://gitforwindows.org), and run every command below from Git Bash |
+| **Rust** | only when no prebuilt Noise addon loads, see below | the same | the same, with Visual Studio's C++ build tools |
+
+Node 25 and later no longer ship corepack, so on those run `npm install -g corepack` before
+`corepack enable`. A pnpm installed some other way is likely to misread the lockfile.
+
+Run the suite as an ordinary user, never as root, and not in a container that defaults to root,
+because a test that checks a file is unreadable passes for root whatever it says.
+
+**On Windows, run the test suite inside WSL 2 for now.** Memnox itself runs natively on Windows
+(see [ADR 0003](docs/adr/0003-native-windows.md)), but CI does not hold the native suite green yet,
+so a native run shows failures that are not yours. The `test-windows` job in CI shows which ones.
+
+### Getting the code
+
+Clone it as `memnox-runtime`, because the desktop and mobile repositories look for a sibling folder
+with exactly that name:
+
 ```sh
-git clone https://github.com/Memnox/memnox.git
-cd memnox
-pnpm install          # pnpm 11, Node 22 or 24
-pnpm --filter @memnox/noise build   # the native addon pairing runs on; needs Rust
+git clone https://github.com/Memnox/memnox.git memnox-runtime
+cd memnox-runtime
+pnpm install
+pnpm check-setup      # names anything this machine is missing, one line each
 pnpm build            # every package, in dependency order
 pnpm test             # ~2100 tests, a few seconds
 pnpm bench            # the wall-clock ones, run on purpose
 ```
 
-**Build the Noise addon once, before the first `pnpm test`.** Pairing a phone runs over an
-encrypted tunnel written in Rust (`native/noise`), and its tests load the real addon. A
-release ships it prebuilt for each platform, but a clone has none, so without this step
-about forty pairing tests fail with "Pairing needs the Noise addon". It needs a Rust
-toolchain (`curl https://sh.rustup.rs -sSf | sh`) and, on Linux, a C linker
-(`sudo apt install build-essential`). Run it again only after changing anything under
-`native/noise`.
+To work on the apps as well, clone them beside it:
 
-Run your working copy against your own machine:
+```sh
+git clone https://github.com/Memnox/memnox-desktop.git
+git clone https://github.com/Memnox/memnox-mobile.git
+```
+
+### The Noise addon, and when you need Rust
+
+Pairing a phone runs over an encrypted tunnel written in Rust (`native/noise`), and about forty
+pairing tests load the real addon. `pnpm install` fetches the published build for your platform
+(macOS on arm64 and x64, Linux on x64 and arm64 with glibc, Windows on x64) and checks it against
+the registry's integrity, so most machines need no Rust at all.
+
+You need Rust (`curl https://sh.rustup.rs -sSf | sh`) and `pnpm --filter @memnox/noise build` when:
+
+- you change anything under `native/noise`;
+- the install said it could not fetch the addon, which happens offline or behind a proxy;
+- nothing is published for your platform, such as Windows on arm64 or Alpine.
+
+A local build always wins over the fetched one. Without either, those pairing tests fail with
+"Pairing needs the Noise addon", and `pnpm check-setup` says so first.
+
+### Running your working copy
 
 ```sh
 node packages/cli/dist/index.js scan
@@ -37,13 +76,6 @@ node packages/cli/dist/index.js doctor --wiring
 
 `pnpm build` first, because the `dist/` you just ran is whatever was last built, and a
 change you did not build is a change you did not test.
-
-The pairing tests load `@memnox/noise`, a Rust addon. `pnpm install` fetches the
-published build for your platform (macOS, Linux and Windows on x64, macOS and Linux on
-arm64) and checks it against the registry's integrity, so no Rust is needed to run the
-suite. If you change anything under `native/noise`, or the install said it could not
-fetch one, build it yourself with `pnpm --filter @memnox/noise build`; a local build
-always wins over the fetched one.
 
 Nothing in the suite reads your home directory, spawns an agent, or watches a real
 directory. If a test you write needs one of those, inject it instead; see **Seams**
@@ -58,7 +90,7 @@ pnpm verify:linux    # the same inside a Linux container, with Docker running
 ```
 
 All clean. CI runs them on Ubuntu and macOS against Node 22 and 24, plus a
-publish dry run, because a shim that works on one platform and not the other is the bug
+publish dry run and a Windows leg that reports but does not block yet, because a shim that works on one platform and not the other is the bug
 that matrix exists to catch. `verify:linux` is that Ubuntu leg on your own machine, as a
 user who is not root, and `NODE_VERSION=22 pnpm verify:linux` is the other Node.
 

@@ -40,8 +40,8 @@ There are three ways a cloud agent comes under Memnox, from strongest to weakest
   agent process          │  Memnox Cloud                             │
   ┌───────────────────┐  │                                           │
   │ @memnox/guard     │──┼─▶ GET  /v1/workspaces/:ws/bundle (signed) │
-  │  engine in memory │  │   POST /v1/workspaces/:ws/held             │
-  │  allow/deny local │◀─┼── GET  /v1/workspaces/:ws/held/:id?wait=25 │
+  │  engine in memory │  │   POST /v1/workspaces/:ws/held-calls             │
+  │  allow/deny local │◀─┼── GET  /v1/workspaces/:ws/held-calls/:id?wait=25 │
   │  ask goes up      │──┼─▶ POST /v1/workspaces/:ws/events           │
   └───────────────────┘  │   GET  /v1/keys (public)                   │
                          │                                           │
@@ -174,9 +174,9 @@ The bundle route now sends the exact bytes it signed, with `x-memnox-signature: 
 
 ### 5.3 The ask API
 
-`src/machines/held-ask.service.ts` (logic) and `held-ask.controller.ts` (shape checking only).
+`src/held-calls/held-ask.service.ts` (logic) and `held-calls.controller.ts` (shape checking only).
 
-**`POST /v1/workspaces/:ws/held`** takes `operation, argsDigest, agent, sessionId, reason, operationId, waitMinutes`, and optionally `target`, `ruleId` and `callbackUrl`.
+**`POST /v1/workspaces/:ws/held-calls`** takes `operation, argsDigest, agent, sessionId, reason, operationId, waitMinutes`, and optionally `target`, `ruleId` and `callbackUrl`.
 
 - Machine credentials only: the question is kept under the caller's own machine, so it sees its own questions and nobody else's.
 - Gated on the `REMOTE_AGENTS` plan feature with the existing 402 refusal. Gated when asking, not when polling, so an agent already waiting when a plan lapses still hears how its question ended.
@@ -185,7 +185,7 @@ The bundle route now sends the exact bytes it signed, with `x-memnox-signature: 
 - Raised through `HeldCallService.raise`, so it is routed to owners and approvers exactly as a heartbeat routes, and announced on `HELD_CALLS_RAISED` so every door hears it.
 - The wait is clamped between 1 and 60 minutes. Field lengths are capped so a hostile caller cannot fill the store.
 
-**`GET /v1/workspaces/:ws/held/:id?wait=N`** answers `pending`, `answered` or `expired`, holding the request open up to 25 seconds and checking the store about once a second. That is long enough that a person answering on a phone usually lands inside one poll, and it works on any instance because the store is shared.
+**`GET /v1/workspaces/:ws/held-calls/:id?wait=N`** answers `pending`, `answered` or `expired`, holding the request open up to 25 seconds and checking the store about once a second. That is long enough that a person answering on a phone usually lands inside one poll, and it works on any instance because the store is shared.
 
 **The signed answer payload:**
 
@@ -327,8 +327,8 @@ Both were changed only once the code behind them existed, per the rule in `prici
 | ---------------------------------------------------------------- | ---------------------------------- | ------------------------------- |
 | `GET /v1/keys`                                                   | anyone                             | Ed25519 public keys             |
 | `GET /v1/workspaces/:ws/bundle`                                  | machine, viewer                    | signed rules, ETag aware        |
-| `POST /v1/workspaces/:ws/held`                                   | machine, reviewer, `REMOTE_AGENTS` | raise a question                |
-| `GET /v1/workspaces/:ws/held/:id?wait=`                          | machine, reviewer                  | long poll for the signed answer |
+| `POST /v1/workspaces/:ws/held-calls`                                   | machine, reviewer, `REMOTE_AGENTS` | raise a question                |
+| `GET /v1/workspaces/:ws/held-calls/:id?wait=`                          | machine, reviewer                  | long poll for the signed answer |
 | `POST /v1/workspaces/:ws/events`                                 | machine, reviewer                  | the guard's records and pauses  |
 | `POST /v1/workspaces/:ws/gateway/:server`                        | machine, reviewer, `REMOTE_AGENTS` | the MCP gateway                 |
 | `GET, PUT, DELETE /v1/workspaces/:ws/gateway-upstreams/:name`    | admin                              | servers behind the gateway      |
@@ -373,7 +373,7 @@ Event kinds a cloud agent produces: `agent.session.started`, `agent.action.recor
 
 - `src/crypto/answer-signing.ts`, `keys.controller.ts`, `crypto.providers.ts`
 - `src/bundle/asking-rule.ts`, `bundle.controller.ts`, `bundle.providers.ts`
-- `src/machines/held-ask.service.ts`, `held-ask.controller.ts`, `held-call.ts`, `held-call-store.ts`, `postgres-held-call-store.ts`, `held-call.service.ts`, `held-escalation.service.ts`, `machines.providers.ts`
+- `src/held-calls/held-ask.service.ts`, `held-calls.controller.ts`, `held-call.ts`, `held-call-store.ts`, `postgres-held-call-store.ts`, `held-call.service.ts`, `held-escalation.service.ts`, `machines.providers.ts`
 - `src/mcp/mcp.providers.ts`, `mcp.service.ts`, `mcp.ts`
 - `src/gateway/` (all new), `src/cloud-agents/` (all new)
 - `src/policies/policies.controller.ts`, `rule-capture.service.ts`, `policy-source.ts`

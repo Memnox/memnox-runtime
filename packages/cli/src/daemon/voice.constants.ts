@@ -6,3 +6,6 @@ export const FEED_INTERVAL_MS = 500;
 
 /** A finished session is news for minutes, so the ledger is read for it far less often. */
 export const NOTICE_INTERVAL_MS = 10_000;
+
+/** A live timeline hears a burst of rows as one event, at most this often. */
+export const ACTIVITY_INTERVAL_MS = 1_000;

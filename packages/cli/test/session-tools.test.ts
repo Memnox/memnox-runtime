@@ -153,7 +153,7 @@ async function call(
 }
 
 describe('the session tools', () => {
-  it('offers exactly why, status, replay, decisions, memory, brief, work, fingerprint and rewind', () => {
+  it('offers exactly why, status, replay, decisions, memory, brief, work, fingerprint, memnox_suggest, apps, app_run and rewind', () => {
     expect(SESSION_TOOLS.map((tool) => tool.name)).toEqual([
       'why',
       'status',
@@ -163,6 +163,9 @@ describe('the session tools', () => {
       'brief',
       'work',
       'fingerprint',
+      'memnox_suggest',
+      'apps',
+      'app_run',
       'rewind',
     ]);
   });
@@ -175,10 +178,16 @@ describe('the session tools', () => {
   });
 
   /* Recording a fingerprint writes, and only ever adds what agents are held to, so the host
-     need not ask; rewind moves a person's files, so it is the one the person is asked about. */
-  it('marks every tool read only except fingerprint and rewind, and only rewind destructive', () => {
+     need not ask; app_run waits on the person's signature for any act; rewind moves a person's
+     files, so it is the one the person is asked about. */
+  it('marks every tool read only except fingerprint, memnox_suggest, app_run and rewind, and only rewind destructive', () => {
     const acting = SESSION_TOOLS.filter((tool) => !tool.annotations.readOnlyHint);
-    expect(acting.map((tool) => tool.name)).toEqual(['fingerprint', 'rewind']);
+    expect(acting.map((tool) => tool.name)).toEqual([
+      'fingerprint',
+      'memnox_suggest',
+      'app_run',
+      'rewind',
+    ]);
     expect(
       acting.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name),
     ).toEqual(['rewind']);
@@ -377,15 +386,14 @@ describe('what the workspace settled, asked from the session', () => {
     const answer = await call({ deps: depsFor(await connected()) }, 'memory', {
       about: 'payment retries',
     });
-    const read = JSON.parse(answer.text) as {
-      facts: { statement: string; settled: string }[];
-      withheld: string;
-    };
+    const read = JSON.parse(answer.text) as { facts: string[]; withheld: string };
 
-    expect(read.facts.map((each) => each.statement)).toEqual([
-      'Retry logic must remain inside PaymentService.',
+    expect(read.facts).toEqual([
+      expect.stringMatching(
+        /^Retry logic must remain inside PaymentService\. \[f_retry; /,
+      ),
     ]);
-    expect(read.facts[0]?.settled).toContain('confirmed by ada@acme.test');
+    expect(read.facts[0]).toContain('confirmed by ada@acme.test');
     expect(read.withheld).toContain('2 fact(s)');
   });
 
@@ -393,13 +401,10 @@ describe('what the workspace settled, asked from the session', () => {
     const answer = await call({ deps: depsFor(await connected()) }, 'memory', {
       about: 'decisions',
     });
-    const read = JSON.parse(answer.text) as {
-      facts: { statement: string; kind: string }[];
-      said: string;
-    };
+    const read = JSON.parse(answer.text) as { facts: string[]; said: string };
 
     expect(read.facts).toHaveLength(2);
-    expect(read.facts[0]?.kind).toBe('decision');
+    expect(read.facts[0]).toContain('a decision');
     expect(read.said).toContain('sources');
   });
 
@@ -521,28 +526,25 @@ describe('what the workspace settled, asked from the session', () => {
       about: 'payment retries',
     });
     const read = JSON.parse(answer.text) as {
-      facts: { statement: string }[];
-      unconfirmed: { note: string; candidates: { approved: boolean; from: string }[] };
+      facts: string[];
+      unconfirmed: { note: string; candidates: string[] };
     };
 
-    expect(read.facts.map((each) => each.statement)).toEqual([
+    expect(read.facts.map((each) => each.split(' [')[0])).toEqual([
       'Retry logic must remain inside PaymentService.',
     ]);
     expect(read.unconfirmed.note).toContain('approved by nobody');
-    expect(read.unconfirmed.candidates[0]).toMatchObject({
-      approved: false,
-      from: 'read from Slack',
-    });
+    expect(read.unconfirmed.candidates[0]).toContain('[c_retry; read from Slack');
   });
 
   it('briefs from what this machine holds when the workspace cannot be asked', async () => {
     const answer = await call({ deps: depsFor(await connected()) }, 'brief', {
       paths: 'src/billing/cache.ts',
     });
-    const read = JSON.parse(answer.text) as { from: string; facts: { about: string }[] };
+    const read = JSON.parse(answer.text) as { from: string; facts: string[] };
 
     expect(read.from).toContain('what this machine pulled');
-    expect(read.facts.map((each) => each.about)).toEqual(['billing']);
+    expect(read.facts).toEqual([expect.stringContaining('[f_redis; ')]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { HTTP } from '@memnox/core';
 import { callCloud } from './client';
 import type { PersonCredential } from './person';
+import { MACHINE } from '../this-machine';
 
 /**
  * One POST to the workspace in the signed in person's own name, said back in words the voice
@@ -21,7 +22,7 @@ const PERSON_CALL_TIMEOUT_MS = 5_000;
 
 export const NOT_SIGNED_IN: PersonCall = {
   ok: false,
-  said: 'You are not signed in as yourself on this Mac, so nothing can be sent in your name. Sign in from the Account page, then try again.',
+  said: `You are not signed in as yourself on this ${MACHINE}, so nothing can be sent in your name. Sign in from the Account page, then try again.`,
 };
 
 /** `route` is below the workspace, like `me/handovers`. */

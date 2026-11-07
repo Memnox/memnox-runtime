@@ -3,6 +3,7 @@
  * it earned since the last pass. It runs only where a person turned `autopilot` on.
  */
 import {
+  AUTOPILOT_OPERATION as OPERATION,
   earnedGrants,
   earnedWindowStart,
   EarnedAllowances,
@@ -17,11 +18,6 @@ import {
 } from '@memnox/core';
 
 import { CONFIG_RULE, recordConfigChanges, type ConfigRecord } from './config-events';
-
-const OPERATION = {
-  GRANTED: 'autopilot.granted',
-  REVOKED: 'autopilot.revoked',
-} as const;
 
 interface AutopilotPass {
   granted: EarnedGrant[];

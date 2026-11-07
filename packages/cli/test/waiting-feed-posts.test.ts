@@ -9,6 +9,8 @@ import {
   EVENT_SCHEMA_VERSION,
   EVENT_SURFACE,
   POST_KIND,
+  PROPOSAL_KIND,
+  Proposals,
   SessionPauses,
   SessionPosts,
   SessionTurns,
@@ -98,5 +100,20 @@ describe('what a person away hears that is not a question', () => {
     await turns.ended('ses_back', 'claude-code', '2026-10-08T03:00:00.000Z');
     await turns.prompted('ses_back', 'claude-code', '2026-10-08T06:00:00.000Z');
     expect(await new WaitingFeed(dir).current(NOW)).toEqual([]);
+  });
+
+  it('says what kind of change a proposal is, so a surface can word it', async () => {
+    const dir = await home();
+    await new Proposals(dir).propose({
+      change: { kind: PROPOSAL_KIND.LAN, on: true },
+      rationale: 'Let paired phones reach this machine on the local network',
+      proposedBy: 'agt_settings',
+      at: '2026-10-08T06:59:00.000Z',
+      ttlMs: 300_000,
+    });
+    const events = await new WaitingFeed(dir).current(NOW);
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: 'proposal', proposalKind: PROPOSAL_KIND.LAN }),
+    );
   });
 });

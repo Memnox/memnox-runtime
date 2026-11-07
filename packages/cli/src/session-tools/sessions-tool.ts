@@ -12,6 +12,7 @@ import {
   SessionTasks,
   SessionTurns,
   summarizeSubagents,
+  typedAsks,
   type SessionTurn,
   summarizeSession,
   UNNAMED_AGENT,
@@ -32,6 +33,7 @@ import {
 import { repositoriesOf } from './changes-tool';
 import { hostedIds } from './session-aliases';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
+import { MACHINE } from '../this-machine';
 
 /**
  * Every session on this machine lately, side by side, so "what is Claude doing" with two
@@ -39,12 +41,10 @@ import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
  */
 
 /** Said of the catch-all session, so a pause on an editor's git check is never told as an agent stuck. */
-const LOCAL_WORK =
-  'commands run on this Mac outside any agent session, such as an editor or a terminal checking git';
+const LOCAL_WORK = `commands run on this ${MACHINE} outside any agent session, such as an editor or a terminal checking git`;
 
 /** Said of a session holding only what the voice typed into an app, which no agent session is behind. */
-const VOICE_TYPING =
-  'only the voice typing into an app on this Mac for the person, with no agent session behind it';
+const VOICE_TYPING = `only the voice typing into an app on this ${MACHINE} for the person, with no agent session behind it`;
 
 /** Something recorded this recently is work happening now, which is what "which one is working" means. */
 export const WORKING_WITHIN_MS = 3 * 60 * 1_000;
@@ -318,9 +318,8 @@ async function describe(
       run?.agent ??
       namedAgent(events) ??
       'unknown',
-    ...(task === null ? {} : { task: task.statement }),
     // The mission stays the task; what the person asked last sits beside it.
-    ...(task?.latestAsk === undefined ? {} : { lastAsk: task.latestAsk }),
+    ...typedAsks(task),
     repositories: repositories.length > 0 || run === undefined ? repositories : [run.cwd],
     started:
       summary?.started ??

@@ -13,8 +13,28 @@ const CLAUDE_SETTINGS = /(^|\/)\.claude\/settings(\.local)?\.json$|(^|\/)\.claud
  * An agent host's own record of its sessions, which the daemon reads a session back from.
  * An agent that rewrote or deleted it would be editing the evidence against it.
  */
-const SESSION_RECORDS =
-  /(^|\/)\.claude\/projects\/.+\.jsonl$|(^|\/)\.codex\/sessions(\/|$)/;
+const CLAUDE_SESSIONS = '.claude/projects/';
+const SESSION_FILE = '.jsonl';
+const CODEX_SESSIONS = /(^|\/)\.codex\/sessions(\/|$)/;
+
+/**
+ * Whether a path is a session record, found by index rather than one pattern with `.+` in it, so a path repeating
+ * `.claude/projects/` costs its length rather than its square.
+ */
+function isSessionRecord(path: string): boolean {
+  if (CODEX_SESSIONS.test(path)) return true;
+  if (!path.endsWith(SESSION_FILE)) return false;
+  // The first place it starts leaves the most room for a file name before the extension.
+  for (
+    let at = path.indexOf(CLAUDE_SESSIONS);
+    at !== -1;
+    at = path.indexOf(CLAUDE_SESSIONS, at + 1)
+  ) {
+    if (at !== 0 && path[at - 1] !== '/') continue;
+    return at + CLAUDE_SESSIONS.length < path.length - SESSION_FILE.length;
+  }
+  return false;
+}
 
 /** The binaries a hook runs by name, so replacing one would answer for Memnox. */
 const MEMNOX_BINARY = /\/(bin|\.bin)\/memnox(-[\w-]+)?$/;
@@ -34,9 +54,7 @@ export function isProtectedPath(target: string): boolean {
     /\.policies\.toml$/.test(name)
   )
     return true;
-  return (
-    CLAUDE_SETTINGS.test(path) || MEMNOX_BINARY.test(path) || SESSION_RECORDS.test(path)
-  );
+  return CLAUDE_SETTINGS.test(path) || MEMNOX_BINARY.test(path) || isSessionRecord(path);
 }
 
 /**

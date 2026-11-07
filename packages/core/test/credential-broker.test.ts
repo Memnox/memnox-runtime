@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   BROKER_VAR,
@@ -79,8 +80,9 @@ describe('a request to the broker', () => {
   });
 
   it('lives with the session’s other state, under its id', () => {
-    expect(brokerPathFor('/home/dev', 'ses_1')).toBe(
-      '/home/dev/.memnox/brokers/ses_1.sock',
+    // Asked for the unix socket, since on Windows the broker is a named pipe instead.
+    expect(brokerPathFor('/home/dev', 'ses_1', 'darwin')).toBe(
+      join('/home/dev', '.memnox', 'brokers', 'ses_1.sock'),
     );
     expect(BROKER_VAR).toBe('MEMNOX_CREDENTIAL_BROKER');
   });

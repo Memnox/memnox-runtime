@@ -24,7 +24,8 @@ import { renderTrace } from './explain/capability';
 import { answerQuestion, renderAnswer } from './explain/question';
 import { renderCli, type ExplainedCli } from './explain/cli';
 import { readDormantHere } from '../keeper/keep-dormant';
-import { readCoverageFacts, readLastProbedScan, renderAgent } from './explain/agent';
+import { readCoverageFacts } from '../verify/coverage-facts';
+import { readLastProbedScan, renderAgent } from './explain/agent';
 import { renderServer, serverNamed, withVerdicts } from './explain/server';
 import { authorityFor } from './explain/authority-view';
 

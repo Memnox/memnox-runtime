@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MEMNOX_HOME, JsonRecordDir } from '@memnox/core';
 import { OPEN_BROWSER_VAR } from '../sync/browser';
+import { KEY_THEIRS } from '../this-machine';
 
 /**
  * Any memnox command by voice: what reads runs at once, what changes waits for Touch ID, and a few
@@ -72,8 +73,7 @@ const CHANGES: readonly string[] = [
 
 /** Why each of these is a person's to run at a terminal, said instead of running it. */
 const NEVER_BY_VOICE: Readonly<Record<string, string>> = {
-  approve:
-    'A held call is answered with propose_answer, which puts exactly that call to Touch ID.',
+  approve: `A held call is answered with propose_answer, which puts exactly that call to ${KEY_THEIRS}.`,
   ask: 'That question is already being asked of this voice.',
   run: 'Starting an agent is propose_start, which opens it in its own terminal tab.',
   daemon:

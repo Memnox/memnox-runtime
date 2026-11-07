@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 
 import { DestinationRecords, EXIT, openLedger } from '@memnox/core';
 
+import { egressPlaces } from './egress-place';
 import { EGRESS_BLIND_SPOTS, EgressSeam } from './egress-seam';
 import { EGRESS_LOOPBACK, recordEgress, startEgressProxy } from './egress-server';
 import { buildAuthorizer, buildHold, log } from './seam-runtime';
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
     // An ask on the network seam has to reach a person, or `ask` is a slower `deny`.
     hold: buildHold(),
     ruled: recordEgress(openLedger(home), new DestinationRecords(home)),
+    placeOf: egressPlaces(home),
   });
   const proxy = await startEgressProxy({ seam, port, log });
   log(`egress seam on ${EGRESS_LOOPBACK}:${proxy.port}`);

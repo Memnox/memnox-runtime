@@ -71,6 +71,11 @@ export interface PolicyCarveOut {
   project?: string;
   agents?: string[];
   workingDirectories?: string[];
+  /**
+   * When the exception behind it ends. From then the rule holds again, whether or not
+   * the control plane is reachable to say so.
+   */
+  expiresAt?: string;
 }
 
 /** Per-rule mode. An observed rule matches and is recorded, but never decides. */
@@ -118,6 +123,8 @@ export interface Policy {
   /** Who in the workspace approved it and when, so the reason an agent is given names a person and a day. */
   decidedBy?: string;
   decidedAt?: string;
+  /** Where a rule learned from the person's notes was read, as `path#heading` or a link, so a stop cites it. */
+  learnedFrom?: string[];
 }
 
 export interface PolicyDocument {

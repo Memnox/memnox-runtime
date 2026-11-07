@@ -15,6 +15,12 @@ import { delegations, handable, PROMOTION_THRESHOLD, type Delegation } from './a
 /** Who every grant names, so `why` says the autopilot allowed it and never a person. */
 export const AUTOPILOT_BY = 'memnox autopilot';
 
+/** The ledger's config rows for what the autopilot granted and took back. */
+export const AUTOPILOT_OPERATION = {
+  GRANTED: 'autopilot.granted',
+  REVOKED: 'autopilot.revoked',
+} as const;
+
 /** How long a grant stands before it has to be earned again on fresh evidence. */
 export const EARNED_DAYS = 7;
 

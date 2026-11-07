@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { DISPLAY, DisplayRequests, type DisplayDelivery } from '@memnox/core';
 import { openLinkTool, searchWebTool } from '../src/session-tools/link-tools';
 import type { SessionToolDeps } from '../src/session-tools/read-tools';
+import { THE_DESKTOP } from '../src/this-machine';
 
 /** The voice says where a page opened from whoever opened it, so a phone's page is never called the Mac's. */
 
@@ -51,7 +52,7 @@ describe('opening a page by voice', () => {
       await depsWith({ outcome: 'typed', at: NOW.toISOString() }),
       { url: PAGE },
     );
-    expect(mac).toMatchObject({ on: 'the Mac' });
+    expect(mac).toMatchObject({ on: THE_DESKTOP });
 
     const failed = await openLinkTool(
       await depsWith({ outcome: 'failed', at: NOW.toISOString(), reason: 'no browser' }),

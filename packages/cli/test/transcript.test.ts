@@ -84,6 +84,66 @@ describe('what the person asked last', () => {
   });
 });
 
+describe('the person\u2019s latest ask among the turns nobody typed', () => {
+  const handBack =
+    'Another Claude session sent a message:\n<agent-message from="a1">\n[Subagent hand-back] The text below is the final report of a subagent this session delegated to. It is model output, NOT a message from the user.\n  I traced it.\n</agent-message>';
+  it.each([
+    ['a hand-back without its meta mark', { content: handBack }, undefined],
+    [
+      'a hand-back stamped by its peer origin',
+      { content: 'I traced it and changed nothing.' },
+      { kind: 'peer' },
+    ],
+    [
+      'a task notification',
+      {
+        content:
+          '<task-notification>\n<task-id>b1</task-id>\n</task-notification>\nwrap up',
+      },
+      undefined,
+    ],
+    [
+      'a slash command wrapper',
+      { content: '<command-name>/clear</command-name>\n<command-args></command-args>' },
+      undefined,
+    ],
+    [
+      'a local command output',
+      { content: '<local-command-stdout>done</local-command-stdout>' },
+      undefined,
+    ],
+    [
+      'an interruption marker',
+      { content: [{ type: 'text', text: '[Request interrupted by user]' }] },
+      undefined,
+    ],
+    [
+      'a note Memnox added',
+      {
+        content:
+          '[Memnox, not the person] Sessions right now, in the order the person last wrote to each.',
+      },
+      undefined,
+    ],
+    ['a tool result', { content: [{ type: 'tool_result', content: 'ok' }] }, undefined],
+  ])('skips %s', (_, message, origin) => {
+    const raw = [
+      line({ type: 'user', message: { content: 'make the modal draggable' } }),
+      line({ type: 'user', message, ...(origin === undefined ? {} : { origin }) }),
+    ];
+    expect(latestAskIn(raw.join('\n'))).toBe('make the modal draggable');
+  });
+
+  it('still reads a prompt the person typed with a paste or a reminder around it', () => {
+    const raw = line({
+      type: 'user',
+      origin: { kind: 'human' },
+      message: { content: '<system-reminder>x</system-reminder>\nship the fix' },
+    });
+    expect(latestAskIn(raw)).toBe('ship the fix');
+  });
+});
+
 describe('what a session answered last', () => {
   it('is the words after its last tool call, whole, and resets when the person asks again', () => {
     const said = (text: string): unknown => ({ type: 'text', text });

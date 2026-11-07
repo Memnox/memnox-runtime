@@ -15,6 +15,20 @@ export * from './daemon/team-calls';
 export * from './daemon/home';
 export * from './daemon/intercept';
 export * from './daemon/remote';
+export * from './daemon/mcp-hub';
+export * from './daemon/policies';
+export * from './daemon/activity';
+export * from './daemon/agents-view';
+export * from './daemon/skills-hub';
+export * from './daemon/held-action';
+export * from './daemon/projects';
+export * from './daemon/memory';
+export * from './daemon/backup';
+export * from './daemon/lan';
+export * from './daemon/personal-sync';
+export * from './daemon/profiles';
+export * from './daemon/community-index';
+export * from './daemon/proposing';
 export {
   MOST_PRESSED_KEYS,
   TERMINAL_KEY,
@@ -28,4 +42,4 @@ export {
   type HoldAnswer,
   type ProposalAnswer,
 } from './gate/answers';
-export { confirmationMessage } from './gate/confirm-message';
+export { actionConfirmationMessage, confirmationMessage } from './gate/confirm-message';

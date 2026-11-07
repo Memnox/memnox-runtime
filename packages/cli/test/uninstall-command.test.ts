@@ -32,6 +32,9 @@ async function run(
   registerUninstallCommand(program, new CliContext(out, plainStyle), {
     home: () => home,
     dir: () => repo,
+    // Never the real managed file or the real npm prefix, so a purge here cannot take this machine's memnox.
+    managedTarget: () => null,
+    cli: { packageDir: join(home, 'no-package'), prefixes: async () => [] },
     ...(unwrap === undefined ? {} : { unwrap }),
   });
   await program.parseAsync(args, { from: 'user' });
@@ -39,41 +42,53 @@ async function run(
 }
 
 describe('memnox uninstall', () => {
-  it('takes the interceptors and the hooks off, and says what it removed', async () => {
-    const { home, repo } = await machine();
-    await installInterceptors(home, '/x/memnox-intercept');
-    await installGitHooks(repo);
+  // Windows needs the node and entry paths its .cmd shims start, which this install does not pass.
+  it.skipIf(process.platform === 'win32')(
+    'takes the interceptors and the hooks off, and says what it removed',
+    async () => {
+      const { home, repo } = await machine();
+      await installInterceptors(home, '/x/memnox-intercept');
+      await installGitHooks(repo);
 
-    const out = await run(['uninstall'], home, repo);
+      const out = await run(['uninstall'], home, repo);
 
-    expect(out.text).toContain('Interceptors');
-    expect(out.text).toContain('pre-push and pre-commit');
-    expect(out.text).toContain('Removed the interceptors');
-  });
+      expect(out.text).toContain('Interceptors');
+      expect(out.text).toContain('pre-push and pre-commit');
+      expect(out.text).toContain('Removed the interceptors');
+    },
+  );
 
-  it('keeps the rules and history unless asked to purge, and says where they are', async () => {
-    const { home, repo } = await machine();
-    await installInterceptors(home, '/x/memnox-intercept');
-    await writeFile(join(home, '.memnox', 'config.toml'), 'mode = "enforce"\n');
+  // Windows needs the node and entry paths its .cmd shims start, which this install does not pass.
+  it.skipIf(process.platform === 'win32')(
+    'keeps the rules and history unless asked to purge, and says where they are',
+    async () => {
+      const { home, repo } = await machine();
+      await installInterceptors(home, '/x/memnox-intercept');
+      await writeFile(join(home, '.memnox', 'config.toml'), 'mode = "enforce"\n');
 
-    const out = await run(['uninstall'], home, repo);
+      const out = await run(['uninstall'], home, repo);
 
-    expect(out.text).toContain('Still here');
-    expect(out.text).toContain(join(home, '.memnox'));
-    expect(out.text).toContain('--purge');
-    expect(await readdir(join(home, '.memnox'))).toContain('config.toml');
-  });
+      expect(out.text).toContain('Still here');
+      expect(out.text).toContain(join(home, '.memnox'));
+      expect(out.text).toContain('--purge');
+      expect(await readdir(join(home, '.memnox'))).toContain('config.toml');
+    },
+  );
 
-  it('deletes everything on --purge, and says PATH is the one thing it cannot undo', async () => {
-    const { home, repo } = await machine();
-    await installInterceptors(home, '/x/memnox-intercept');
+  // Windows needs the node and entry paths its .cmd shims start, which this install does not pass.
+  it.skipIf(process.platform === 'win32')(
+    'deletes everything on --purge, and says PATH is the one thing it cannot undo',
+    async () => {
+      const { home, repo } = await machine();
+      await installInterceptors(home, '/x/memnox-intercept');
 
-    const out = await run(['uninstall', '--purge'], home, repo);
+      const out = await run(['uninstall', '--purge'], home, repo);
 
-    expect(out.text).toContain('Nothing of Memnox is left');
-    expect(out.text).toContain('PATH');
-    await expect(readdir(join(home, '.memnox'))).rejects.toThrow();
-  });
+      expect(out.text).toContain('Nothing of Memnox is left');
+      expect(out.text).toContain('PATH');
+      await expect(readdir(join(home, '.memnox'))).rejects.toThrow();
+    },
+  );
 
   it('hands every onboarded agent back, so a later setup offers it again', async () => {
     /* A record left behind read as onboarded to the next setup, while the

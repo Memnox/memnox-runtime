@@ -22,9 +22,11 @@ import { readLocalDecisions } from '../src/sync/local-decisions';
 import { pushDecisions } from '../src/sync/push';
 import { CloudUnreachable, type CloudResponse } from '../src/sync/client';
 import type { CloudCall } from '../src/sync/rule-draft-cloud';
+import type { LocalRun } from '../src/operator/rule-brain';
 import { callOperatorTool } from '../src/session-tools/operator-tools';
 import type { SessionToolDeps } from '../src/session-tools/read-tools';
 import type { RewindSeams } from '../src/session-tools/rewind-tool';
+import { KEY_THEIRS } from '../src/this-machine';
 
 /**
  * Any rule a person says, on the Mac or the phone: read back, signed, in force on this machine from
@@ -117,7 +119,7 @@ describe('a rule said to the voice', () => {
       sentence: 'Codex may not touch the payments database',
     })) as { proposed: string; readBack: string; said: string; offeredToTeam: boolean };
     expect(answer.readBack).toBe('Codex-cli may not touch anything named payments.');
-    expect(answer.said).toContain('Touch ID');
+    expect(answer.said).toContain(KEY_THEIRS);
     expect(answer.offeredToTeam).toBe(false);
 
     const query = { action: 'sql.query', target: 'postgres://db/payments' };
@@ -235,6 +237,17 @@ describe('the rule method a phone calls', () => {
     throw new CloudUnreachable('no network here');
   };
 
+  /** No Claude Code on this machine, so a sentence the grammar cannot read goes to the workspace. */
+  const noModel: LocalRun = async () => null;
+
+  /** The person's own model here, answering with the text given and noting each prompt. */
+  function modelSaying(text: string, prompts: string[] = []): LocalRun {
+    return async (prompt) => {
+      prompts.push(prompt);
+      return text;
+    };
+  }
+
   function answering(
     status: number,
     body: unknown,
@@ -255,7 +268,7 @@ describe('the rule method a phone calls', () => {
       home,
       { id: 1, method: DAEMON_METHOD.RULE, said: sentence },
       AT,
-      offline,
+      { cloud: offline, local: noModel },
     );
     expect(first.ok).toBe(true);
     expect(first.rule).toMatchObject({ draftedBy: 'pattern', offeredToTeam: true });
@@ -266,13 +279,83 @@ describe('the rule method a phone calls', () => {
       home,
       { id: 2, method: DAEMON_METHOD.RULE, said: sentence, approved: 'api.stripe.com' },
       AT,
-      offline,
+      { cloud: offline, local: noModel },
     );
     expect(second.rule?.proposed).toMatch(/^prp_/);
     expect(second.proposed).toBe(second.rule?.proposed);
   });
 
-  it('asks the workspace on an enrolled machine, and keeps only what validates here', async () => {
+  it('drafts with the model on this machine, and never asks the workspace', async () => {
+    const { home } = await depsAt();
+    await enrol(home);
+    const asked: CloudRequest[] = [];
+    const prompts: string[] = [];
+    const drafted = await answerRule(
+      home,
+      {
+        id: 1,
+        method: DAEMON_METHOD.RULE,
+        said: 'patient files stay with a person in the loop',
+      },
+      AT,
+      {
+        cloud: answering(200, {}, asked),
+        local: modelSaying(
+          'Here it is: {"effect":"ask","operation":"*","dataClassifications":["health"],"openQuestions":[]}',
+          prompts,
+        ),
+      },
+    );
+    expect(drafted.rule).toMatchObject({ draftedBy: 'model', offeredToTeam: true });
+    expect(drafted.rule?.readBack).toBe(
+      'A person is asked before an agent can send health records.',
+    );
+    expect(prompts[0]).toContain(
+      '<sentence>\npatient files stay with a person in the loop\n</sentence>',
+    );
+    expect(asked).toEqual([]);
+  });
+
+  it('says how to put it when the model here reads no rule, and asks nobody else', async () => {
+    const { home } = await depsAt();
+    await enrol(home);
+    const asked: CloudRequest[] = [];
+    const refused = await answerRule(
+      home,
+      { id: 1, method: DAEMON_METHOD.RULE, said: 'make everything nicer' },
+      AT,
+      { cloud: answering(200, {}, asked), local: modelSaying('{}') },
+    );
+    expect(refused).toMatchObject({ ok: false });
+    expect(refused.reason).toContain('never push to main');
+    expect(asked).toEqual([]);
+  });
+
+  it('answers the destinations question the model asked in its own words', async () => {
+    const { home } = await depsAt();
+    const model = modelSaying(
+      '{"effect":"deny","operation":"*","dataClassifications":["customer-record"],"openQuestions":["Which destinations are approved? List them."]}',
+    );
+    const said = 'customer records only go where we approved';
+    const first = await answerRule(
+      home,
+      { id: 1, method: DAEMON_METHOD.RULE, said },
+      AT,
+      { cloud: offline, local: model },
+    );
+    expect(first.rule?.openQuestions).toHaveLength(1);
+    const second = await answerRule(
+      home,
+      { id: 2, method: DAEMON_METHOD.RULE, said, approved: 'api.stripe.com' },
+      AT,
+      { cloud: offline, local: model },
+    );
+    expect(second.rule?.openQuestions).toEqual([]);
+    expect(second.rule?.draft.targets).toEqual(['*', '!api.stripe.com']);
+    expect(second.rule?.proposed).toMatch(/^prp_/);
+  });
+
+  it('asks the workspace when no model here can, and keeps only what validates here', async () => {
     const { home } = await depsAt();
     await enrol(home);
     const asked: CloudRequest[] = [];
@@ -284,16 +367,19 @@ describe('the rule method a phone calls', () => {
         said: 'patient files stay with a person in the loop',
       },
       AT,
-      answering(
-        200,
-        {
-          draft: { effect: 'ask', operation: '*', dataClassifications: ['health'] },
-          readBack: 'ignored, since it is said back here',
-          openQuestions: [],
-          draftedBy: 'model',
-        },
-        asked,
-      ),
+      {
+        cloud: answering(
+          200,
+          {
+            draft: { effect: 'ask', operation: '*', dataClassifications: ['health'] },
+            readBack: 'ignored, since it is said back here',
+            openQuestions: [],
+            draftedBy: 'model',
+          },
+          asked,
+        ),
+        local: noModel,
+      },
     );
     const rule = drafted.rule as SpokenRuleAnswer;
     expect(rule).toMatchObject({ draftedBy: 'model', offeredToTeam: true });
@@ -309,7 +395,13 @@ describe('the rule method a phone calls', () => {
       home,
       { id: 2, method: DAEMON_METHOD.RULE, said: 'something odd' },
       AT,
-      answering(200, { draft: { effect: 'block', operation: '*' }, readBack: '' }),
+      {
+        cloud: answering(200, {
+          draft: { effect: 'block', operation: '*' },
+          readBack: '',
+        }),
+        local: noModel,
+      },
     );
     expect(bad).toMatchObject({ ok: false });
   });
@@ -321,10 +413,12 @@ describe('the rule method a phone calls', () => {
       home,
       { id: 1, method: DAEMON_METHOD.RULE, said: 'keep things tidy' },
       AT,
-      answering(402, {
-        error: 'rule_drafting_locked',
-        message: 'The fixed grammar could not read that sentence, or upgrade to Pro.',
-      }),
+      {
+        cloud: answering(402, {
+          error: 'rule_drafting_locked',
+          message: 'The fixed grammar could not read that sentence, or upgrade to Pro.',
+        }),
+      },
     );
     expect(refused).toMatchObject({
       ok: false,
@@ -340,7 +434,7 @@ describe('the rule method a phone calls', () => {
       home,
       { id: 1, method: DAEMON_METHOD.RULE, said: 'never push to main' },
       AT,
-      answering(200, {}, asked),
+      { cloud: answering(200, {}, asked), local: noModel },
     );
     expect(drafted.rule).toMatchObject({ draftedBy: 'pattern', offeredToTeam: false });
     expect(asked).toEqual([]);

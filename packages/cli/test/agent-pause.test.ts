@@ -107,7 +107,7 @@ describe('pausing an agent and telling the workspace', () => {
       'pause Codex',
     );
     expect(paused.workspace).toEqual({ outcome: 'told', conditionId: 'st_1' });
-    expect(sent[0]?.path).toBe('/v1/workspaces/ws_1/state/machine-freezes');
+    expect(sent[0]?.path).toBe('/v1/workspaces/ws_1/conditions/machine-freezes');
     expect(sent[0]?.token).toBe('machine-token');
     // The cloud pins the machine from the credential, so the body never names one.
     expect(sent[0]?.body).toEqual({
@@ -196,7 +196,9 @@ describe('pausing an agent and telling the workspace', () => {
     });
     const resumed = await resumeAgent({ home: dir, now: () => NOW, call }, 'codex-cli');
     expect(resumed.liftedHere).toBe(1);
-    expect(sent.at(-1)?.path).toBe('/v1/workspaces/ws_1/state/machine-freezes/st_1/lift');
+    expect(sent.at(-1)?.path).toBe(
+      '/v1/workspaces/ws_1/conditions/machine-freezes/st_1/lift',
+    );
     expect(sent.at(-1)?.token).toBe('machine-token');
     expect(await readOrgConditions(dir)).toEqual([]);
     expect(await effectFor(dir, 'codex-cli')).toBe(DECISION_EFFECT.ALLOW);

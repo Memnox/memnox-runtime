@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   agentHostOf,
@@ -35,7 +36,7 @@ describe('whether Claude Code asks before it acts', () => {
     expect(posture).toEqual({
       state: APPROVAL_STATE.AUTO,
       setting: 'defaultMode = "bypassPermissions"',
-      declaredIn: `${HOME}/.claude/settings.json`,
+      declaredIn: join(HOME, '.claude', 'settings.json'),
     });
   });
 
@@ -48,7 +49,7 @@ describe('whether Claude Code asks before it acts', () => {
       PROJECT,
     ]);
     expect(posture.state).toBe(APPROVAL_STATE.ASKS);
-    expect(posture.declaredIn).toBe(`${PROJECT}/.claude/settings.json`);
+    expect(posture.declaredIn).toBe(join(PROJECT, '.claude', 'settings.json'));
   });
 
   it('counts an unscoped shell allowed in any file, since allow lists merge', async () => {
@@ -89,7 +90,7 @@ describe('whether Claude Code asks before it acts', () => {
     expect(posture).toEqual({
       state: APPROVAL_STATE.MODEL_REVIEWED,
       setting: 'defaultMode = "auto"',
-      declaredIn: `${HOME}/.claude/settings.json`,
+      declaredIn: join(HOME, '.claude', 'settings.json'),
     });
   });
 

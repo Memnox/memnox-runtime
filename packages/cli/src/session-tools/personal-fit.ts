@@ -1,5 +1,6 @@
 import type { PersonalTool } from '../sync/personal-work';
 import { bounded, MOST_ANSWER_CHARS } from './bounded';
+import { KEY_THEIRS } from '../this-machine';
 
 /**
  * What the person's own tools hand back, made to fit the brain's answer whole: a listing loses fields
@@ -201,7 +202,7 @@ function toolsSaid(tools: readonly VoiceTool[], leftOut: number): string | undef
   const parts = [
     ...(acts
       ? [
-          'A tool with workClass act sends or changes something as them, such as a comment on a pull request, an issue or a ticket: write it down with propose_tool, which puts a draft on their screen for Touch ID.',
+          `A tool with workClass act sends or changes something as them, such as a comment on a pull request, an issue or a ticket: write it down with propose_tool, which puts a draft on their screen for ${KEY_THEIRS}.`,
         ]
       : []),
     ...(leftOut === 0

@@ -14,6 +14,8 @@ import {
   MEMNOX_HOME,
   newEventId,
   openLedger,
+  PROJECTS_DIR,
+  SKILLS_HUB_FILE,
   type MemnoxEvent,
   type ToolClass,
 } from '@memnox/core';
@@ -30,6 +32,9 @@ const CONFIG_SESSION_PREFIX = 'cfg_';
 /** Where the daemon's own rows sit, since no rule file decided them. */
 const KEEPER_LAYER = 'machine';
 
+/** Under the Memnox home: restores staged by their digest until the person signs one. */
+export const RESTORES_DIR = 'restores';
+
 /** Which of the daemon's two jobs a row came from, named as `why` prints a rule. */
 export const CONFIG_RULE = {
   /** Setup asked for the boundary to be kept, and this pass kept it. */
@@ -41,6 +46,12 @@ export const CONFIG_RULE = {
     name: 'autopilot: hand over what was earned',
     file: EARNED_ALLOWANCES_FILE,
   },
+  /** The Skills Hub wrote a skill into an agent's own folder, or took one of its own out. */
+  SKILLS: { name: 'skills hub: hand skills to agents', file: SKILLS_HUB_FILE },
+  /** A project's instructions written into an agent's own file, or taken back out. */
+  PROJECTS: { name: 'projects: hand instructions to agents', file: PROJECTS_DIR },
+  /** A signed restore put a backup's file back over this machine's own. */
+  BACKUP: { name: 'backup: put a signed restore back', file: RESTORES_DIR },
 } as const;
 
 type ConfigRule = (typeof CONFIG_RULE)[keyof typeof CONFIG_RULE];

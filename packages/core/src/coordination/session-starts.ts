@@ -117,6 +117,17 @@ export function isStartableAgent(agent: string): agent is StartableAgent {
   return Object.hasOwn(STARTABLE_AGENT, agent);
 }
 
+/** Discovery names Codex by its command line package, so its kind is read as the agent a terminal starts. */
+const STARTABLE_KIND_ALIASES: Readonly<Record<string, StartableAgent>> = {
+  'codex-cli': AGENT_ID.CODEX,
+};
+
+/** The agent a discovered kind names, when a terminal can start it; null for every other. */
+export function startableKindOf(kind: string): StartableAgent | null {
+  if (isStartableAgent(kind)) return kind;
+  return STARTABLE_KIND_ALIASES[kind] ?? null;
+}
+
 /**
  * One line, because a `cd` sent on its own reached the shell after the agent and started it at home.
  * Every value is single quoted, so a path or a task can say anything and still only be words.

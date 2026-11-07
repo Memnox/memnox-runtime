@@ -55,16 +55,20 @@ describe("Claude Code's settings with the lease hook", () => {
 /* The agent runs the hook with its own PATH, not the installer's, so a bare name found
    on the installer's PATH still fails on every tool call where the agent cannot find it. */
 describe('what the hook entry runs', () => {
-  it('runs the built one by its path, and is still found as ours', () => {
-    const command = editHookCommand(
-      (file) => file === '/x/edit-hook.js',
-      '/x/edit-hook.js',
-    );
+  // Windows writes no sh launcher, since it has no sh to run one, so hooks name node directly.
+  it.skipIf(process.platform === 'win32')(
+    'runs the built one by its path, and is still found as ours',
+    () => {
+      const command = editHookCommand(
+        (file) => file === '/x/edit-hook.js',
+        '/x/edit-hook.js',
+      );
 
-    // The launcher by its path, so a host that hashes the entry keeps trusting it through updates.
-    expect(command).toBe(`"${join(homedir(), '.memnox', 'hooks', OURS)}"`);
-    expect(withoutEditHook(withEditHook({}, command))).toEqual({});
-  });
+      // The launcher by its path, so a host that hashes the entry keeps trusting it through updates.
+      expect(command).toBe(`"${join(homedir(), '.memnox', 'hooks', OURS)}"`);
+      expect(withoutEditHook(withEditHook({}, command))).toEqual({});
+    },
+  );
 
   it('falls back to the name only where nothing is built beside it', () => {
     expect(editHookCommand(() => false, '/x/edit-hook.js')).toBe(OURS);

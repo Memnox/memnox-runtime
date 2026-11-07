@@ -13,13 +13,16 @@ import {
   type SpokenRuleAnswer,
   type SpokenRuleReading,
 } from '@memnox/core';
+import { draftLocally, type LocalRun } from '../operator/rule-brain';
 import { draftInCloud, type CloudCall } from '../sync/rule-draft-cloud';
 import { machinePolicyPath } from './machine-rules';
 import { machineScope } from './rule-scope';
+import { KEY_THEIRS } from '../this-machine';
 
 /**
- * A rule a person said, drafted by the enrolled workspace (whose plan decides if a model reads it) or by
- * this machine's grammar, read back, proposed once nothing is open, then in force here and offered to the team.
+ * A rule a person said, drafted by this machine's grammar, then by the person's own model here when a phone asks,
+ * and by the enrolled workspace only where neither could (its plan decides if a model reads it there). Read back,
+ * proposed once nothing is open, then in force here and offered to the team.
  */
 
 /** Who the ledger names as having proposed it, as every other rule card names it. */
@@ -44,14 +47,66 @@ interface SpokenRuleSeams {
   at: string;
   /** How the workspace is called; the real one unless a test hands in another. */
   cloud?: CloudCall;
+  /** The person's own model on this machine, asked when the grammar cannot read it; absent, none is asked. */
+  local?: LocalRun;
+}
+
+type Drafted = Omit<SpokenRuleAnswer, 'offeredToTeam'>;
+
+/** A reading held to the validator and said back, with who drafted it. */
+function heldToValidator(
+  read: SpokenRuleReading,
+  approved: readonly string[],
+  draftedBy: Drafted['draftedBy'],
+  note?: string,
+): Drafted | SpokenRuleRefusal {
+  const reading = withApprovedDestinations(read, approved);
+  const problems = spokenRuleProblems(reading.draft);
+  if (problems.length > 0)
+    return { refused: `The rule would not load: ${problems.join('; ')}` };
+  return {
+    draft: reading.draft,
+    readBack: readBackOfSpokenRule(reading.draft),
+    openQuestions: reading.openQuestions,
+    draftedBy,
+    ...(note === undefined ? {} : { note }),
+  };
+}
+
+/**
+ * Asked from a phone: the grammar here first, since it is instant and exact, then the person's own model on this
+ * machine, so the sentence stays on their machines. The workspace drafts it only when no model here could be asked.
+ */
+async function draftHereFirst(
+  sentence: string,
+  approved: readonly string[],
+  local: LocalRun,
+  seams: Pick<SpokenRuleSeams, 'env' | 'home' | 'cloud'>,
+): Promise<Drafted | SpokenRuleRefusal> {
+  const grammar = readRuleSentence(sentence, (command) => actionOf(command, seams.env));
+  if (grammar !== undefined)
+    return heldToValidator(grammar, approved, RULE_DRAFTED_BY.PATTERN);
+  const model = await draftLocally(seams.home, sentence, local);
+  if (model === undefined) return { refused: NOT_READ };
+  if (model !== null) return heldToValidator(model, approved, RULE_DRAFTED_BY.MODEL);
+  const cloud = await draftInCloud(seams.home, sentence, seams.cloud);
+  if (cloud === null) return { refused: NOT_READ };
+  if ('refused' in cloud)
+    return {
+      refused: cloud.refused,
+      ...(cloud.upgrade === true ? { upgrade: true } : {}),
+    };
+  return heldToValidator(cloud.drafted, approved, cloud.draftedBy, cloud.note);
 }
 
 /** The sentence drafted, or why it could not be. */
 async function draftSpokenRule(
   sentence: string,
   approved: readonly string[],
-  seams: Pick<SpokenRuleSeams, 'env' | 'home' | 'cloud'>,
-): Promise<Omit<SpokenRuleAnswer, 'offeredToTeam'> | SpokenRuleRefusal> {
+  seams: Pick<SpokenRuleSeams, 'env' | 'home' | 'cloud' | 'local'>,
+): Promise<Drafted | SpokenRuleRefusal> {
+  if (seams.local !== undefined)
+    return draftHereFirst(sentence, approved, seams.local, seams);
   const cloud = await draftInCloud(seams.home, sentence, seams.cloud);
   if (cloud !== null && 'refused' in cloud)
     return {
@@ -63,17 +118,12 @@ async function draftSpokenRule(
       ? readRuleSentence(sentence, (command) => actionOf(command, seams.env))
       : cloud.drafted;
   if (read === undefined) return { refused: NOT_READ };
-  const reading: SpokenRuleReading = withApprovedDestinations(read, approved);
-  const problems = spokenRuleProblems(reading.draft);
-  if (problems.length > 0)
-    return { refused: `The rule would not load: ${problems.join('; ')}` };
-  return {
-    draft: reading.draft,
-    readBack: readBackOfSpokenRule(reading.draft),
-    openQuestions: reading.openQuestions,
-    draftedBy: cloud === null ? RULE_DRAFTED_BY.PATTERN : cloud.draftedBy,
-    ...(cloud?.note === undefined ? {} : { note: cloud.note }),
-  };
+  return heldToValidator(
+    read,
+    approved,
+    cloud === null ? RULE_DRAFTED_BY.PATTERN : cloud.draftedBy,
+    cloud?.note,
+  );
 }
 
 /**
@@ -113,7 +163,7 @@ export function spokenRuleSentence(answer: SpokenRuleAnswer): string {
   const team = answer.offeredToTeam
     ? ' Once they confirm it also goes to the team as a proposal, and it becomes a team rule only when a second admin approves it.'
     : '';
-  return `Read it back: ${answer.readBack} It holds on this machine from the next action once they confirm with Touch ID or Face ID, and not before.${team}`;
+  return `Read it back: ${answer.readBack} It holds on this machine from the next action once they confirm with ${KEY_THEIRS} or Face ID, and not before.${team}`;
 }
 
 /** A comma separated list of what the person named, as its parts. */

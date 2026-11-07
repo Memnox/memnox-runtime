@@ -20,6 +20,7 @@ import {
   FINDS_ITS_TAB,
   TOOL_ARG,
 } from './session-tools.constants';
+import { THE_DESKTOP, THE_DESKTOP_START } from '../this-machine';
 
 /**
  * Stopping an agent where it is, as a person does at the keyboard: Escape in the terminal it runs
@@ -124,9 +125,7 @@ const STOP_TITLE = 'Stop';
 
 const STOPPED =
   'Escape was pressed in its terminal, which stops whatever it was doing there and leaves its tab and conversation as they are. Say it is stopped in a few words, and that it is waiting for what to do next.';
-const STOP_UNCONFIRMED =
-  'Handed to the Mac to press Escape in its terminal, which has not said it went in. Say you asked it to stop and could not confirm it yet; never that it stopped.';
-const NOT_STOPPED =
-  'The Mac could not press Escape in its terminal, so it is still going: why says the reason. Say sorry in a few words and the reason in plain words, then offer as one question to pause it, which holds it at its next step, or to close its tab now.';
+const STOP_UNCONFIRMED = `Handed to ${THE_DESKTOP} to press Escape in its terminal, which has not said it went in. Say you asked it to stop and could not confirm it yet; never that it stopped.`;
+const NOT_STOPPED = `${THE_DESKTOP_START} could not press Escape in its terminal, so it is still going: why says the reason. Say sorry in a few words and the reason in plain words, then offer as one question to pause it, which holds it at its next step, or to close its tab now.`;
 const NO_TERMINAL =
   'It runs where Memnox cannot press Escape, such as a desktop app it has no window for, so nothing was stopped. Say so in a sentence and offer as one question to pause it, which holds it at its next step.';

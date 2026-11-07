@@ -2,8 +2,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SessionTasks, SqliteEventStore, type MemnoxEvent } from '@memnox/core';
-import { leadUpTo } from '../src/commands/why/lead-up';
+import { leadUpTo, SessionTasks, SqliteEventStore, type MemnoxEvent } from '@memnox/core';
 
 function row(
   id: string,

@@ -8,6 +8,7 @@ import {
   NodeWorktree,
   REPLAY_STEP,
   SessionHosts,
+  isInjectedPrompt,
   SPEAKER,
   statementOfPrompt,
   type CardExcerpt,
@@ -176,7 +177,7 @@ export class SessionViews {
     const repository = row.repositories[0] ?? opened ?? undefined;
     const root = repository === undefined ? null : repositoryAround(repository);
     const branch = root === null ? null : branchAt(root);
-    const task = row.task ?? (await this.openingAsk(sessionId));
+    const task = typedTask(row.task) ?? (await this.openingAsk(sessionId));
     return viewOf(row, {
       sessionId,
       agentName: nameOf(names, row.agent),
@@ -380,7 +381,7 @@ function cardOf(
     agentName: nameOf(names, row.agent),
     state: row.state,
     thinking: row.turn === 'in progress',
-    ...(row.task === undefined ? {} : { task: row.task }),
+    ...(typedTask(row.task) === undefined ? {} : { task: row.task }),
     ...(focus === null ? {} : { focus }),
     ...(repository === undefined ? {} : { repository: basename(repository) }),
     ...(row.runningIn === undefined ? {} : { runningIn: row.runningIn }),
@@ -439,6 +440,11 @@ function viewOf(row: SessionRow, gathered: Gathered): SessionView {
     ...(row.paused === undefined ? {} : { paused: row.paused }),
     ...gathered.conversation,
   };
+}
+
+/** A task noted from a prompt that a helper's report or a harness notice set before the hook knew them apart, dropped. */
+function typedTask(task: string | undefined): string | undefined {
+  return task === undefined || isInjectedPrompt(task) ? undefined : task;
 }
 
 /** The transcript's word over the prompt hook's, since the hook cannot tell the person's prompt from a helper's report. */

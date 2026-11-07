@@ -3,6 +3,7 @@
  * anybody running a command. Read by its words, never by a model: "investigate why the
  * payments failed" is an investigation, "investigate and fix it" is not.
  */
+import { isInjectedPrompt } from './injected-prompt';
 import { TASK_INTENT, taskFor, type SessionTask, type TaskIntent } from './session-task';
 
 /** Long enough to recognise the ask in `why`, short enough never to be a document. */
@@ -54,6 +55,8 @@ const MOST_WORDS_NEEDED = 3;
  * that opens with a pasted log or a stray backtick still has its question further down.
  */
 export function statementOfPrompt(prompt: string): string {
+  // A helper's report or a harness notice is no ask at all, so it never stands as the task or the latest ask.
+  if (isInjectedPrompt(prompt)) return '';
   const lines = prompt
     .split('\n')
     .map((each) => unwrapped(each).trim())
@@ -84,7 +87,7 @@ export function taskFromPrompt(
   const task = taskFor(
     {
       sessionId: moment.sessionId,
-      statement: existing?.statement ?? statement,
+      statement: kept(existing) ?? statement,
       scope: {},
       ...(intent === undefined ? {} : { intent }),
     },
@@ -97,6 +100,25 @@ export function taskFromPrompt(
     declaredAt: existing.declaredAt,
     declaredBy: DECLARED_BY_PROMPT,
     latestAsk: statement,
+  };
+}
+
+/** The statement a task keeps, unless a helper's report set it before the hook could tell one from the person. */
+function kept(existing: SessionTask | null): string | undefined {
+  if (existing === null || isInjectedPrompt(existing.statement)) return undefined;
+  return existing.statement;
+}
+
+/**
+ * A task's statement and latest ask as a card shows them, each left out where a helper's report or a harness notice
+ * was kept as one before the hook could tell them from the person, so only their own words stand as what they asked.
+ */
+export function typedAsks(task: SessionTask | null): { task?: string; lastAsk?: string } {
+  if (task === null) return {};
+  const latest = task.latestAsk;
+  return {
+    ...(isInjectedPrompt(task.statement) ? {} : { task: task.statement }),
+    ...(latest === undefined || isInjectedPrompt(latest) ? {} : { lastAsk: latest }),
   };
 }
 

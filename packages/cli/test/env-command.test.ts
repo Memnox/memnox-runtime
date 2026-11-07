@@ -10,10 +10,14 @@ const env = (args: string[]) =>
   );
 
 describe('the environment a service manager has to set itself', () => {
-  it('puts the interceptors in front of the real binaries', async () => {
-    const { out } = await env(['env']);
-    expect(out.text).toContain('export PATH="/home/dev/.memnox/bin:$PATH"');
-  });
+  // This line is for a POSIX shell, systemd or docker, and Windows joins it with backslashes and ';'.
+  it.skipIf(process.platform === 'win32')(
+    'puts the interceptors in front of the real binaries',
+    async () => {
+      const { out } = await env(['env']);
+      expect(out.text).toContain('export PATH="/home/dev/.memnox/bin:$PATH"');
+    },
+  );
 
   it('points SHELL at the governed shell, and keeps the real one', async () => {
     const { out } = await env(['env']);
@@ -29,18 +33,26 @@ describe('the environment a service manager has to set itself', () => {
   /* systemd does not run a shell, so `$PATH` in a unit file is four literal
      characters — and the interceptors would be the entire path, which is an agent
      that can run nothing at all. */
-  it('expands PATH for systemd, which has no shell to expand it', async () => {
-    const { out } = await env(['env', '--format', 'systemd']);
-    expect(out.text).toContain('Environment="PATH=/home/dev/.memnox/bin:');
-    expect(out.text).not.toContain('$PATH');
-  });
+  // This line is for a POSIX shell, systemd or docker, and Windows joins it with backslashes and ';'.
+  it.skipIf(process.platform === 'win32')(
+    'expands PATH for systemd, which has no shell to expand it',
+    async () => {
+      const { out } = await env(['env', '--format', 'systemd']);
+      expect(out.text).toContain('Environment="PATH=/home/dev/.memnox/bin:');
+      expect(out.text).not.toContain('$PATH');
+    },
+  );
 
-  it('expands it for docker too, and says the home has to be there', async () => {
-    const { out } = await env(['env', '--format', 'docker']);
-    expect(out.text).toContain('ENV PATH=/home/dev/.memnox/bin:');
-    expect(out.text).not.toContain('$PATH');
-    expect(out.notes.join(' ')).toContain('~/.memnox');
-  });
+  // This line is for a POSIX shell, systemd or docker, and Windows joins it with backslashes and ';'.
+  it.skipIf(process.platform === 'win32')(
+    'expands it for docker too, and says the home has to be there',
+    async () => {
+      const { out } = await env(['env', '--format', 'docker']);
+      expect(out.text).toContain('ENV PATH=/home/dev/.memnox/bin:');
+      expect(out.text).not.toContain('$PATH');
+      expect(out.notes.join(' ')).toContain('~/.memnox');
+    },
+  );
 
   it('tells a systemd user what to do next', async () => {
     const { out } = await env(['env', '--format', 'systemd']);

@@ -10,6 +10,7 @@ import {
 } from '@memnox/core';
 import { machinePolicyPath } from './machine-rules';
 import { WRITTEN_POLICY_FILE } from './merge-rules';
+import { MACHINE } from '../this-machine';
 
 /**
  * Where a rule a person asked for is put in force. A rule file's place on disk does not limit
@@ -27,9 +28,17 @@ export function machineScope(suggested: boolean): RuleScope {
   return {
     id: MACHINE_SCOPE_ID,
     kind: RULE_SCOPE.MACHINE,
-    label: 'This Mac',
+    label: `This ${MACHINE}`,
     ...(suggested ? { suggested } : {}),
   };
+}
+
+/**
+ * A repository's rules kept in this Mac's own file rather than the repository's, so the checkout
+ * stays clean; the rules carry the folder in their match, which is what holds them there.
+ */
+export function machineScopeIn(folder: string): RuleScope {
+  return { ...machineScope(true), label: `This ${MACHINE}, in ${basename(folder)} only` };
 }
 
 /** The workspace, for a machine that is enrolled in one; nothing is written here, it is offered on the next sync. */
@@ -90,14 +99,18 @@ export function ruleDraftOf(proposal: Proposal): RuleDraft | undefined {
     return undefined;
   const [rule] = change.rules;
   if (rule === undefined) return undefined;
-  const branches = rule.match.branches;
-  const targets = rule.match.targets;
+  const { branches, targets, agents, workingDirectories, classes } = rule.match;
   return {
     summary: proposal.rationale,
     effect: rule.decision.effect,
     action: rule.match.actions?.[0] ?? '',
     ...(branches === undefined ? {} : { branches: [...branches] }),
     ...(targets === undefined ? {} : { targets: [...targets] }),
+    ...(agents === undefined ? {} : { agents: [...agents] }),
+    ...(workingDirectories === undefined
+      ? {}
+      : { workingDirectories: [...workingDirectories] }),
+    ...(classes === undefined ? {} : { classes: [...classes] }),
     reason: rule.decision.reason ?? proposal.rationale,
     scopes: [...change.scopes],
   };

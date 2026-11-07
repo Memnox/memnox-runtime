@@ -39,7 +39,12 @@ describe('having the machine start the daemon', () => {
     const written = await readFile(state.path, 'utf8');
     // It has to actually run the daemon, or it is a file that keeps nothing alive.
     expect(written).toContain('daemon');
-    expect(written).toContain(platform() === 'darwin' ? SERVICE_LABEL : 'Restart=always');
+    // Each platform's own mark: the launchd label, the systemd restart, the task's batch file.
+    const marks: Record<string, string> = {
+      darwin: SERVICE_LABEL,
+      win32: 'Scheduled Task',
+    };
+    expect(written).toContain(marks[platform()] ?? 'Restart=always');
 
     expect((await uninstallService(dir, { unload: () => null })).state.installed).toBe(
       false,

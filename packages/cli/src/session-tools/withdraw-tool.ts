@@ -1,6 +1,7 @@
 import { PROPOSAL_ANSWER, PROPOSAL_KIND, Proposals, type Proposal } from '@memnox/core';
 import { BY_VOICE, OPERATOR_AGENT } from './propose-tools';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
+import { KEY_THEIRS } from '../this-machine';
 
 /**
  * A draft the voice put up, taken back when the person says to discard it: closed as declined, as the card's own
@@ -63,7 +64,7 @@ function alreadySaid(proposal: Proposal): { withdrawn: false; said: string } {
   }
   return {
     withdrawn: false,
-    said: `${what} was already confirmed with Touch ID, so it cannot be discarded now: say so plainly, and use sent to say whether it went out.`,
+    said: `${what} was already confirmed with ${KEY_THEIRS}, so it cannot be discarded now: say so plainly, and use sent to say whether it went out.`,
   };
 }
 

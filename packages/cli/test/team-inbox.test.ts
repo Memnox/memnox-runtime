@@ -90,7 +90,9 @@ describe('a person signed in from a terminal', () => {
 
   it('answers a team question with a yes signed over the words a phone signs, and a no unsigned', async () => {
     const { home } = await signedIn();
-    const sent = cloud({ '/held/apr_team': { id: 'apr_team', status: 'answered' } });
+    const sent = cloud({
+      '/held-calls/apr_team/answer': { id: 'apr_team', status: 'answered' },
+    });
     const run = async (args: string[]): Promise<void> => {
       const program = new Command();
       registerApprovalsCommand(
@@ -109,7 +111,7 @@ describe('a person signed in from a terminal', () => {
     await run(['deny', 'apr_team']);
 
     const [yes, no] = sent.filter(
-      (each) => each.path === '/v1/workspaces/ws_1/me/held/apr_team',
+      (each) => each.path === '/v1/workspaces/ws_1/me/held-calls/apr_team/answer',
     );
     expect(yes?.body).toMatchObject({ answer: 'once', deviceId: 'pdv_term' });
     expect(no?.body).toEqual({ answer: 'deny', deviceId: 'pdv_term' });
@@ -139,7 +141,7 @@ describe('memnox inbox', () => {
     };
     await new PendingApprovals(home).raise(request, NOW.toISOString(), 120_000);
     cloud({
-      '/me/held': [
+      '/me/held-calls': [
         {
           id: 'apr_team',
           machineId: 'mch_1',

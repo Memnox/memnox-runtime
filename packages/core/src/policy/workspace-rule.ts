@@ -1,4 +1,5 @@
-import { orgPolicyPathFor, readJsonFile } from '@memnox/core';
+import { readJsonFile } from '../store/json-records';
+import { orgPolicyPathFor } from './org-bundle';
 
 /** A rule the workspace published, as `why` names it: who decided it, when, and in which bundle. */
 export interface WorkspaceRule {
@@ -33,15 +34,21 @@ export async function workspaceRuleOf(
   };
 }
 
+/** Whether the workspace has published newer rules than the bundle the event was decided under. */
+export function publishedSince(rule: WorkspaceRule, decidedUnder?: string): boolean {
+  return (
+    decidedUnder !== undefined &&
+    rule.bundleHash !== undefined &&
+    decidedUnder !== rule.bundleHash
+  );
+}
+
 /** Who decided it and when, said plainly, and whether the team has published newer rules since. */
 export function decidedLine(rule: WorkspaceRule, decidedUnder?: string): string {
   const who = rule.decidedBy ?? 'the workspace';
   const when = rule.decidedAt === undefined ? '' : ` on ${rule.decidedAt.slice(0, 10)}`;
-  const since =
-    decidedUnder !== undefined &&
-    rule.bundleHash !== undefined &&
-    decidedUnder !== rule.bundleHash
-      ? ', and the workspace has published newer rules since'
-      : '';
+  const since = publishedSince(rule, decidedUnder)
+    ? ', and the workspace has published newer rules since'
+    : '';
   return `${who}${when}${since}`;
 }

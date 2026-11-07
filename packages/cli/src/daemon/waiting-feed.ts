@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import {
+  actionDigestOf,
   AGENT_ID_PREFIX,
   AgentQuestions,
   DAEMON_EVENT,
@@ -25,6 +26,7 @@ import {
   POST_KIND,
   SessionPosts,
   SessionTurns,
+  typedAsks,
   type SessionPost,
   type AgentQuestion,
   type DaemonEvent,
@@ -43,6 +45,9 @@ import { displayName, readNames, type AgentNames } from '../agents/names';
 import { withEvents } from '../event-store';
 import { answerOnOf, answeringPhone } from '../remote/answer-on';
 import { NewsTold } from './news-told';
+import { briefFor } from './turn-brief';
+import { whichSession } from './which-session';
+import { OPERATOR_AGENT } from '../session-tools/propose-tools';
 
 /**
  * What is waiting on a person, read from the files other processes write, since a held
@@ -222,6 +227,8 @@ export class WaitingFeed {
         run: away.run,
         at: span.endedAt,
         sessionId: turn.sessionId,
+        ...(await whichSession(this.home, turn.sessionId)),
+        ...(await briefFor(this.home, turn.sessionId)),
       };
       this.summaries.set(subject, event);
       events.push(event);
@@ -256,8 +263,7 @@ export class WaitingFeed {
       sessionId: question.sessionId,
       questions: question.questions,
       ...(question.answers === undefined ? {} : { answers: question.answers }),
-      ...(task === null ? {} : { task: task.statement }),
-      ...(task?.latestAsk === undefined ? {} : { lastAsk: task.latestAsk }),
+      ...typedAsks(task),
       ...(host?.cwd === undefined ? {} : { place: basename(host.cwd) }),
     };
   }
@@ -286,10 +292,11 @@ export class WaitingFeed {
       what: plain.doing ?? describeHeldCall(request),
       why: plain.why,
       sessionId: request.sessionId,
-      ...(task === null ? {} : { task: task.statement }),
-      ...(task?.latestAsk === undefined ? {} : { lastAsk: task.latestAsk }),
+      ...typedAsks(task),
       ...(host?.cwd === undefined ? {} : { place: basename(host.cwd) }),
       ...(request.withinSession === true ? { withinSession: true } : {}),
+      // What a v4 yes signs, so the answer covers this exact call and no later edit of it.
+      actionDigest: actionDigestOf(request),
       ...answerOnOf(answeringPhone(devices, REMOTE_CAPABILITY.ANSWER)),
     };
   }
@@ -417,6 +424,7 @@ function proposalEvent(
     summary: each.rationale,
     at: each.proposedAt,
     expiresAt: each.expiresAt,
+    proposalKind: each.change.kind,
     ...(rule === undefined ? {} : { rule }),
     ...(within ? { withinSession: true } : {}),
     ...teamAnswerOf(each),
@@ -441,8 +449,10 @@ function phoneOf(
   };
 }
 
-/** Something going out in the person's name, drawn on the Mac the way its tool draws it. */
-function workDraftFor(proposal: Proposal): Pick<DaemonEvent, 'work' | 'claim'> {
+/** Something going out in the person's name, drawn as its tool draws it; marked when a working agent asked for it. */
+function workDraftFor(
+  proposal: Proposal,
+): Pick<DaemonEvent, 'work' | 'claim' | 'agentAsked'> {
   const change = proposal.change;
   // Answered from the signed in pill in the notch, so the Mac never declines it as unasked.
   if (change.kind === PROPOSAL_KIND.ACCOUNT)
@@ -454,6 +464,7 @@ function workDraftFor(proposal: Proposal): Pick<DaemonEvent, 'work' | 'claim'> {
       ...(change.account === undefined ? {} : { account: change.account }),
       ...(change.toName === undefined ? {} : { toName: change.toName }),
     }),
+    ...(proposal.proposedBy === OPERATOR_AGENT ? {} : { agentAsked: true as const }),
   };
 }
 

@@ -10,6 +10,7 @@ import {
   type WorkAccount,
 } from '@memnox/core';
 import type { SessionToolDeps } from './read-tools';
+import { KEY_THEIRS, THEIR_KEY } from '../this-machine';
 
 /** Far enough back for "did it go?" asked after a few more turns, and short enough to be about today's sends. */
 const SENT_LOOKBACK_MS = minutesToMs(60);
@@ -36,7 +37,7 @@ export function proposedReply(
   return {
     proposed: id,
     ...(to.length === 0 ? {} : { to }),
-    said: `The draft is on their screen and waits there for them. Read this back: ${heard}.${readdressNote(editable, to)} Then say in a few words that they can change ${changes} on the card and press Send, which asks for Touch ID, and that nothing goes out before. Never offer to send it yourself.${unverifiedNote(account)}`,
+    said: `The draft is on their screen and waits there for them. Read this back: ${heard}.${readdressNote(editable, to)} Then say in a few words that they can change ${changes} on the card and press Send, which asks for ${KEY_THEIRS}, and that nothing goes out before. Never offer to send it yourself.${unverifiedNote(account)}`,
   };
 }
 
@@ -50,7 +51,7 @@ function readdressNote(editable: boolean, to: readonly string[]): string {
 function unverifiedNote(account: WorkAccount): string {
   return account.check === WORK_ACCOUNT_CHECK.MATCHED
     ? ''
-    : ' Say the account name as you read it back; their Touch ID on this send ties it to them, so never tell them it needs anything else first.';
+    : ` Say the account name as you read it back; ${THEIR_KEY} on this send ties it to them, so never tell them it needs anything else first.`;
 }
 
 /**
@@ -76,7 +77,7 @@ export async function sentTool(deps: SessionToolDeps): Promise<unknown> {
       to: each.ran?.to ?? recipientsProposed(each),
       ...(each.ran === undefined ? {} : { result: each.ran.said }),
     })),
-    said: 'Say what became of the one they mean, by its state: sent went out, failed did not and says why, waiting is still on their screen for Touch ID, declined they closed, expired ran out unanswered. Its to is who it went to as sent, the address they typed on the card where they changed it, so name that one. When one failed or expired and they still want it, propose it again at once.',
+    said: `Say what became of the one they mean, by its state: sent went out, failed did not and says why, waiting is still on their screen for ${KEY_THEIRS}, declined they closed, expired ran out unanswered. Its to is who it went to as sent, the address they typed on the card where they changed it, so name that one. When one failed or expired and they still want it, propose it again at once.`,
   };
 }
 

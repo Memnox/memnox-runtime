@@ -28,6 +28,14 @@ import { fileForScope, scopeAnswered, scopedRules } from '../protect/rule-scope'
 import { decisionsOfRules, recordLocalDecisions } from '../sync/local-decisions';
 import { editedProposal, ranOf } from './confirm-edit';
 import { applyPersonal } from './confirm-work';
+import { applyHubProposal } from './mcp-hub-confirm';
+import { applySkillsProposal } from './skills-hub-confirm';
+import { applyProjectProposal } from './projects-confirm';
+import { applyBackupProposal } from './backup-confirm';
+import { applyLanProposal } from './lan-answer';
+import { applyIndexSourceProposal } from './index-source-answer';
+import { afterConfirmed, applyPersonalSyncProposal } from './personal-sync-answer';
+import { applyStudioProposal } from './studio-confirm';
 import {
   FROM_NOW_ON,
   NEVER_FROM_NOW_ON,
@@ -45,6 +53,7 @@ import {
   voiceArguments,
   type CommandRun,
 } from '../session-tools/voice-commands';
+import { MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * A person's answer arriving from the Mac app or a paired phone. Refusing never needs proof; a yes
@@ -67,6 +76,8 @@ export interface ConfirmInput {
   editedTo?: string;
   /** What the person said with a no, which the agent hears beside the rule's way forward; a yes drops it. */
   reason?: string;
+  /** On a held call: the digest the screen signed, so a call that changed since it was shown is refused by name. */
+  actionDigest?: string;
   at: string;
   /** How a confirmed memnox command is run; memnox itself unless a test hands in another. */
   run?: CommandRunner;
@@ -127,6 +138,7 @@ async function answerHeld(home: string, input: ConfirmInput): Promise<ConfirmRes
     capability: REMOTE_CAPABILITY.ANSWER,
     withinSession: held?.request.withinSession === true,
     driven: false,
+    ...(held === null ? {} : { heldCall: held.request }),
   });
   if ('refused' in consent) return { ok: false, error: consent.refused, refused: true };
   const by = consent.by;
@@ -178,7 +190,7 @@ function fromNowOnOutcome(
   offered: { proposed: string } | { notProposed: string },
 ): string {
   return 'proposed' in offered
-    ? `${answer}, and the rule for from now on waits on the Mac as ${offered.proposed}`
+    ? `${answer}, and the rule for from now on waits on ${THE_DESKTOP} as ${offered.proposed}`
     : `${answer}, and nothing from now on: ${offered.notProposed}`;
 }
 
@@ -243,6 +255,7 @@ async function carryOut(
 ): Promise<ConfirmResult> {
   const run = input.run ?? runMemnox;
   const applied = await apply(home, proposal, { at: input.at, run, by, scope });
+  afterConfirmed(home, proposal.change.kind, applied.ok);
   const kind = proposal.change.kind;
   if (kind !== PROPOSAL_KIND.WORK && kind !== PROPOSAL_KIND.ACCOUNT) return applied;
   await proposals.ran(proposal.id, ranOf(proposal.change, applied, input.at));
@@ -322,8 +335,17 @@ async function apply(
   if (change.kind === PROPOSAL_KIND.ANSWER) {
     return applyHeldAnswer(home, proposal, change, { at, by });
   }
+  if (change.kind === PROPOSAL_KIND.MCP_HUB) return applyHubProposal(home, change.hub);
+  if (change.kind === PROPOSAL_KIND.SKILLS_HUB)
+    return applySkillsProposal(home, change.skills, new Date(at));
   return (
-    (await applyPersonal(home, proposal)) ?? {
+    (await applyPersonal(home, proposal)) ??
+    (await applyStudioProposal(home, change, new Date(at))) ??
+    (await applyProjectProposal(home, change, new Date(at))) ??
+    (await applyBackupProposal(home, change, new Date(at))) ??
+    (await applyLanProposal(home, change)) ??
+    (await applyIndexSourceProposal(home, change)) ??
+    (await applyPersonalSyncProposal(home, change)) ?? {
       ok: false,
       error: `${proposal.id} is nothing to apply`,
     }
@@ -344,7 +366,7 @@ async function offerToTeam(
   if ((await readAccount(home)) === null) {
     return {
       ok: false,
-      error: 'this Mac is not connected to a team, so there is nobody to offer it to',
+      error: `this ${MACHINE} is not connected to a team, so there is nobody to offer it to`,
     };
   }
   await recordLocalDecisions(home, decided);

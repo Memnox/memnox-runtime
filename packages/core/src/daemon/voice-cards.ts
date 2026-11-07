@@ -44,6 +44,12 @@ export interface RuleDraft {
   action: string;
   branches?: string[];
   targets?: string[];
+  /** The agent kinds it is narrowed to; absent, it reaches every agent. */
+  agents?: string[];
+  /** The folders it holds in, as wildcards; absent, it holds everywhere. */
+  workingDirectories?: string[];
+  /** What the action does, such as read, write, destructive or communication. */
+  classes?: string[];
   reason: string;
   scopes: RuleScope[];
 }

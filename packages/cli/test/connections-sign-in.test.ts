@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  CONNECT_STATE,
   DAEMON_METHOD,
   decodeRequest,
   decodeResponse,
@@ -23,8 +24,10 @@ import {
   searchToolkits,
   toolkitsFrom,
 } from '../src/sync/connection-work';
+import { ACCOUNT_REQUIRED, SIGN_IN_TO_CONNECT } from '../src/sync/cloud-account';
 import { voicePrompt } from '../src/operator/voice-prompts';
 import { PERSONAL_TOOLS } from '../src/session-tools/personal-catalogue';
+import { MACHINE } from '../src/this-machine';
 
 const NOTION_PAGE = 'https://connect.composio.dev/link/notion';
 
@@ -128,27 +131,51 @@ describe('connections-sign-in, connecting any tool as the person', () => {
     expect(broken.error).toBe('That tool could not be connected just now.');
   });
 
-  it('refuses over the socket in plain words when the cloud cannot be reached, never asking for an account', async () => {
+  it('answers sign in needed over the socket with nobody signed in, asking the cloud nothing', async () => {
     const home = await mkdtemp(join(tmpdir(), 'memnox-connect-surface-'));
     const surface = new VoiceSurface({ home, now: () => 'now', log: () => undefined });
     const peer = new Heard();
     await surface.respond(peer, signInRequest());
     surface.close();
-    expect(peer.said[0]).toMatchObject({ id: 4, ok: false });
-    expect(peer.said[0]?.error).toMatch(/could not reach Memnox Cloud/);
-    expect(peer.said[0]?.error).toMatch(/no Memnox account/);
+    expect(peer.said[0]).toMatchObject({
+      id: 4,
+      ok: false,
+      error: SIGN_IN_TO_CONNECT,
+      connectState: CONNECT_STATE.SIGN_IN_NEEDED,
+    });
     expect(peer.said[0]?.signIn).toBeUndefined();
   });
 
-  it('asks for a tool by name before reaching the cloud', async () => {
+  it('passes the cloud refusing a caller with no account on as the same state', async () => {
+    const response = await answerConnectionCall(signInRequest(), '/nowhere', false, {
+      ...seamsWith(),
+      link: async () => ({
+        ok: false,
+        said: 'Sign in to Memnox Cloud to connect.',
+        status: 403,
+        code: ACCOUNT_REQUIRED,
+      }),
+    });
+    expect(response).toEqual({
+      id: 4,
+      ok: false,
+      error: 'Sign in to Memnox Cloud to connect.',
+      connectState: 'sign-in-needed',
+    });
+  });
+
+  it('asks for a tool by name, then for a Memnox Cloud sign in, before reaching the cloud', async () => {
     const home = await mkdtemp(join(tmpdir(), 'memnox-connect-name-'));
     const unnamed = await connectLink(home, '../grants');
     expect(unnamed).toEqual({
       ok: false,
       said: 'Name the tool to connect, such as notion or asana.',
     });
-    const unreached = await connectLink(home, 'asana');
-    expect(unreached.ok ? '' : unreached.said).toMatch(/could not reach Memnox Cloud/);
+    expect(await connectLink(home, 'asana')).toEqual({
+      ok: false,
+      said: SIGN_IN_TO_CONNECT,
+      code: ACCOUNT_REQUIRED,
+    });
   });
 });
 
@@ -167,7 +194,9 @@ describe('connections-sign-out, answering the refreshed list', () => {
   it('has nothing to undo before anything was connected, and registers nothing for it', async () => {
     const home = await mkdtemp(join(tmpdir(), 'memnox-disconnect-'));
     const nobody = await disconnect(home, 'notion');
-    expect(nobody.ok ? '' : nobody.said).toBe('Nothing is connected on this Mac yet.');
+    expect(nobody.ok ? '' : nobody.said).toBe(
+      `Nothing is connected on this ${MACHINE} yet.`,
+    );
   });
 });
 
@@ -178,9 +207,73 @@ describe('toolkits-search, the catalogue anybody can connect from', () => {
       { id: 6, method: DAEMON_METHOD.TOOLKITS_SEARCH, query: 'asa' },
       '/nowhere',
       true,
-      { search: async () => ({ ok: true, value: toolkits }) },
+      { search: async () => ({ ok: true, value: toolkits }), signedIn: async () => true },
     );
     expect(response).toEqual({ id: 6, ok: true, toolkits });
+  });
+
+  it('still answers the catalogue signed out, saying connecting waits on a sign in', async () => {
+    const toolkits = [{ slug: 'asana', name: 'Asana' }];
+    const response = await answerConnectionCall(
+      { id: 6, method: DAEMON_METHOD.TOOLKITS_SEARCH },
+      '/nowhere',
+      false,
+      {
+        search: async () => ({ ok: true, value: toolkits }),
+        signedIn: async () => false,
+      },
+    );
+    expect(response).toEqual({
+      id: 6,
+      ok: true,
+      toolkits,
+      connectState: CONNECT_STATE.SIGN_IN_NEEDED,
+    });
+  });
+
+  it("passes on the console card's fields where the cloud sends them, and drops what is not what it says", () => {
+    const found = toolkitsFrom([
+      {
+        slug: 'gmail',
+        name: 'Gmail',
+        description: '  Mail from Google.  ',
+        categories: ['Email', '', 7, 'Communication'],
+        kind: 'conversation',
+        support: { level: 'partial', gaps: ['history'] },
+        toolCount: 40,
+      },
+      { slug: 'odd', name: 'Odd', description: ' ', kind: 'gossip', support: 'full' },
+    ]);
+    expect(found).toEqual([
+      {
+        slug: 'gmail',
+        name: 'Gmail',
+        description: 'Mail from Google.',
+        categories: ['Email', 'Communication'],
+        kind: 'conversation',
+        support: 'partial',
+        source: 'api',
+        weight: 2,
+      },
+      { slug: 'odd', name: 'Odd', source: 'api', weight: 2 },
+    ]);
+  });
+
+  it('answers official first, then cli, api and community mcp, keeping the order within one', () => {
+    const found = toolkitsFrom([
+      { slug: 'one', name: 'One', source: 'mcp' },
+      { slug: 'two', name: 'Two' },
+      { slug: 'three', name: 'Three', verified: true },
+      { slug: 'four', name: 'Four', source: 'cli' },
+      { slug: 'five', name: 'Five', source: 'official' },
+    ]);
+    expect(found.map((each) => `${each.slug}:${each.source}:${each.weight}`)).toEqual([
+      'three:official:4',
+      'five:official:4',
+      'four:cli:3',
+      'two:api:2',
+      'one:mcp:1',
+    ]);
   });
 
   it('maps the cloud catalogue to slug, name and logo, thirty at most', () => {
@@ -201,8 +294,10 @@ describe('toolkits-search, the catalogue anybody can connect from', () => {
       slug: 'notion',
       name: 'Notion',
       logo: 'https://logos/notion.png',
+      source: 'api',
+      weight: 2,
     });
-    expect(found[1]).toEqual({ slug: 'jira', name: 'Jira' });
+    expect(found[1]).toEqual({ slug: 'jira', name: 'Jira', source: 'api', weight: 2 });
     expect(found).toHaveLength(30);
     expect(toolkitsFrom(undefined)).toEqual([]);
   });

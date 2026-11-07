@@ -19,6 +19,7 @@ import { noteFocus } from './focus';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import type { RewindSeams } from './rewind-tool';
 import { scopeOf } from './session-scope';
+import { KEY_START, THE_DESKTOP } from '../this-machine';
 
 /**
  * "That broke it, put it back": the working tree back to before what a session just did. It
@@ -29,8 +30,7 @@ import { scopeOf } from './session-scope';
 /** Long enough to reach for the key, short enough that nobody confirms a stale one. */
 const REWIND_TTL_MS = minutesToMs(5);
 
-const READ_BACK =
-  'Nothing has moved yet. Read back in a sentence what goes back: the repository by name, roughly when it goes back to, and how many files, like "I\'ll put memnox runtime back to twenty minutes ago, three files. Touch ID on the Mac to confirm." Their current files are kept first, so they can ask to bring them back.';
+const READ_BACK = `Nothing has moved yet. Read back in a sentence what goes back: the repository by name, roughly when it goes back to, and how many files, like "I'll put memnox runtime back to twenty minutes ago, three files. ${KEY_START} on ${THE_DESKTOP} to confirm." Their current files are kept first, so they can ask to bring them back.`;
 
 export async function proposeRewindTool(
   deps: SessionToolDeps,

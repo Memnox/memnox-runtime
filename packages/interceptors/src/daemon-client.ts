@@ -25,6 +25,8 @@ export interface AskOptions {
   action: string;
   target?: string;
   sessionId?: string;
+  /** The folder the action runs in; the daemon finds its project, so a project's rules decide it. */
+  workingDirectory?: string;
   timeoutMs?: number;
 }
 
@@ -56,6 +58,9 @@ export function askDaemon(
     action: options.action,
     ...(options.target === undefined ? {} : { target: options.target }),
     ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
+    ...(options.workingDirectory === undefined
+      ? {}
+      : { workingDirectory: options.workingDirectory }),
   });
 }
 

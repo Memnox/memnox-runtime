@@ -22,9 +22,9 @@ import {
 
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import { readTool, type ToolDefinition } from './session-tools';
+import { MACHINE } from '../this-machine';
 
-const NOT_REACHABLE =
-  'The workspace could not be asked just now: this Mac is not connected, or the control plane did not answer. Say so in a sentence; never say there is nothing there.';
+const NOT_REACHABLE = `The workspace could not be asked just now: this ${MACHINE} is not connected, or the control plane did not answer. Say so in a sentence; never say there is nothing there.`;
 
 /** Messages, tickets and documents from the systems the workspace connects, as far as this Mac may read. */
 export async function sourcesTool(
@@ -44,7 +44,7 @@ export async function sourcesTool(
     sources: read.sources,
     total: read.total,
     ...(read.withheld > 0
-      ? { withheld: `${read.withheld} more this Mac is not cleared to read` }
+      ? { withheld: `${read.withheld} more this ${MACHINE} is not cleared to read` }
       : {}),
     ...(read.sources.length === 0
       ? { said: 'Nothing in the connected systems matches. Say so rather than guess.' }

@@ -23,6 +23,7 @@ import {
   type DeviceOffer,
 } from '../sync/enrol';
 import type { PersonCredential } from '../sync/person';
+import { MACHINE } from '../this-machine';
 
 /**
  * Connecting this machine to a workspace from the Mac app, with no terminal: the `memnox login` flow, ending in
@@ -100,7 +101,7 @@ async function approveMachine(person: Approver, userCode: string): Promise<void>
     body: { userCode, approved: true },
   });
   if (answer.status >= HTTP.BAD_REQUEST) {
-    throw new Error(`The workspace would not take this Mac (${answer.status}).`);
+    throw new Error(`The workspace would not take this ${MACHINE} (${answer.status}).`);
   }
 }
 

@@ -36,6 +36,8 @@ import {
   readWorkspaceGithub,
   workspaceRepositories,
 } from '../sync/personal-work';
+import { VOICE_SIGN_IN_FIRST } from '../sync/cloud-account';
+import { readPerson } from '../sync/person';
 import { findEveryTool, runLocal } from '../local-tools/local-tools';
 import { isLocalSlug } from '../local-tools/local-run';
 import type { SessionToolDeps } from './read-tools';
@@ -122,12 +124,13 @@ function depsFor(argv: readonly string[], env: NodeJS.ProcessEnv): SessionToolDe
           ? runLocal(homedir(), tool, argumentsText, false)
           : runPersonalTool(homedir(), tool, argumentsText),
       signIn: (toolkit) => signInPersonal(homedir(), toolkit),
-      link: (toolkit) => signInLink(homedir(), toolkit),
+      link: (toolkit) => signInLink(homedir(), toolkit, VOICE_SIGN_IN_FIRST),
       accounts: () => personalAccounts(homedir()),
       repositories: (all) => workspaceRepositories(homedir(), all),
       github: (read) => readWorkspaceGithub(homedir(), read),
       signOut: (toolkit) => signOutOf(homedir(), toolkit),
       connections: () => connectionsOf(homedir()),
+      signedIn: async () => (await readPerson(homedir())) !== null,
     },
     memnoxSignIn: () => askPersonSignIn(homedir()),
     delivered: (requestId, waitMs) => awaitDelivery(homedir(), requestId, waitMs),

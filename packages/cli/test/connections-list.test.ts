@@ -12,7 +12,8 @@ import {
 import { answerConnections } from '../src/daemon/connection-calls';
 import { isVoiceMethod } from '../src/daemon/voice-methods';
 import { VoiceSurface } from '../src/daemon/voice-surface';
-import { connectionsFrom, connectionsOf } from '../src/sync/personal-work';
+import { connectionsFrom } from '../src/sync/grant-connections';
+import { connectionsOf } from '../src/sync/personal-work';
 
 /** A connection that keeps what it was sent, so the voice's side is tested with no socket. */
 class Heard {
@@ -64,6 +65,46 @@ describe('the apps the person connected, folded from their sign ins', () => {
 
   it('lists nothing when there are no sign ins', () => {
     expect(connectionsFrom([])).toEqual([]);
+  });
+
+  it('dates each tool by its earliest working sign in, and leaves the date out where none says', () => {
+    expect(
+      connectionsFrom([
+        {
+          id: 'g1',
+          toolkit: 'slack',
+          status: 'ACTIVE',
+          enabled: true,
+          connectedAt: '2026-10-05T10:00:00Z',
+        },
+        {
+          id: 'g2',
+          toolkit: 'slack',
+          status: 'ACTIVE',
+          enabled: true,
+          connectedAt: '2026-09-01T08:00:00Z',
+        },
+        {
+          id: 'g3',
+          toolkit: 'slack',
+          status: 'EXPIRED',
+          enabled: true,
+          connectedAt: '2025-01-01T00:00:00Z',
+        },
+        {
+          id: 'g4',
+          toolkit: 'gmail',
+          status: 'ACTIVE',
+          enabled: true,
+          connectedAt: 'yesterday',
+        },
+        { id: 'g5', toolkit: 'notion', status: 'ACTIVE', enabled: true },
+      ]),
+    ).toEqual([
+      { toolkit: 'gmail', connected: true },
+      { toolkit: 'notion', connected: true },
+      { toolkit: 'slack', connected: true, connectedAt: '2026-09-01T08:00:00.000Z' },
+    ]);
   });
 });
 

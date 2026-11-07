@@ -1,11 +1,18 @@
 /**
- * The text without every copy of one character at its end, such as a path's trailing slashes, by
- * index rather than a pattern, so a long run of it costs its length rather than its square.
+ * The text without every character of `chars` at its end, such as a path's trailing slashes, by
+ * index rather than a pattern, so a long run of them costs its length rather than its square.
  */
-export function withoutTrailing(text: string, char: string): string {
+export function withoutTrailing(text: string, chars: string): string {
   let end = text.length;
-  while (end > 0 && text[end - 1] === char) end -= 1;
+  while (end > 0 && chars.includes(text[end - 1]!)) end -= 1;
   return text.slice(0, end);
+}
+
+/** The text without every character of `chars` at its start, by index for the same reason. */
+export function withoutLeading(text: string, chars: string): string {
+  let start = 0;
+  while (start < text.length && chars.includes(text[start]!)) start += 1;
+  return text.slice(start);
 }
 
 /** An MCP tool's name, `mcp__<server>__<tool>`, with the server ending at the first separator. */

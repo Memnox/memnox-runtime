@@ -28,6 +28,7 @@ import {
 import { FINISHED_NOTE } from '../src/daemon/ask-context';
 import { MemnoxDaemon } from '../src/daemon-server';
 import { BRAIN_CHUNK, type Brain } from '../src/operator/brain';
+import { KEY } from '../src/this-machine';
 
 const NOW = '2026-09-30T10:00:00.000Z';
 const TWO_MINUTES = 120_000;
@@ -200,7 +201,7 @@ describe('answering by voice', () => {
     });
 
     expect(response.ok).toBe(false);
-    expect(response.error).toContain('Touch ID');
+    expect(response.error).toContain(KEY);
     expect((await new PendingApprovals(home).read(held.id))?.answer).toBeUndefined();
     await daemon.close();
   });

@@ -147,33 +147,39 @@ describe('how a shell was invoked', () => {
     expect(invocation.flags).toEqual(['-o', 'pipefail']);
   });
 
-  it('hands the real shell the positionals unchanged, after the line', () => {
-    const argv = ['-e', '-c', 'echo "$1"', '_', 'hi'];
-    const invocation = parseShellInvocation(argv);
+  // This spawns /bin/sh, which Windows does not have.
+  it.skipIf(process.platform === 'win32')(
+    'hands the real shell the positionals unchanged, after the line',
+    () => {
+      const argv = ['-e', '-c', 'echo "$1"', '_', 'hi'];
+      const invocation = parseShellInvocation(argv);
 
-    expect(commandShellArgs(invocation)).toEqual(argv);
-    // The literal is spawned rather than the parsed copy, which the line above proves equal.
-    const ran = spawnSync(FALLBACK_SHELL, argv, { encoding: 'utf8' });
-    expect(ran.stdout).toBe('hi\n');
-  });
+      expect(commandShellArgs(invocation)).toEqual(argv);
+      // The literal is spawned rather than the parsed copy, which the line above proves equal.
+      const ran = spawnSync(FALLBACK_SHELL, argv, { encoding: 'utf8' });
+      expect(ran.stdout).toBe('hi\n');
+    },
+  );
 });
 
 describe('the shell handed the command on', () => {
   /* `memnox run` overwrites SHELL. Reading it back here would make the wrapper exec
      itself for ever — the interceptor fork bomb, in a place nobody would look. */
+  // Asked as macOS, since Windows falls back to Git Bash and windows-exec covers that.
   it('is never this binary, whatever SHELL says', () => {
-    expect(realShell({ SHELL: '/usr/local/bin/memnox-shell' }, 'memnox-shell')).toBe(
-      FALLBACK_SHELL,
-    );
+    expect(
+      realShell({ SHELL: '/usr/local/bin/memnox-shell' }, 'memnox-shell', 'darwin'),
+    ).toBe(FALLBACK_SHELL);
     expect(
       realShell(
         { MEMNOX_REAL_SHELL: '/bin/zsh', SHELL: '/x/memnox-shell' },
         'memnox-shell',
+        'darwin',
       ),
     ).toBe('/bin/zsh');
   });
 
   it('falls back to the shell every machine has', () => {
-    expect(realShell({}, 'memnox-shell')).toBe(FALLBACK_SHELL);
+    expect(realShell({}, 'memnox-shell', 'darwin')).toBe(FALLBACK_SHELL);
   });
 });

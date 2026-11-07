@@ -2,6 +2,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { interceptorDirFor } from '@memnox/interceptors';
 import {
   addToProfile,
   blockFor,
@@ -16,21 +17,21 @@ describe('the shell profile line', () => {
   it('is written the way each shell actually sets PATH', () => {
     // A bash export pasted into fish silently does nothing, which is the worst outcome.
     expect(pathLineFor('/bin/zsh', HOME)).toBe(
-      'export PATH="/home/dev/.memnox/bin:$PATH"',
+      `export PATH="${interceptorDirFor(HOME)}:$PATH"`,
     );
     expect(pathLineFor('/usr/local/bin/fish', HOME)).toBe(
-      'fish_add_path --prepend --move /home/dev/.memnox/bin',
+      `fish_add_path --prepend --move ${interceptorDirFor(HOME)}`,
     );
   });
 
   it('goes in the file that shell reads', () => {
-    expect(profilesFor('/bin/zsh', HOME)).toEqual(['/home/dev/.zshrc']);
+    expect(profilesFor('/bin/zsh', HOME)).toEqual([join(HOME, '.zshrc')]);
     expect(profilesFor('/bin/bash', HOME)).toEqual([
-      '/home/dev/.bashrc',
-      '/home/dev/.bash_profile',
+      join(HOME, '.bashrc'),
+      join(HOME, '.bash_profile'),
     ]);
     expect(profilesFor('/usr/local/bin/fish', HOME)).toEqual([
-      '/home/dev/.config/fish/config.fish',
+      join(HOME, '.config', 'fish', 'config.fish'),
     ]);
   });
 
@@ -43,7 +44,7 @@ describe('the shell profile line', () => {
     await addToProfile(path, blockFor('/bin/zsh', HOME));
     const after = await readFile(path, 'utf8');
     expect(after).toContain('export EDITOR=vim');
-    expect(after).toContain('/home/dev/.memnox/bin');
+    expect(after).toContain(interceptorDirFor(HOME));
 
     await removeFromProfile(path);
     // The one that matters: their file comes back, not a reformatted version of it.

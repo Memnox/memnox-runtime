@@ -16,6 +16,7 @@ import {
   type HoldService,
 } from '@memnox/core';
 
+import type { EgressPlace, EgressPlaceOf } from './egress-place';
 import {
   describeVerdict,
   type HookAuthorizer,
@@ -67,6 +68,8 @@ export interface HttpAttempt {
 export interface EgressCaller {
   sessionId?: string;
   agent?: string;
+  /** The session's proxy key; without the one issued to `sessionId` its folder and project are not used. */
+  key?: string;
 }
 
 /** One ruling, as the ledger and the destination record take it. */
@@ -90,6 +93,8 @@ export interface EgressSeamDeps {
   contain?: (caller: EgressCaller) => Promise<Containment | null>;
   /** Told every ruling, for the ledger and the per-agent destination record. */
   ruled?: (ruling: EgressRuling) => Promise<void>;
+  /** The folder and project the caller's session works in, so a project's rules decide here too. */
+  placeOf?: EgressPlaceOf;
 }
 
 const SEVERITY: Readonly<Record<DecisionEffect, number>> = {
@@ -131,6 +136,7 @@ export class EgressSeam {
       target: attempt.url,
       arguments: fields,
       ...this.session(caller),
+      ...(await this.place(caller)),
     };
 
     // Allowing it unread would be the one way out that inspection never sees.
@@ -166,6 +172,7 @@ export class EgressSeam {
       action: EGRESS_CONNECT_ACTION,
       target: authority,
       ...this.session(caller),
+      ...(await this.place(caller)),
     };
     return this.told(request, caller, await this.rule([request], caller));
   }
@@ -173,6 +180,15 @@ export class EgressSeam {
   private session(caller: EgressCaller): { sessionId?: string } {
     const sessionId = caller.sessionId ?? this.deps.sessionId;
     return sessionId === undefined ? {} : { sessionId };
+  }
+
+  /** A place that cannot be read is none, so the machine's rules still decide alone. */
+  private async place(caller: EgressCaller): Promise<EgressPlace> {
+    const placeOf = this.deps.placeOf;
+    if (placeOf === undefined) return {};
+    const sessionId = caller.sessionId ?? this.deps.sessionId;
+    const asked = sessionId === undefined ? caller : { ...caller, sessionId };
+    return placeOf(asked).catch((): EgressPlace => ({}));
   }
 
   /** The strictest ruling among the requests, then a person where it asks. */
@@ -221,8 +237,10 @@ export class EgressSeam {
   ): Promise<EgressOutcome> {
     const ruled = this.deps.ruled;
     if (ruled === undefined) return outcome;
+    // The key proves the session to this seam and goes no further, so no record ever holds one.
+    const { key: _key, ...named } = caller;
     await ruled({
-      caller,
+      caller: named,
       action: request.action,
       target: request.target ?? '',
       effect: outcome.allowed ? DECISION_EFFECT.ALLOW : DECISION_EFFECT.DENY,

@@ -14,31 +14,35 @@ function list(dir: string): readonly CarveEntry[] {
   return (TREE[dir] ?? []).map((name) => ({ name, symlink: false }));
 }
 
-describe('the Linux wall of an untrusted repository', () => {
-  const plan = untrustedLandlockPlan(
-    {
-      home: '/home/dev',
-      writable: ['/w'],
-      readable: [],
-      unreadable: [],
-      unwritable: [],
-      statePrefixes: [],
-      proxyPort: null,
-      workspace: '/w',
-    },
-    list,
-  );
+// The Landlock plan walks a POSIX tree with '/' paths, and Windows has no Landlock and joins with backslashes.
+describe.skipIf(process.platform === 'win32')(
+  'the Linux wall of an untrusted repository',
+  () => {
+    const plan = untrustedLandlockPlan(
+      {
+        home: '/home/dev',
+        writable: ['/w'],
+        readable: [],
+        unreadable: [],
+        unwritable: [],
+        statePrefixes: [],
+        proxyPort: null,
+        workspace: '/w',
+      },
+      list,
+    );
 
-  it('grants neither reading nor writing of its key files', () => {
-    for (const denied of [`/w/${KEYS}`, `/w/src/${KEYS}.local`]) {
-      expect(plan.read).not.toContain(denied);
-      expect(plan.write).not.toContain(denied);
-    }
-  });
+    it('grants neither reading nor writing of its key files', () => {
+      for (const denied of [`/w/${KEYS}`, `/w/src/${KEYS}.local`]) {
+        expect(plan.read).not.toContain(denied);
+        expect(plan.write).not.toContain(denied);
+      }
+    });
 
-  it('grants the rest, the template of names included', () => {
-    expect(plan.read).toContain(`/w/${KEYS}.example`);
-    expect(plan.read).toContain('/w/src/app.ts');
-    expect(plan.write).toContain('/w/node_modules');
-  });
-});
+    it('grants the rest, the template of names included', () => {
+      expect(plan.read).toContain(`/w/${KEYS}.example`);
+      expect(plan.read).toContain('/w/src/app.ts');
+      expect(plan.write).toContain('/w/node_modules');
+    });
+  },
+);

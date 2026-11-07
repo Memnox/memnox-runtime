@@ -1,0 +1,66 @@
+# A rule pack: import it from Memnox and each rule arrives as its own proposal to sign.
+version = 1
+
+[pack]
+name = "Safe defaults"
+description = "Agents work freely on this machine and ask before anything that deletes, rewrites history or changes somebody else's system."
+
+[[policies]]
+name = "pack-safe-defaults-delete-ask"
+description = "Deleting files"
+
+[policies.match]
+actions = [ "filesystem.delete" ]
+
+[policies.decision]
+effect = "ask"
+reason = "a delete is sometimes the build folder and sometimes the only copy, so a person looks first"
+
+[[policies]]
+name = "pack-safe-defaults-history-deny"
+description = "Force pushing and hard resets"
+
+[policies.match]
+actions = [ "git.push-force", "git.push-f", "git.reset-hard", "git.clean-fd", "git.clean-f" ]
+
+[policies.decision]
+effect = "deny"
+reason = "it rewrites history somebody else may already have pulled"
+
+[[policies]]
+name = "pack-safe-defaults-mcp-ask"
+description = "MCP tools that change something outside this machine"
+
+[policies.match]
+actions = [ "mcp.*" ]
+classes = [ "write", "destructive", "communication" ]
+
+[policies.decision]
+effect = "ask"
+reason = "other people see what these calls change, while a tool that only reads is how an agent finds its way"
+
+[[policies]]
+name = "pack-safe-defaults-network-ask"
+description = "Requests that change something on another host"
+
+[policies.match]
+actions = [ "http.request" ]
+
+[policies.match.arguments]
+method = [ "POST", "PUT", "PATCH", "DELETE" ]
+
+[policies.decision]
+effect = "ask"
+reason = "a POST, PUT, PATCH or DELETE changes somebody else's state, while fetching a page is ordinary work"
+
+[[policies]]
+name = "pack-safe-defaults-cloud-ask"
+description = "Command line tools changing clouds, repositories, deployments and databases"
+
+[policies.match]
+actions = [ "aws.*", "gcloud.*", "az.*", "gh.*", "kubectl.*", "terraform.*", "vercel.*", "fly.*", "heroku.*", "netlify.*", "psql.*", "mysql.*", "docker.push", "npm.publish" ]
+classes = [ "write", "destructive", "communication" ]
+
+[policies.decision]
+effect = "ask"
+reason = "a deploy, a merge or a delete lands on somebody else's system"

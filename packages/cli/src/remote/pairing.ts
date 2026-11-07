@@ -1,5 +1,6 @@
 import {
   DEVICE_KIND,
+  type Account,
   deviceFingerprint,
   deviceProofMessage,
   isP256Point,
@@ -8,23 +9,74 @@ import {
 import { FRAME, frame, SecureChannel } from './framing';
 import { NOISE_PATTERN, type Noise, type NoiseHandshake } from './noise';
 import type { NoiseKeypair } from './remote-files';
+import type { OpenedMailbox } from '../sync/relay';
 
 /**
  * The runtime's side of pairing: an XXpsk0 handshake with the QR's secret, the device's name and
  * keys inside it, and a proof that it holds its signing key. Nothing is trusted until the person says yes.
  */
 
-/** What the QR carries: where to meet, the key to expect, and a secret good for one handshake. */
+/** Where a phone on the same network meets this machine, beside or instead of the relay. */
+export interface QrLan {
+  /** This machine's private addresses, any of which reaches the listener. */
+  hosts: string[];
+  port: number;
+  /** The random Bonjour name, so a phone knows which `_memnox._tcp` announcement is this machine. */
+  instance: string;
+}
+
+/**
+ * What the QR carries: where to meet, the key to expect, and a secret good for one handshake.
+ * Version 1 names the relay and may name the local network too; version 2 names only the local
+ * network, so a phone that knows only the relay says it cannot pair rather than failing on it.
+ */
 export interface QrPayload {
-  v: 1;
+  v: typeof QR_VERSION.RELAY | typeof QR_VERSION.LAN_ONLY;
   machineId: string;
   machine: string;
-  relayUrl: string;
+  relayUrl?: string;
   mailbox: string;
-  pairingToken: string;
+  pairingToken?: string;
   runtimeNoiseStatic: string;
   secret: string;
   expiresAt: string;
+  lan?: QrLan;
+}
+
+export const QR_VERSION = { RELAY: 1, LAN_ONLY: 2 } as const;
+
+/** The local network as a QR names it, with the id that names the machine where no account does. */
+export interface LanInvite extends QrLan {
+  machineId: string;
+}
+
+/** Where a phone meets this machine: the relay, the local network, or both. */
+export interface Meeting {
+  lan: LanInvite | null;
+  relay: { account: Account; opened: OpenedMailbox } | null;
+}
+
+/** The QR's version, machine and meeting fields: the relay's where it carries the pairing, the local network's where it is on. */
+export function qrPlace(
+  place: Meeting,
+  relayUrl: string,
+): Pick<QrPayload, 'v' | 'machineId' | 'relayUrl' | 'pairingToken' | 'lan'> {
+  const { lan, relay } = place;
+  const near =
+    lan === null
+      ? {}
+      : { lan: { hosts: lan.hosts, port: lan.port, instance: lan.instance } };
+  if (relay === null)
+    return { v: QR_VERSION.LAN_ONLY, machineId: lan?.machineId ?? '', ...near };
+  const { account, opened } = relay;
+  const { pairingToken } = opened;
+  return {
+    v: QR_VERSION.RELAY,
+    machineId: account.machineId,
+    relayUrl,
+    pairingToken,
+    ...near,
+  };
 }
 
 /** The phone once it finished the handshake and proved its key, with the digits both screens show. */

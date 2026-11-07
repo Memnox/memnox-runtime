@@ -22,7 +22,8 @@ describe('paths leave the machine hashed when the person chose so', () => {
     expect(keys[0]?.length).toBe(32);
     expect(keys.every((key) => key.equals(keys[0] ?? Buffer.alloc(0)))).toBe(true);
     const mode = (await stat(join(home, '.memnox', 'upload-key'))).mode & 0o777;
-    expect(mode).toBe(0o600);
+    // Windows has no POSIX mode bits, so 0o600 reads back as 0o666.
+    if (process.platform !== 'win32') expect(mode).toBe(0o600);
   });
 
   it('hashes a file path and a command so the same one still matches and none can be read', async () => {

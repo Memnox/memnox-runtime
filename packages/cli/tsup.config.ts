@@ -2,6 +2,7 @@ import { cpSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineConfig } from 'tsup';
 import { KNOWLEDGE_DIR, KNOWLEDGE_SOURCES } from './src/operator/knowledge-sources';
+import { PACKS_DIR } from './src/studio/rule-pack-dir';
 
 export default defineConfig({
   // Every binary the plan installs ships from this package: npm exposes the bins of
@@ -9,6 +10,7 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/bin/mcp-proxy.ts',
+    'src/bin/mcp-remote.ts',
     'src/bin/shell.ts',
     'src/bin/intercept.ts',
     'src/bin/git-credential.ts',
@@ -26,6 +28,8 @@ export default defineConfig({
     // The project's own documents ship too, so the voice answers about Memnox from what it says.
     for (const [source, name] of Object.entries(KNOWLEDGE_SOURCES))
       cpSync(join('../..', source), join('dist', KNOWLEDGE_DIR, name));
+    // The rule packs onboarding offers, read beside the bundle as they are in the repository.
+    cpSync('../../assets/packs', join('dist', PACKS_DIR), { recursive: true });
     // The plugins written into agents that hook in-process, read beside the bundle at install.
     cpSync('src/protect/agent-plugins', 'dist/agent-plugins', { recursive: true });
     // The native wrapper ships where it was built; without one the shims keep the Node interceptor.

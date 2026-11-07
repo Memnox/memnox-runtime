@@ -3,6 +3,26 @@ import type { ConnectionsRequestFields, ConnectionsResponseFields } from './conn
 import type { FilesRequestFields, FilesResponseFields } from './files';
 import type { HomeResponseFields } from './home';
 import type { InterceptRequestFields, InterceptResponseFields } from './intercept';
+import type { McpHubRequestFields, McpHubResponseFields } from './mcp-hub';
+import type { PolicyRequestFields, PolicyResponseFields } from './policies';
+import type {
+  ActivityEventFields,
+  ActivityRequestFields,
+  ActivityResponseFields,
+} from './activity';
+import type { AgentsRequestFields, AgentsResponseFields } from './agents-view';
+import type { SkillsRequestFields, SkillsResponseFields } from './skills-hub';
+import type { HeldActionEventFields, HeldActionRequestFields } from './held-action';
+import type { ProjectsRequestFields, ProjectsResponseFields } from './projects';
+import type { MemoryRequestFields, MemoryResponseFields } from './memory';
+import type { BackupRequestFields, BackupResponseFields } from './backup';
+import type { LanRequestFields, LanResponseFields } from './lan';
+import type {
+  PersonalSyncRequestFields,
+  PersonalSyncResponseFields,
+} from './personal-sync';
+import type { ProfilesRequestFields, ProfilesResponseFields } from './profiles';
+import type { IndexRequestFields, IndexResponseFields } from './community-index';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -28,6 +48,11 @@ interface TeamEventFields {
   teamAnswer?: TeamAnswerBrief;
 }
 
+interface ProposalEventFields {
+  /** On a PROPOSAL, what kind of change it is, a PROPOSAL_KIND value, so a surface words each kind its own way. */
+  proposalKind?: string;
+}
+
 interface WorkRequestFields {
   /** On CONFIRM of a draft: the words the person rewrote on its card, which the signature then covers. */
   edited?: string;
@@ -47,6 +72,11 @@ interface QuestionEventFields {
   answers?: Record<string, string>;
 }
 
+interface SubscribeRequestFields {
+  /** On SUBSCRIBE: send ACTIVITY too; asked for, since an app built before it would say every row aloud. */
+  subscribeActivity?: boolean;
+}
+
 interface AccountRequestFields {
   /** On PERSON_SIGN_IN: the Mac app's own waiting device code, so one approval signs both in. */
   companionOf?: string;
@@ -57,6 +87,8 @@ interface WorkEventFields {
   work?: WorkDraft;
   /** On SIGN_IN, the tools the person asked for and has not signed in to, each with its page. */
   signIn?: ToolSignIn[];
+  /** On a PROPOSAL of `work`, raised by a working agent through Memnox rather than by the voice, so its card waits for Send unasked. */
+  agentAsked?: true;
   /** On a PROPOSAL that an account is the person's own, answered from the signed in pill. */
   claim?: { toolkit: string; label: string };
   /** On a SIGNED_IN or SIGN_IN_STALLED notice, which tool, as whom, and what to carry on with. */
@@ -71,10 +103,24 @@ export interface ExtensionRequestFields
     TeamRequestFields,
     WorkRequestFields,
     AccountRequestFields,
+    SubscribeRequestFields,
     QuestionRequestFields,
     ConnectionsRequestFields,
     InterceptRequestFields,
-    SpokenRuleRequestFields {}
+    SpokenRuleRequestFields,
+    McpHubRequestFields,
+    PolicyRequestFields,
+    ActivityRequestFields,
+    AgentsRequestFields,
+    SkillsRequestFields,
+    HeldActionRequestFields,
+    ProjectsRequestFields,
+    BackupRequestFields,
+    MemoryRequestFields,
+    LanRequestFields,
+    PersonalSyncRequestFields,
+    ProfilesRequestFields,
+    IndexRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -84,7 +130,26 @@ export interface ExtensionResponseFields
     HomeResponseFields,
     ConnectionsResponseFields,
     InterceptResponseFields,
-    SpokenRuleResponseFields {}
+    SpokenRuleResponseFields,
+    McpHubResponseFields,
+    PolicyResponseFields,
+    ActivityResponseFields,
+    AgentsResponseFields,
+    SkillsResponseFields,
+    ProjectsResponseFields,
+    BackupResponseFields,
+    MemoryResponseFields,
+    LanResponseFields,
+    PersonalSyncResponseFields,
+    ProfilesResponseFields,
+    IndexResponseFields {}
 
 export interface ExtensionEventFields
-  extends RemoteEventFields, TeamEventFields, WorkEventFields, QuestionEventFields {}
+  extends
+    RemoteEventFields,
+    TeamEventFields,
+    WorkEventFields,
+    QuestionEventFields,
+    HeldActionEventFields,
+    ProposalEventFields,
+    ActivityEventFields {}

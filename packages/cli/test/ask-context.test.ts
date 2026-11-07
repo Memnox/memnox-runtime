@@ -4,6 +4,7 @@ import {
   heldCallsContext,
   lookingAtContext,
   momentContext,
+  phoneContext,
 } from '../src/daemon/ask-context';
 
 describe('what the brain is told before what the person said', () => {
@@ -201,5 +202,18 @@ describe('calls held for the person, put ahead of what they said', () => {
     expect(context).toContain('propose_answer');
     expect(context).toContain('never end the conversation while one is waiting');
     expect(heldCallsContext([])).toBe('');
+  });
+});
+
+describe('a question asked through a phone', () => {
+  it('says whether the phone may act on the Mac and whether it drives it now', () => {
+    expect(phoneContext(null)).toBe('');
+    const barred = phoneContext({ mayActOnMac: false, driving: false });
+    expect(barred).toContain('may not act on');
+    expect(barred).toContain('never send them to pair it');
+    expect(phoneContext({ mayActOnMac: true, driving: true })).toContain('driving');
+    expect(phoneContext({ mayActOnMac: true, driving: false })).toContain(
+      'is not driving it now',
+    );
   });
 });

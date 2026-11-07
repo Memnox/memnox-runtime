@@ -3,6 +3,8 @@ import { homedir } from 'node:os';
 import {
   FileToolPins,
   loadOrCreateConfig,
+  nodeSecretStore,
+  resolveSecretRefs,
   CloudActions,
   CloudNotes,
   ENV_AGENT_NAME,
@@ -14,7 +16,10 @@ import {
   PROBATION_KIND,
   ProbationRegister,
   probationOf,
+  projectIdAt,
   protectionStopped,
+  remoteAddressProblem,
+  resolveHeaderRefs,
   SESSION_VAR,
   trustCommandFor,
   UNNAMED_AGENT,
@@ -24,7 +29,7 @@ import {
 } from '@memnox/core';
 
 import { parseFirewallArgs, type FirewallArgs } from './firewall-args';
-import { McpFirewall, type FirewallOptions } from './firewall';
+import { McpFirewall, type FirewallOptions, type RemoteServer } from './firewall';
 import { ENV_TOOLS_ALLOW, ENV_TOOLS_DENY } from './firewall.constants';
 import { LiveGate } from './live-gate';
 import { localGateEnvironment } from './local-gate-loader';
@@ -36,9 +41,11 @@ import { sessionLimitsFor } from './session-limits';
  */
 
 const USAGE = `Usage: memnox-mcp-proxy --name <server-name> -- <server command...>
+       memnox-mcp-proxy --name <server-name> --url <https url> [--header "Name: value"]...
 
-Wraps a stdio MCP server. Every tools/call is ruled on in this process before it
-reaches the server, so a call's arguments never leave the machine.
+Wraps a stdio MCP server, or reaches a streamable HTTP one. Every tools/call is ruled
+on in this process before it reaches the server, so a refused call never leaves the
+machine. A header value may name a kept secret as memnox-secret:<name>.
 
 Normally you do not run this by hand: "memnox mcp wrap" points your agent's config
 at it, and "memnox mcp unwrap" puts the config back.
@@ -68,7 +75,56 @@ async function main(): Promise<void> {
     process.exit(EXIT.FAILED);
   }
 
-  new McpFirewall(await firewallOptionsFor(args, homedir())).start();
+  await resolveSecrets(homedir());
+  const remote = await remoteFor(args, homedir());
+  const options = await firewallOptionsFor(args, homedir());
+  new McpFirewall(remote === undefined ? options : { ...options, remote }).start();
+}
+
+/**
+ * The remote server's address and headers, each secret a header names read from the OS store here
+ * and nowhere else. Only header names are ever said, since a value may be a credential.
+ */
+async function remoteFor(
+  args: FirewallArgs,
+  home: string,
+): Promise<RemoteServer | undefined> {
+  const url = args.url;
+  if (url === undefined) return undefined;
+  const problem = remoteAddressProblem(url);
+  if (problem !== undefined) {
+    warn(problem);
+    process.exit(EXIT.FAILED);
+  }
+  const store = nodeSecretStore(home);
+  const resolved = await resolveHeaderRefs(args.headers ?? {}, (name) => store.get(name));
+  if (resolved.missing.length > 0) {
+    for (const each of resolved.missing)
+      warn(
+        `the ${each.header} header needs the secret ${each.secret}, which this machine does not hold`,
+      );
+    process.exit(EXIT.FAILED);
+  }
+  return { url, headers: resolved.headers };
+}
+
+/**
+ * Swaps each secret reference the hub wrote for its value from the OS store, here and in no
+ * other process, so the server gets the credential and the agent's config never held it.
+ */
+async function resolveSecrets(home: string): Promise<void> {
+  const store = nodeSecretStore(home);
+  const resolved = await resolveSecretRefs(process.env, (name) => store.get(name));
+  if (resolved.missing.length > 0) {
+    // Starting with the reference in place of the value would fail later and less clearly.
+    for (const each of resolved.missing)
+      warn(
+        `${each.variable} needs the secret ${each.secret}, which this machine does not hold`,
+      );
+    process.exit(EXIT.FAILED);
+  }
+  for (const [variable, value] of Object.entries(resolved.env))
+    process.env[variable] = value;
 }
 
 /** Everything the proxy is wired to on this machine, read once where it starts. */
@@ -82,6 +138,8 @@ async function firewallOptionsFor(
   const ledger = openLedger(home);
   const session = process.env[SESSION_VAR];
   const mode = (await loadOrCreateConfig(home).catch(() => null))?.mode;
+  // An agent starts its servers in the folder it works in, which names the project.
+  const projectId = await projectIdAt(home, process.cwd());
 
   return {
     command: args.command,
@@ -90,6 +148,8 @@ async function firewallOptionsFor(
     env: process.env,
     ...(ledger === null ? {} : { ledger }),
     ...(session === undefined ? {} : { sessionId: session }),
+    ...(projectId === undefined ? {} : { projectId }),
+    workingDirectory: process.cwd(),
     ...(agent === undefined ? {} : { agent }),
     limits: sessionLimitsFor({ home }),
     stopped: () => protectionStopped(home),

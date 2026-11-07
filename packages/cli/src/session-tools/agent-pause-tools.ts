@@ -18,6 +18,7 @@ import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import type { ToolDefinition } from './session-tools';
 import type { ScopeKind } from './session-scope';
 import { stopSession } from './stop-tool';
+import { KEY_THEIRS, MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * "Pause Codex": one agent stopped on this machine and every other left working. Pausing only holds
@@ -32,8 +33,7 @@ const AGENT_NAME_ARG = {
 
 const PAUSE_AGENT_TOOL: ToolDefinition = {
   name: 'pause_agent',
-  description:
-    'Pause one agent on this machine, every session of it, when the person says to pause or hold an agent by name, or to keep it stopped, like "pause Codex", "hold Cursor" or "stop Claude Code until I say". It takes effect at once: the agent\'s next action is refused with word that a person paused it, any turn it has running is interrupted, and every other agent keeps working. The workspace is told too when this Mac is signed in. Pass the agent as they said it. When the answer is ambiguous, ask which of the agents it names they meant, in one short question. One session alone is pause_session, and stopping only what it is doing now, ready for the next instruction, is show with display stop.',
+  description: `Pause one agent on this machine, every session of it, when the person says to pause or hold an agent by name, or to keep it stopped, like "pause Codex", "hold Cursor" or "stop Claude Code until I say". It takes effect at once: the agent's next action is refused with word that a person paused it, any turn it has running is interrupted, and every other agent keeps working. The workspace is told too when this ${MACHINE} is signed in. Pass the agent as they said it. When the answer is ambiguous, ask which of the agents it names they meant, in one short question. One session alone is pause_session, and stopping only what it is doing now, ready for the next instruction, is show with display stop.`,
   inputSchema: {
     type: 'object',
     properties: { agent: AGENT_NAME_ARG, said: SAID_ARG },
@@ -44,7 +44,7 @@ const PAUSE_AGENT_TOOL: ToolDefinition = {
 
 const PROPOSE_AGENT_RESUME_TOOL: ToolDefinition = proposeTool(
   'propose_agent_resume',
-  'Let one agent the person paused carry on, like "let Cursor carry on" or "unpause Codex". Nothing restarts until they confirm with Touch ID on the Mac, so say that. When the answer is ambiguous, ask which agent they meant.',
+  `Let one agent the person paused carry on, like "let Cursor carry on" or "unpause Codex". Nothing restarts until they confirm with ${KEY_THEIRS} on ${THE_DESKTOP}, so say that. When the answer is ambiguous, ask which agent they meant.`,
   { agent: AGENT_NAME_ARG, said: SAID_ARG },
 );
 
@@ -96,7 +96,7 @@ async function proposeAgentResumeTool(
   return {
     proposed: proposal.id,
     agent: named.kind,
-    said: 'Waiting for Touch ID. It stays paused until the person confirms on the Mac.',
+    said: `Waiting for ${KEY_THEIRS}. It stays paused until the person confirms on ${THE_DESKTOP}.`,
   };
 }
 
@@ -159,8 +159,8 @@ function midTurn(turn: SessionTurn, now: number): boolean {
 
 function pausedSentence(paused: Paused, interrupted: number): string {
   const first = paused.fresh
-    ? `Paused ${paused.kind} on this Mac. Its next action is refused and every other agent keeps working.`
-    : `${paused.kind} was already paused on this Mac.`;
+    ? `Paused ${paused.kind} on this ${MACHINE}. Its next action is refused and every other agent keeps working.`
+    : `${paused.kind} was already paused on this ${MACHINE}.`;
   const stopped =
     interrupted === 0
       ? ''
@@ -170,8 +170,7 @@ function pausedSentence(paused: Paused, interrupted: number): string {
 
 const WORKSPACE_SENTENCE: Record<string, string> = {
   [WORKSPACE_TOLD.TOLD]: 'The workspace shows it paused too.',
-  [WORKSPACE_TOLD.NO_WORKSPACE]:
-    'Only this Mac knows, since it is not signed in to a workspace.',
+  [WORKSPACE_TOLD.NO_WORKSPACE]: `Only this ${MACHINE} knows, since it is not signed in to a workspace.`,
   [WORKSPACE_TOLD.REFUSED]:
     'The workspace did not take it, so teammates will not see it, though it is paused here all the same.',
   [WORKSPACE_TOLD.UNREACHABLE]:

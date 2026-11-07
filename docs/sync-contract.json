@@ -2,7 +2,7 @@
  "version": 1,
  "note": "The wire between memnox-runtime and memnox-cloud, by example: the bundle a machine is sent, the heartbeat it reports and what comes back, the batch it posts for what it did, and the census it posts for what it can do, which carries what somebody on the machine decided about each agent: the name they chose and whether they said no to it. This file is the original; memnox-cloud/docs/sync-contract.json is a verbatim copy. Change one and copy it across whole, so a diff between the two stays empty. A test in each repository asserts its own side against this, because the two were written against each other's documentation rather than against each other, and every field name that drifted did so silently. `heartbeat.mode` is what the machine is running and `heartbeatReply.mode` is what the workspace has set: they differ here on purpose, because that is the state a graduation passes through and the one both halves have to render honestly. A rule narrowed by targets, agents or directories is sent under `memnox.requires-scoped-rules` with its real action in `scopedMatch`, and one carrying any other condition under `memnox.requires-conditioned-rules` with every action in `actions` and the rest of its match in `conditions`, so a runtime too old to honour them matches less than the rule, never more. A rule whose decision says more than its effect carries it whole in `decision`, which a runtime reads its effect from; the top level `effect` is what a runtime that ignores `decision` may apply, so an ask held to named approvers is a deny there, and an observed rule is sent under `memnox.requires-rule-decisions` so such a runtime skips it rather than enforcing it.",
  "bundle": {
-  "hash": "9875db57c4f398bc4b4c99001d7e4f6ecde922c9aceaaa51c8e30751ae319033",
+  "hash": "a4a536cea6614d64eaf2d721c675349a7daf858d78f8855b964386a786b60190",
   "policies": [
    {
     "hash": "p1",
@@ -90,6 +90,24 @@
       "dba"
      ]
     }
+   },
+   {
+    "id": "never-delete",
+    "policyHash": "p1",
+    "line": 8,
+    "domain": "*",
+    "effect": "deny",
+    "specificity": 0,
+    "match": "memnox.requires-conditioned-rules",
+    "actions": [
+     "*"
+    ],
+    "conditions": {
+     "classes": [
+      "destructive"
+     ]
+    },
+    "reason": "Never delete anything."
    }
   ],
   "conditions": [
@@ -116,8 +134,9 @@
  },
  "heartbeat": {
   "runtimeVersion": "0.1.0",
-  "bundleHashApplied": "9875db57c4f398bc4b4c99001d7e4f6ecde922c9aceaaa51c8e30751ae319033",
-  "mode": "observe"
+  "bundleHashApplied": "a4a536cea6614d64eaf2d721c675349a7daf858d78f8855b964386a786b60190",
+  "mode": "observe",
+  "rulesNotEnforced": []
  },
  "heartbeatReply": {
   "id": "mch_01",
@@ -173,7 +192,7 @@
      "argsDigest": "sha256:9f2b",
      "ruleId": "no-force-push-to-main",
      "policyHash": "p1",
-     "bundleHash": "9875db57c4f398bc4b4c99001d7e4f6ecde922c9aceaaa51c8e30751ae319033",
+     "bundleHash": "a4a536cea6614d64eaf2d721c675349a7daf858d78f8855b964386a786b60190",
      "conditionIds": [
       "cnd_deploy_freeze"
      ],
@@ -200,7 +219,7 @@
      "resourceRef": "acme/web#412",
      "ruleId": "ask-before-merge",
      "policyHash": "p1",
-     "bundleHash": "9875db57c4f398bc4b4c99001d7e4f6ecde922c9aceaaa51c8e30751ae319033",
+     "bundleHash": "a4a536cea6614d64eaf2d721c675349a7daf858d78f8855b964386a786b60190",
      "exitCode": 0,
      "errored": false,
      "startedAt": 1757000454800

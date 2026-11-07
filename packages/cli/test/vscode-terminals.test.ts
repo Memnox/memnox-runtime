@@ -110,12 +110,9 @@ describe('the extension that shows a session its own VS Code terminal', () => {
     const calls: string[][] = [];
     const seams = await seamsFor(calls);
     const extensions = join(home, '.vscode', 'extensions');
-    const folder = `${TERMINALS_EXTENSION}-0.13.14`;
+    const build = builtVersion(await readFile(seams.script() ?? '', 'utf8'));
+    const folder = `${TERMINALS_EXTENSION}-${build}`;
     await mkdir(join(extensions, folder, 'dist'), { recursive: true });
-    await writeFile(
-      join(extensions, folder, 'dist', 'extension.js'),
-      await readFile(seams.script() ?? '', 'utf8'),
-    );
     await writeFile(
       join(extensions, '.obsolete'),
       JSON.stringify({ [folder]: true, 'someone.else-1.0.0': true }),
@@ -126,6 +123,22 @@ describe('the extension that shows a session its own VS Code terminal', () => {
     expect(existsSync(join(extensions, folder))).toBe(false);
     expect(JSON.parse(await readFile(join(extensions, '.obsolete'), 'utf8'))).toEqual({
       'someone.else-1.0.0': true,
+    });
+  });
+
+  it('leaves an older copy on disk, since an editor open since before still loads it as its extensions restart', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
+    const calls: string[][] = [];
+    const seams = await seamsFor(calls);
+    const extensions = join(home, '.vscode', 'extensions');
+    const older = `${TERMINALS_EXTENSION}-0.13.14-0000beef`;
+    await mkdir(join(extensions, older, 'dist'), { recursive: true });
+    await writeFile(join(extensions, '.obsolete'), JSON.stringify({ [older]: true }));
+    await refreshVscodeTerminals(home, () => undefined, seams);
+    expect(installs(calls)).toHaveLength(1);
+    expect(existsSync(join(extensions, older))).toBe(true);
+    expect(JSON.parse(await readFile(join(extensions, '.obsolete'), 'utf8'))).toEqual({
+      [older]: true,
     });
   });
 

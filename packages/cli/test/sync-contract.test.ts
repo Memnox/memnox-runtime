@@ -18,7 +18,7 @@ import {
   type EnvironmentSnapshot,
   type MemnoxEvent,
 } from '@memnox/core';
-const BUNDLE_HASH = '9875db57c4f398bc4b4c99001d7e4f6ecde922c9aceaaa51c8e30751ae319033';
+const BUNDLE_HASH = 'a4a536cea6614d64eaf2d721c675349a7daf858d78f8855b964386a786b60190';
 
 import { applyBundle, orgPolicyPath, pullBundle, type Bundle } from '../src/sync/bundle';
 import type { Account } from '@memnox/core';
@@ -326,6 +326,7 @@ describe('the census this machine sends', () => {
  * has had was in a hop that each side tested alone and neither tested together.
  */
 describe('a machine pulling from a control plane', () => {
+  let capabilities = '';
   let home: string;
   let server: Server;
   let baseUrl: string;
@@ -338,6 +339,7 @@ describe('a machine pulling from a control plane', () => {
     live.conditions[0]!.untilAt = Date.now() + 60 * 60 * 1000;
 
     server = createServer((request, response) => {
+      capabilities = String(request.headers['x-memnox-capabilities'] ?? '');
       response.setHeader('content-type', 'application/json');
       response.setHeader('etag', `"${live.hash}"`);
       if (request.headers['if-none-match'] === `"${live.hash}"`) {
@@ -366,6 +368,12 @@ describe('a machine pulling from a control plane', () => {
     enrolledAt: new Date().toISOString(),
   });
 
+  it('says it can end an exception, so the plane sends it the ones that end', async () => {
+    await pullBundle(home, account());
+
+    expect(capabilities.split(',')).toContain('exception-expiry');
+  });
+
   it('ends up enforcing what the workspace declared', async () => {
     const pulled = await pullBundle(home, account());
     expect(pulled.outcome).toBe('applied');
@@ -375,11 +383,10 @@ describe('a machine pulling from a control plane', () => {
     expect(facts).toContain('freeze:deploys');
   });
 
-  /* An open-ended condition is held for a day past the last sync, so a machine that
-     keeps syncing keeps holding it. The 304 is the ordinary answer, so a horizon
-     that only moved on a changed bundle would let a standing incident lapse on
-     every machine still faithfully checking in. */
-  it('moves the horizon of an open-ended condition on a 304', async () => {
+  /* An open-ended condition is held until the plane lifts it, so a machine whose last
+     sync was days ago, and the 304 it gets once it checks in again, still enforce a
+     standing incident rather than letting it lapse while the network was away. */
+  it('holds an open-ended condition however long ago the last sync was', async () => {
     const first = await pullBundle(home, account());
     expect(first.outcome).toBe('applied');
 
@@ -391,7 +398,7 @@ describe('a machine pulling from a control plane', () => {
     );
     expect(
       stateLabelsOf(await overlaysInForce(home), new Date().toISOString()),
-    ).not.toContain('incident:*');
+    ).toContain('incident:*');
 
     await pullBundle(home, account(), first.hash);
 

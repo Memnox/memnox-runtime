@@ -15,6 +15,7 @@ import {
 import { readConfigs } from '../mcp/server-configs';
 import type { PersonalTool } from '../sync/personal-work';
 import type { McpPool } from './mcp-client';
+import { MACHINE } from '../this-machine';
 
 /**
  * What this Mac already reaches with no Memnox service in between: the MCP servers the person's agents
@@ -147,7 +148,7 @@ function cliTool(cli: Pick<LocalCli, 'name' | 'headline'>): PersonalTool {
   return {
     slug: `${LOCAL_SLUG.CLI}${cli.name}`,
     name: cli.name,
-    description: `${cli.headline} Runs ${cli.name} on this Mac as the person is signed in to it. Pass arguments as {"args": [...]}, the words after "${cli.name}". A command that only reads runs with run_tool; one that changes anything goes to propose_tool.`,
+    description: `${cli.headline} Runs ${cli.name} on this ${MACHINE} as the person is signed in to it. Pass arguments as {"args": [...]}, the words after "${cli.name}". A command that only reads runs with run_tool; one that changes anything goes to propose_tool.`,
     toolkit: cli.name,
     inputParameters: { args: { type: 'array', items: { type: 'string' } } },
     workClass: 'read',

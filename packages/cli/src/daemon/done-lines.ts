@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import { DELIVERY, DISPLAY, type DaemonEvent } from '@memnox/core';
+import { KEY, MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * The one line a phone speaks once the Mac did something it asked for. Built from what was
@@ -7,11 +8,23 @@ import { DELIVERY, DISPLAY, type DaemonEvent } from '@memnox/core';
  */
 
 /** Said to the phone when nobody has the Mac app open to do it, rather than leaving it to wait. */
-export const OPEN_THE_MAC = 'Open Memnox on your Mac to do that';
+export const OPEN_THE_MAC = `Open Memnox on your ${MACHINE} to do that`;
 
 /** Said when the phone was never allowed to act on the Mac. */
-export const NOT_ALLOWED_ON_MAC =
-  'This phone may not act on your Mac yet. Allow it from the Mac with Touch ID first';
+export const NOT_ALLOWED_ON_MAC = `This phone may not act on your ${MACHINE} yet. Allow it from ${THE_DESKTOP} with ${KEY}, then drive it from here`;
+
+/** The words that mark a refusal as a phone not yet allowed, which allowing it ends, unlike a fault. */
+const MAY_NOT_ACT = 'may not act on';
+
+/** Why a paired phone's request was refused, said as the permission to give, since pairing again changes nothing. */
+export function phoneMayNotAct(phone: string): string {
+  return `${phone} ${MAY_NOT_ACT} ${THE_DESKTOP} yet: it is paired, but acting here is a permission of its own. Allow it from ${THE_DESKTOP} with ${KEY}, then drive ${THE_DESKTOP} from the phone`;
+}
+
+/** Whether a refusal was a phone not yet allowed to act, which a retry after allowing it gets past. */
+export function isPhoneMayNotAct(reason: string | undefined): boolean {
+  return reason?.includes(MAY_NOT_ACT) === true;
+}
 
 /** How the Mac said a look ended, beside the deliveries a typed instruction has. */
 export const SEEN = 'seen';
@@ -21,34 +34,34 @@ const WENT_IN: readonly string[] = [DELIVERY.TYPED, DELIVERY.VERIFIED, SEEN];
 /** The line for a show the Mac finished, in the words a phone can speak as they are. */
 export function doneText(event: DaemonEvent, agentName: string, outcome: string): string {
   if (outcome === DELIVERY.WAITING) return `It goes to ${agentName} at its next prompt`;
-  if (!WENT_IN.includes(outcome)) return 'That did not work on your Mac';
+  if (!WENT_IN.includes(outcome)) return `That did not work on your ${MACHINE}`;
   if (event.display === DISPLAY.TYPE || event.display === DISPLAY.PREFILL) {
     return `Typed it into ${agentName}`;
   }
   if (event.display === DISPLAY.OPEN || event.display === DISPLAY.FOCUS) {
     return `Brought ${agentName} forward`;
   }
-  if (event.display === DISPLAY.LAUNCH) return `Started ${agentName} on your Mac`;
+  if (event.display === DISPLAY.LAUNCH) return `Started ${agentName} on your ${MACHINE}`;
   if (event.display === DISPLAY.CLOSE) return `Closed ${agentName}`;
   if (event.display === DISPLAY.INTERRUPT) return `Stopped ${agentName}`;
-  if (event.display === DISPLAY.FOLDER) return 'Opened the folder on your Mac';
+  if (event.display === DISPLAY.FOLDER) return `Opened the folder on your ${MACHINE}`;
   if (event.display === DISPLAY.LOOK) return 'Looked at your screen';
   if (event.display === DISPLAY.DISMISS) return 'Cleared your screen';
-  return `Opened ${event.title ?? agentName} on your Mac`;
+  return `Opened ${event.title ?? agentName} on your ${MACHINE}`;
 }
 
 /** What the phone is asked to sign for, in words: the action and where it lands. */
 export function macRationale(event: DaemonEvent, agentName: string): string {
   if (event.display === DISPLAY.TYPE || event.display === DISPLAY.PREFILL) {
-    return `Type into ${agentName} on your Mac: ${event.summary}`;
+    return `Type into ${agentName} on your ${MACHINE}: ${event.summary}`;
   }
   if (event.display === DISPLAY.LAUNCH) {
     const cwd = event.host?.cwd;
     const where = cwd === undefined ? '' : ` in ${basename(cwd)}`;
-    return `Start ${agentName}${where} on your Mac`;
+    return `Start ${agentName}${where} on your ${MACHINE}`;
   }
-  if (event.display === DISPLAY.CLOSE) return `Close ${agentName} on your Mac`;
-  if (event.display === DISPLAY.INTERRUPT) return `Stop ${agentName} on your Mac`;
-  if (event.display === DISPLAY.FOLDER) return `Open ${event.summary} on your Mac`;
-  return `On your Mac: ${event.title ?? event.summary}`;
+  if (event.display === DISPLAY.CLOSE) return `Close ${agentName} on your ${MACHINE}`;
+  if (event.display === DISPLAY.INTERRUPT) return `Stop ${agentName} on your ${MACHINE}`;
+  if (event.display === DISPLAY.FOLDER) return `Open ${event.summary} on your ${MACHINE}`;
+  return `On your ${MACHINE}: ${event.title ?? event.summary}`;
 }

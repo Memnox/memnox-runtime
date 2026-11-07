@@ -91,6 +91,8 @@ export interface InterceptDeps {
   overlays?: readonly Overlay[];
   sessionId?: string;
   agent?: string;
+  /** The project of the folder the command runs in, so a rule scoped to it decides it. */
+  projectId?: string;
   now?: () => Date;
 }
 
@@ -135,6 +137,7 @@ export async function ruleOnCommand(
     ...(verdict.dataClassification === undefined
       ? {}
       : { dataClassification: verdict.dataClassification }),
+    ...(deps.projectId === undefined ? {} : { projectId: deps.projectId }),
   };
   const decision = gate.evaluate(request);
   const ruled = { ...base, ...ruledFor(decision) };
@@ -285,6 +288,8 @@ async function askPerson(
     reason: input.reason,
     evidence: input.evidence,
     command: input.command.join(' '),
+    // Where the command runs, so a yes signed for it covers this folder only.
+    cwd: process.cwd(),
     ...(verdict.target === undefined ? {} : { target: verdict.target }),
   };
 

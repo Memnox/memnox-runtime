@@ -29,7 +29,8 @@ describe('the repository boundary', () => {
       BOUNDARY,
     );
     expect(asked?.signal).toBe(CONTAINMENT_SIGNAL.BOUNDARY);
-    expect(asked?.reason).toContain('/etc/hosts is outside /work/shop');
+    // Joined without a root, since Windows spells the path with its drive and backslashes.
+    expect(asked?.reason).toContain(`${join('etc', 'hosts')} is outside`);
   });
 
   it('asks before a delete outside it, relative paths resolved from where the agent is', () => {
@@ -37,7 +38,7 @@ describe('the repository boundary', () => {
       { action: 'filesystem.delete', target: '../other/file', workingDirectory: ROOT },
       BOUNDARY,
     );
-    expect(asked?.reason).toContain('/work/other/file');
+    expect(asked?.reason).toContain(join('work', 'other', 'file'));
   });
 
   it('reads a home path as the path it is', () => {
@@ -45,7 +46,7 @@ describe('the repository boundary', () => {
       { action: 'filesystem.write', target: '~/.zshrc' },
       BOUNDARY,
     );
-    expect(asked?.reason).toContain('/home/dev/.zshrc');
+    expect(asked?.reason).toContain(join('home', 'dev', '.zshrc'));
   });
 
   it('lets a write inside the repository, or into temp, through', () => {
@@ -82,53 +83,57 @@ describe('the repository boundary', () => {
   });
 });
 
-describe('the repository boundary through a symlink', () => {
-  const made: string[] = [];
-  afterEach(() => {
-    for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
-  });
+// Creating a symlink on Windows needs admin rights or developer mode, which a runner may lack.
+describe.skipIf(process.platform === 'win32')(
+  'the repository boundary through a symlink',
+  () => {
+    const made: string[] = [];
+    afterEach(() => {
+      for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
+    });
 
-  function fixture(): { repo: string; outside: string; bounded: Containment } {
-    const base = mkdtempSync(join(tmpdir(), 'memnox-link-'));
-    made.push(base);
-    const repo = join(base, 'repo');
-    const outside = join(base, 'outside');
-    mkdirSync(join(repo, 'src', 'real'), { recursive: true });
-    mkdirSync(outside);
-    writeFileSync(join(outside, 'hosts'), '');
-    symlinkSync(outside, join(repo, 'escape'));
-    symlinkSync(join(repo, 'src', 'real'), join(repo, 'alias'));
-    return { repo, outside, bounded: { root: repo, cwd: repo, scratch: [] } };
-  }
+    function fixture(): { repo: string; outside: string; bounded: Containment } {
+      const base = mkdtempSync(join(tmpdir(), 'memnox-link-'));
+      made.push(base);
+      const repo = join(base, 'repo');
+      const outside = join(base, 'outside');
+      mkdirSync(join(repo, 'src', 'real'), { recursive: true });
+      mkdirSync(outside);
+      writeFileSync(join(outside, 'hosts'), '');
+      symlinkSync(outside, join(repo, 'escape'));
+      symlinkSync(join(repo, 'src', 'real'), join(repo, 'alias'));
+      return { repo, outside, bounded: { root: repo, cwd: repo, scratch: [] } };
+    }
 
-  it('asks before a write through a link in the repository that points outside it', () => {
-    const { repo, bounded } = fixture();
-    const asked = containmentAsk(
-      { action: 'filesystem.write', target: join(repo, 'escape', 'hosts') },
-      bounded,
-    );
-    expect(asked?.signal).toBe(CONTAINMENT_SIGNAL.BOUNDARY);
-  });
-
-  it('asks before a new file is created through that link', () => {
-    const { bounded } = fixture();
-    const asked = containmentAsk(
-      { action: 'filesystem.write', target: 'escape/new/deeper.txt' },
-      bounded,
-    );
-    expect(asked?.signal).toBe(CONTAINMENT_SIGNAL.BOUNDARY);
-  });
-
-  it('lets a link that points elsewhere inside the repository stay inside', () => {
-    const { repo, bounded } = fixture();
-    expect(
-      containmentAsk(
-        { action: 'filesystem.write', target: join(repo, 'alias', 'fresh.ts') },
+    it('asks before a write through a link in the repository that points outside it', () => {
+      const { repo, bounded } = fixture();
+      const asked = containmentAsk(
+        { action: 'filesystem.write', target: join(repo, 'escape', 'hosts') },
         bounded,
-      ),
-    ).toBeNull();
-  });
-});
+      );
+      expect(asked?.signal).toBe(CONTAINMENT_SIGNAL.BOUNDARY);
+    });
+
+    it('asks before a new file is created through that link', () => {
+      const { bounded } = fixture();
+      const asked = containmentAsk(
+        { action: 'filesystem.write', target: 'escape/new/deeper.txt' },
+        bounded,
+      );
+      expect(asked?.signal).toBe(CONTAINMENT_SIGNAL.BOUNDARY);
+    });
+
+    it('lets a link that points elsewhere inside the repository stay inside', () => {
+      const { repo, bounded } = fixture();
+      expect(
+        containmentAsk(
+          { action: 'filesystem.write', target: join(repo, 'alias', 'fresh.ts') },
+          bounded,
+        ),
+      ).toBeNull();
+    });
+  },
+);
 
 describe('what an action counts as', () => {
   it('reads the verb tables, so a push reaches out and a commit stays local', () => {

@@ -30,7 +30,8 @@ function typed(path: string, args: string[], extra: NodeJS.ProcessEnv = {}): str
   return result.stdout.trim();
 }
 
-describe('typing an agent by name', () => {
+// The launchers and the fake agents are POSIX sh scripts, which Windows cannot run.
+describe.skipIf(process.platform === 'win32')('typing an agent by name', () => {
   it('starts it under memnox run', async () => {
     const { path } = await machine();
     expect(typed(path, ['fix the bug'])).toBe('memnox run -- claude fix the bug');

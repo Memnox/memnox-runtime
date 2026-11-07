@@ -26,6 +26,7 @@ import {
   startWatch,
   watchFired,
   workObservationsOf,
+  typedAsks,
   type Collision,
   type DaemonEvent,
   type NoticeWatch,
@@ -38,6 +39,7 @@ import {
   type WatchFacts,
   type WatchFired,
 } from '@memnox/core';
+import { briefFor } from './turn-brief';
 import { displayName, readNames } from '../agents/names';
 import { withEvents } from '../event-store';
 import { repositoriesWritten, touchesOf } from '../session-tools/session-writes';
@@ -336,16 +338,11 @@ export class NoticeWatcher {
       store.query({ sessionId: notice.sessionId, limit: LEDGER_SESSION_LIMIT }),
     );
     const touches = touchesOf(rows);
-    const [task, host, names, tests] = await Promise.all([
+    const [task, host, names, ended] = await Promise.all([
       new SessionTasks(this.home).read(notice.sessionId),
       new SessionHosts(this.home).read(notice.sessionId),
       readNames(this.home),
-      notice.kind === NOTICE_KIND.FINISHED
-        ? this.testsIn(
-            notice,
-            touches.map((touch) => touch.at),
-          )
-        : Promise.resolve(null),
+      this.howItEnded(notice, touches),
     ]);
     const wrote = repositoriesWritten(touches)[0];
     // Where it last wrote beats where it was opened, since a task often names another repository.
@@ -365,10 +362,26 @@ export class NoticeWatcher {
       notice: notice.kind,
       agentName,
       sessionId: notice.sessionId,
-      ...(task === null ? {} : { task: task.statement }),
+      ...typedAsks(task),
       ...(place === undefined ? {} : { place: basename(place) }),
-      ...(tests === null ? {} : { tests }),
+      ...ended,
     };
+  }
+
+  /** On a finished turn only: how its tests stood and what the agent said it did, read side by side. */
+  private async howItEnded(
+    notice: SessionNotice,
+    touches: ReturnType<typeof touchesOf>,
+  ): Promise<{ tests?: TurnTests; brief?: string }> {
+    if (notice.kind !== NOTICE_KIND.FINISHED) return {};
+    const [tests, brief] = await Promise.all([
+      this.testsIn(
+        notice,
+        touches.map((touch) => touch.at),
+      ),
+      briefFor(this.home, notice.sessionId),
+    ]);
+    return { ...(tests === null ? {} : { tests }), ...brief };
   }
 
   /** How the finished turn left its tests, from the agent's own transcript and the writes the ledger saw. */

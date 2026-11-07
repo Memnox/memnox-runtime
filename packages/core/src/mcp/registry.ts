@@ -1,0 +1,236 @@
+import type { DiscoveredAgentKind } from '../discovery/discovery.constants';
+import { isKeptSecretName, secretNamesIn } from './secret-ref';
+
+/**
+ * The MCP Hub: servers declared once on this machine and handed to the agents a person
+ * chose. The hub is the source of truth for the entries it wrote and for nothing else,
+ * so a server a person configured by hand is shown as found and never rewritten.
+ */
+
+export const HUB_VERSION = 1;
+
+export const HUB_TRANSPORT = {
+  STDIO: 'stdio',
+  HTTP: 'http',
+} as const;
+
+export type HubTransport = (typeof HUB_TRANSPORT)[keyof typeof HUB_TRANSPORT];
+
+export interface HubServer {
+  name: string;
+  description?: string;
+  transport: HubTransport;
+  /** On stdio: the server's own launch line, which the hub puts behind the proxy. */
+  command?: string;
+  args?: string[];
+  /** On http: where the server answers. */
+  url?: string;
+  /** On http: sent with every request; a credential is written as `memnox-secret:<name>` and resolved by the proxy. */
+  headers?: Record<string, string>;
+  /** Plain values, written into the agent's config as they are. */
+  env: Record<string, string>;
+  /** Env name to secret name: only a reference reaches the config, the value stays in the OS store. */
+  secrets: Record<string, string>;
+}
+
+export interface HubAssignment {
+  server: string;
+  agent: DiscoveredAgentKind;
+  /** The repository it is given in, as an absolute path, written to the agent's project config; absent is every project. */
+  project?: string;
+}
+
+/** What the hub last wrote into one config, so a later hand edit reads as drift rather than ours. */
+export interface HubWritten {
+  path: string;
+  server: string;
+  digest: string;
+  /** The repository whose config this is, so the line is taken back once nothing is given there. */
+  project?: string;
+}
+
+export interface Hub {
+  version: typeof HUB_VERSION;
+  servers: HubServer[];
+  assignments: HubAssignment[];
+  written: HubWritten[];
+}
+
+/** Letters, digits and a few separators, so a name is safe as a config key, a flag value and a rule target. */
+const SERVER_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/** The shape every shell and every agent accepts as a variable name. */
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const HTTP_SCHEMES: readonly string[] = ['http:', 'https:'];
+
+/** A header's name as HTTP spells a token. */
+const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
+
+/** Headers that carry a credential, which only ever reach a config as a reference. */
+const CREDENTIAL_HEADERS: readonly string[] = [
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'x-api-key',
+  'api-key',
+];
+
+/** Plain http is for a server on this machine only, since a header may carry a credential. */
+const LOOPBACK_HOSTS: readonly string[] = ['localhost', '127.0.0.1', '[::1]'];
+
+export function emptyHub(): Hub {
+  return { version: HUB_VERSION, servers: [], assignments: [], written: [] };
+}
+
+/** Every reason this server cannot be written, in the words a form shows; empty when it can. */
+export function hubServerProblems(server: HubServer): string[] {
+  const problems: string[] = [];
+  if (!SERVER_NAME.test(server.name)) {
+    problems.push(
+      'A name is letters, digits, dots, dashes or underscores, up to 64 of them.',
+    );
+  }
+  problems.push(...transportProblems(server));
+  for (const name of [...Object.keys(server.env), ...Object.keys(server.secrets)]) {
+    if (!ENV_NAME.test(name))
+      problems.push(`${name} is not a variable name an agent can pass on.`);
+  }
+  for (const name of Object.keys(server.secrets)) {
+    if (name in server.env)
+      problems.push(`${name} is set both as a value and as a secret.`);
+  }
+  for (const secret of Object.values(server.secrets)) {
+    if (!isKeptSecretName(secret))
+      problems.push(`${secret} is not a secret name Memnox can keep.`);
+  }
+  problems.push(...headerProblems(server.headers ?? {}));
+  return problems;
+}
+
+function headerProblems(headers: Readonly<Record<string, string>>): string[] {
+  const problems: string[] = [];
+  for (const [name, value] of Object.entries(headers)) {
+    if (!HEADER_NAME.test(name)) problems.push(`${name} is not a header name.`);
+    else if (
+      CREDENTIAL_HEADERS.includes(name.toLowerCase()) &&
+      secretNamesIn(value).length === 0
+    )
+      problems.push(`${name} carries a credential, so keep its value as a secret.`);
+  }
+  return problems;
+}
+
+/** Why a remote server cannot be reached at this address, or undefined when it can. */
+export function remoteAddressProblem(url: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // An unparseable address is the person's to fix, so it is said rather than thrown.
+    return `${url} is not an address.`;
+  }
+  if (!HTTP_SCHEMES.includes(parsed.protocol))
+    return 'A remote server is reached over http or https.';
+  if (parsed.protocol === 'http:' && !LOOPBACK_HOSTS.includes(parsed.hostname))
+    return 'A remote server off this machine is reached over https.';
+  return undefined;
+}
+
+/** Every secret a server names, in its environment and inside its headers, each once. */
+export function secretsOfServer(server: HubServer): string[] {
+  const inHeaders = Object.values(server.headers ?? {}).flatMap(secretNamesIn);
+  return [...new Set([...Object.values(server.secrets), ...inHeaders])];
+}
+
+function transportProblems(server: HubServer): string[] {
+  if (server.transport === HUB_TRANSPORT.STDIO) {
+    const command = server.command;
+    if (command === undefined || command.trim() === '')
+      return ['A local server needs the command that starts it.'];
+    return [];
+  }
+  if (server.url === undefined)
+    return ['A remote server needs the address it answers on.'];
+  const problem = remoteAddressProblem(server.url);
+  return problem === undefined ? [] : [problem];
+}
+
+/** The agents a server is given to, in the order they were chosen. */
+export function agentsOf(hub: Hub, server: string): DiscoveredAgentKind[] {
+  return hub.assignments
+    .filter((each) => each.server === server)
+    .map((each) => each.agent);
+}
+
+/**
+ * The servers one agent is given in its own config, or with a repository, in that repository's
+ * config only: a server given in one project is never written where every project reads it.
+ */
+export function serversFor(
+  hub: Hub,
+  agent: DiscoveredAgentKind,
+  project?: string,
+): HubServer[] {
+  const names = new Set(
+    hub.assignments
+      .filter((each) => each.agent === agent && each.project === project)
+      .map((each) => each.server),
+  );
+  return hub.servers.filter((server) => names.has(server.name));
+}
+
+/** Whether an agent has the server in this repository, given there or in every project. */
+export function hasServerIn(hub: Hub, assignment: Required<HubAssignment>): boolean {
+  return hub.assignments.some(
+    (each) =>
+      each.server === assignment.server &&
+      each.agent === assignment.agent &&
+      (each.project === undefined || each.project === assignment.project),
+  );
+}
+
+/** Every repository the hub gives a server in or still has a line in, so each project config is kept in step. */
+export function projectsOf(hub: Hub): string[] {
+  const roots = [...hub.assignments, ...hub.written].flatMap((each) =>
+    each.project === undefined ? [] : [each.project],
+  );
+  return [...new Set(roots)];
+}
+
+/** The hub with this server added or replaced by name, leaving its assignments as they were. */
+export function withServer(hub: Hub, server: HubServer): Hub {
+  const others = hub.servers.filter((each) => each.name !== server.name);
+  return { ...hub, servers: [...others, server] };
+}
+
+/** The hub without this server or any of its assignments. Its written entries are removed by the next sync. */
+export function withoutServer(hub: Hub, name: string): Hub {
+  return {
+    ...hub,
+    servers: hub.servers.filter((each) => each.name !== name),
+    assignments: hub.assignments.filter((each) => each.server !== name),
+  };
+}
+
+/** The hub with one assignment turned on or off; turning on twice is the same as once. */
+export function withAssignment(hub: Hub, assignment: HubAssignment, on: boolean): Hub {
+  const others = hub.assignments.filter(
+    (each) =>
+      !(
+        each.server === assignment.server &&
+        each.agent === assignment.agent &&
+        each.project === assignment.project
+      ),
+  );
+  return { ...hub, assignments: on ? [...others, assignment] : others };
+}
+
+/** A widening change the person signs before it holds: a server added or replaced, or given to one more agent. */
+export type HubChange = { put: HubServer } | { assign: HubAssignment };
+
+export function withChange(hub: Hub, change: HubChange): Hub {
+  return 'put' in change
+    ? withServer(hub, change.put)
+    : withAssignment(hub, change.assign, true);
+}

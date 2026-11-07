@@ -122,10 +122,10 @@ describe('an answer given for the rest of the session', () => {
     expect(answeredText(answered)).toBe(
       `Memnox: Maya said yes for the rest of this session: you may delete a.patch (${held.id}). Any other delete still needs their OK. Try the same call again now and carry on.`,
     );
-    expect(heldNotice(held)).toContain(
+    expect(heldNotice(held, 'darwin')).toContain(
       '2. Allow for this session (this a.patch only; any other delete still asks)',
     );
-    expect(heldNotice(held)).toContain('also sent to your Slack or Discord');
+    expect(heldNotice(held, 'darwin')).toContain('also sent to your Slack or Discord');
   });
 
   /* One yes about a file used to cover every write for the rest of the session, including
@@ -155,7 +155,7 @@ describe('an answer given for the rest of the session', () => {
     expect(answeredText(answered)).toContain(
       'That covers /work/cloud/src/notifications only',
     );
-    expect(heldNotice(held)).toContain(
+    expect(heldNotice(held, 'darwin')).toContain(
       '2. Allow for this session (only in /work/cloud/src/notifications; anywhere else still asks)',
     );
   });
@@ -202,6 +202,8 @@ describe('an answer given for the rest of the session', () => {
       await grants.covers(at(join(repo, 'packages', 'core', 'test', 'x.test.ts'))),
     ).toBe(true);
     expect(await grants.covers(at(join(dir, 'elsewhere', 'y.ts')))).toBe(false);
-    expect(heldNotice(held)).toContain(`only in ${repo}; anywhere else still asks`);
+    expect(heldNotice(held, 'darwin')).toContain(
+      `only in ${repo}; anywhere else still asks`,
+    );
   });
 });

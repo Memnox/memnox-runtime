@@ -81,6 +81,13 @@ describe('the device registry', () => {
     expect(written.devices.map((each) => each.id)).toEqual([THIS_MAC]);
   });
 
+  it('names the machine by its platform, a Mac on macOS and a computer elsewhere', async () => {
+    const at = await home();
+    await new ConfirmKeys(at).register(key().point, NOW);
+    expect((await new Devices(at, 'darwin').find(THIS_MAC))?.name).toBe('this Mac');
+    expect((await new Devices(at, 'linux').find(THIS_MAC))?.name).toBe('this computer');
+  });
+
   it('keeps register-key trusted on first use, so a second key never replaces the Mac', async () => {
     const at = await home();
     const first = key();

@@ -114,13 +114,13 @@ export class FetchCloud implements CloudPort {
   }
 
   async raise(ask: HeldAsk): Promise<HeldRaised> {
-    const response = await this.call('POST', this.workspacePath('/held'), ask);
+    const response = await this.call('POST', this.workspacePath('/held-calls'), ask);
     return (await this.ok(response).json()) as HeldRaised;
   }
 
   async status(id: string, waitSeconds: number): Promise<HeldState> {
     const path = this.workspacePath(
-      `/held/${encodeURIComponent(id)}?wait=${waitSeconds}`,
+      `/held-calls/${encodeURIComponent(id)}?wait=${waitSeconds}`,
     );
     const response = await this.call('GET', path);
     return (await this.ok(response).json()) as HeldState;

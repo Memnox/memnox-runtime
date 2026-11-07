@@ -6,6 +6,8 @@ export * from './shell-seam';
 export * from './shell-invocation';
 export * from './git-credential-seam';
 export * from './egress-seam';
+export * from './egress-place';
+export * from './egress-key';
 export * from './interceptor';
 export * from './interceptor-install';
 export * from './windows-exec';

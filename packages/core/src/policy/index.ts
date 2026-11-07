@@ -16,3 +16,5 @@ export * from './modes';
 export * from './relaxing';
 export * from './spoken-rule';
 export * from './rule-sentence';
+export * from './workspace-rule';
+export * from './rule-draft';

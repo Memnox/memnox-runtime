@@ -12,8 +12,8 @@ describe('the directories worth watching', () => {
   it('watches the directory that holds each agent config', () => {
     const paths = watchablePaths('/home/me');
 
-    expect(paths).toContain('/home/me/.claude');
-    expect(paths).toContain('/home/me/.cursor');
+    expect(paths).toContain(join('/home/me', '.claude'));
+    expect(paths).toContain(join('/home/me', '.cursor'));
     expect(paths).toContain('/home/me');
   });
 
@@ -22,9 +22,9 @@ describe('the directories worth watching', () => {
   it('watches the directories definitions are installed into', () => {
     const paths = watchablePaths('/home/me');
 
-    expect(paths).toContain('/home/me/.qwen/agents');
-    expect(paths).toContain('/home/me/.github/agents');
-    expect(paths).toContain('/home/me/.config/opencode/agents');
+    expect(paths).toContain(join('/home/me', '.qwen', 'agents'));
+    expect(paths).toContain(join('/home/me', '.github', 'agents'));
+    expect(paths).toContain(join('/home/me', '.config', 'opencode', 'agents'));
   });
 });
 

@@ -4,7 +4,9 @@
  */
 import { desktopNotice, LocalGate } from '@memnox/core';
 import {
+  EgressKeys,
   log,
+  newEgressKey,
   proxyUrlFor,
   RELAY_STATE,
   startEgressProxy,
@@ -71,15 +73,44 @@ export interface EgressSeams {
   notice?: (message: string) => void;
 }
 
+/** Who a run's proxy is for: the session and agent, named by the run rather than a client. */
+type RunCaller = Required<Pick<EgressCaller, 'sessionId' | 'agent'>>;
+
 interface SessionEgressInput {
   home: string;
-  caller: Required<EgressCaller>;
+  caller: RunCaller;
   untrusted: boolean;
   seams?: EgressSeams;
 }
 
-/** The daemon's proxy where it can be leaned on, and otherwise one held by this run. */
+/**
+ * The daemon's proxy where it can be leaned on, and otherwise one held by this run. Either way
+ * the URL carries a key issued for this session, which is what lets its project decide.
+ */
 export async function sessionEgress(input: SessionEgressInput): Promise<SessionEgress> {
+  const keys = new EgressKeys(input.home);
+  const key = newEgressKey();
+  await keys.issue(input.caller.sessionId, key);
+  try {
+    const egress = await keyedEgress({ ...input, caller: { ...input.caller, key } });
+    return {
+      ...egress,
+      close: async () => {
+        await egress.close();
+        await keys.forget(input.caller.sessionId);
+      },
+    };
+  } catch (err) {
+    await keys.forget(input.caller.sessionId);
+    throw err;
+  }
+}
+
+interface KeyedEgressInput extends Omit<SessionEgressInput, 'caller'> {
+  caller: Required<EgressCaller>;
+}
+
+async function keyedEgress(input: KeyedEgressInput): Promise<SessionEgress> {
   const { home, caller, seams = {} } = input;
   if (!input.untrusted) {
     const daemonPort = seams.daemonPort ?? daemonEgressPort;

@@ -10,7 +10,8 @@ import {
 } from '@memnox/core';
 
 import { draftFrom } from '../src/sync/action-rows';
-import { documentFrom, type Bundle } from '../src/sync/bundle';
+import { type Bundle } from '../src/sync/bundle';
+import { documentFrom } from '../src/sync/bundle-document';
 import { censusFrom } from '../src/sync/census';
 
 const TAKEN_AT = '2026-09-01T09:00:00.000Z';

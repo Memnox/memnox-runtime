@@ -15,6 +15,8 @@ import { rewindTool, type RewindSeams } from './rewind-tool';
 import { briefTool, memoryTool } from './memory-tools';
 import { fingerprintTool } from './fingerprint-tool';
 import { workTool } from './work-tools';
+import { suggestTool } from './suggest-tool';
+import { appRunTool, appsTool } from './app-calls';
 
 /** One argument a tool takes: a string, or a list of small objects, such as a walk through's pages. */
 export type ToolProperty =
@@ -76,6 +78,15 @@ export const SESSION_ARG = {
   description: "a session id; this agent's own latest when left out",
 } as const;
 
+/** The two arguments every budgeted memory read takes, worded once so each costs its tokens once. */
+const BUDGET_ARGS = {
+  budget: {
+    type: 'string',
+    description: 'most tokens to answer with, 800 when left out',
+  },
+  cursor: { type: 'string', description: 'the next an earlier answer gave, for more' },
+} as const;
+
 export const SESSION_TOOLS: readonly ToolDefinition[] = [
   readTool(
     'why',
@@ -108,18 +119,20 @@ export const SESSION_TOOLS: readonly ToolDefinition[] = [
   ),
   readTool(
     'memory',
-    'What your workspace has settled: decisions, policies, who approves what and who owns what, each with who confirmed it, when and where it came from. Ask before planning a change, and cite what it says.',
+    'What your workspace settled: decisions, policies, owners, approvers. Search with about first; each line ends [id; origin], so pass id to read one whole. Answers fit a token budget, and lines this session already saw are counted, not resent. Cite what it says.',
     {
       about: {
         type: 'string',
         description:
-          'words or paths the question is about, such as "payment retries" or "src/billing"; the newest when left out',
+          'key words or paths, such as "payment retries"; newest when left out',
       },
+      id: { type: 'string', description: 'one memory to read whole, by its line id' },
+      ...BUDGET_ARGS,
     },
   ),
   readTool(
     'brief',
-    'The brief for what you are about to change: the decisions that bear on these paths, who owns them, which agent already holds them and what landed there lately. Call it before your first edit.',
+    'Before your first edit: the decisions, owners, agents holding and recent work on the paths you will change, cut to a token budget.',
     {
       paths: {
         type: 'string',
@@ -129,6 +142,7 @@ export const SESSION_TOOLS: readonly ToolDefinition[] = [
         type: 'string',
         description: 'the repository, where the workspace knows it by name',
       },
+      budget: BUDGET_ARGS.budget,
     },
   ),
   readTool(
@@ -155,6 +169,80 @@ export const SESSION_TOOLS: readonly ToolDefinition[] = [
       },
     },
     // Writes one file and only ever adds what agents are held to, so nothing to confirm.
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  },
+  {
+    name: 'memnox_suggest',
+    description:
+      'Propose something you learned for your person to confirm: a fact, a convention, or a rule with its effect and actions. It waits in their Learn queue and is never a fact or a rule until they confirm it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          description: 'fact, convention or rule; fact when left out',
+        },
+        statement: {
+          type: 'string',
+          description: 'what you learned, in one or two sentences',
+        },
+        about: { type: 'string', description: 'what it is about, in two or three words' },
+        effect: {
+          type: 'string',
+          description: 'on a rule: allow, ask or deny; ask when left out',
+        },
+        actions: {
+          type: 'string',
+          description:
+            'on a rule: the action patterns it covers, comma separated, such as "*deploy*"',
+        },
+        targets: {
+          type: 'string',
+          description: 'on a rule: target patterns, comma separated',
+        },
+        reason: { type: 'string', description: 'on a rule: why, in a sentence' },
+      },
+    },
+    // Adds to a queue only a person answers, and changes nothing an agent is held to.
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  },
+  readTool(
+    'apps',
+    "Find a tool in your person's connected apps (GitHub, Linear, Gmail, Slack and the rest they connected to Memnox): what each does, its inputs, and whether it reads or acts. Use these through Memnox rather than connecting the app yourself.",
+    {
+      what: {
+        type: 'string',
+        description: 'the job in a few words, such as "list my open pull requests"',
+      },
+      toolkit: {
+        type: 'string',
+        description: 'one app by its slug, such as github, when the job names one',
+      },
+    },
+  ),
+  {
+    name: 'app_run',
+    description:
+      "Run one tool of your person's connected apps through Memnox. A read their rules allow runs at once; anything that sends or changes something waits on their Mac until they press Send and confirm with Touch ID. Pass proposal alone to hear whether a waiting one went.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool: { type: 'string', description: 'a slug apps returned' },
+        arguments: {
+          type: 'string',
+          description: 'the inputs as a JSON object, as apps described them',
+        },
+        label: {
+          type: 'string',
+          description: 'for a tool that acts: what it does, in plain words, for the card',
+        },
+        proposal: {
+          type: 'string',
+          description: 'a proposal id app_run returned, to hear what became of it',
+        },
+      },
+    },
+    // Rules on the app call it carries itself and waits on the person's signature for any act.
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   },
   {
@@ -202,6 +290,12 @@ export async function callTool(
       return workTool(deps, args);
     case 'fingerprint':
       return fingerprintTool(deps, args);
+    case 'memnox_suggest':
+      return suggestTool(deps, args);
+    case 'apps':
+      return appsTool(deps, args);
+    case 'app_run':
+      return appRunTool(deps, args);
     case 'rewind':
       return rewindTool(deps, seams, args);
     default:

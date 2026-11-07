@@ -191,7 +191,7 @@ export async function signOutPerson(
 export async function teamHeld(person: PersonCredential): Promise<TeamHeld[]> {
   const answer = await callCloud<TeamHeld[]>({
     baseUrl: person.baseUrl,
-    path: `/v1/workspaces/${encodeURIComponent(person.workspaceId)}/me/held`,
+    path: `/v1/workspaces/${encodeURIComponent(person.workspaceId)}/me/held-calls`,
     token: person.token,
   });
   if (answer.status === HTTP.UNAUTHORIZED) {
@@ -218,7 +218,7 @@ export async function answerTeamHeld(
         }).toString('base64');
   return callCloud({
     baseUrl: person.baseUrl,
-    path: `/v1/workspaces/${encodeURIComponent(person.workspaceId)}/me/held/${encodeURIComponent(id)}`,
+    path: `/v1/workspaces/${encodeURIComponent(person.workspaceId)}/me/held-calls/${encodeURIComponent(id)}/answer`,
     method: 'POST',
     token: person.token,
     body: {

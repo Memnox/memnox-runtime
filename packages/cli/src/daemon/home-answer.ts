@@ -3,6 +3,7 @@ import {
   ACTOR_TYPE,
   DECISION_EFFECT,
   delegations,
+  ENFORCEMENT_MODE,
   handable,
   HOME_METHOD,
   LEDGER_SCAN_LIMIT,
@@ -18,6 +19,7 @@ import {
 } from '@memnox/core';
 import { withEvents } from '../event-store';
 import { codexStandingLately, needsYouOf, readChanged } from '../needs-you';
+import { setMode } from '../protect/mode';
 import { proposeRuleTool } from '../session-tools/propose-tools';
 import type { SessionViews } from './session-view';
 
@@ -63,6 +65,13 @@ export async function homeAnswer(
   input: HomeInput,
 ): Promise<DaemonResponse> {
   if (request.method === HOME_METHOD.HAND_OVER) return handOver(request, input);
+  // Only ever toward enforce, which narrows, so it needs no signature; observe stays at the terminal.
+  if (request.method === HOME_METHOD.MODE_ENFORCE)
+    return {
+      id: request.id,
+      ok: true,
+      modeSet: await setMode(home, ENFORCEMENT_MODE.ENFORCE),
+    };
   return { id: request.id, ok: true, home: await readHome(home, input) };
 }
 

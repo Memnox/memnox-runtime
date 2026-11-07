@@ -10,6 +10,7 @@ import { withEvents } from '../event-store';
 import { OPERATOR_AGENT } from './propose-tools';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import { scopeOf } from './session-scope';
+import { KEY_THEIRS, MACHINE, THE_DESKTOP } from '../this-machine';
 
 /**
  * Stopping and restarting a session by voice. Pausing only ever holds an agent back, so it is
@@ -19,8 +20,7 @@ import { scopeOf } from './session-scope';
 /** Long enough to reach for the key, short enough that nobody confirms a stale one. */
 const RESUME_TTL_MS = minutesToMs(5);
 
-const NOT_AN_AGENT =
-  'That is this Mac itself rather than an agent, so there is nothing to pause.';
+const NOT_AN_AGENT = `That is this ${MACHINE} itself rather than an agent, so there is nothing to pause.`;
 
 export async function pauseSessionTool(
   deps: SessionToolDeps,
@@ -70,7 +70,7 @@ export async function proposeResumeTool(
   });
   return {
     proposed: proposal.id,
-    said: 'Waiting for Touch ID. It stays paused until the person confirms on the Mac.',
+    said: `Waiting for ${KEY_THEIRS}. It stays paused until the person confirms on ${THE_DESKTOP}.`,
   };
 }
 

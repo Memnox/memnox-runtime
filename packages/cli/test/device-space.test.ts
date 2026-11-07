@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmationMessage, verifiesSigned, writeAccount } from '@memnox/core';
+import { verifiesSigned, writeAccount } from '@memnox/core';
 import {
   claimDeviceSpace,
   deviceSpaceWorkZeros,
@@ -14,17 +14,16 @@ import {
   relayMachine,
   type DeviceSpace,
 } from '../src/sync/device-space';
+import { ACCOUNT_REQUIRED } from '../src/sync/cloud-account';
 import {
   connectionsOf,
   findPersonalTools,
   runPersonalTool,
-  workDigest,
-  workSubject,
 } from '../src/sync/personal-work';
 
 /**
- * A person acting for themselves with no Memnox account: the Mac registers its own personal space once,
- * signs every personal call as that space, and hands it to their account when they later sign in.
+ * A Mac nobody signed in on: it registers its own personal space once to browse and list as, runs
+ * nothing through it, and hands it to the person's account when they sign in.
  */
 
 const BASE = 'https://api.memnox.test';
@@ -159,30 +158,29 @@ describe('acting as the person through the space', () => {
     }
   });
 
-  it('signs a confirmed send with the space key over the tool and its exact arguments', async () => {
+  it('runs nothing as the space, a confirmed send included, and says to sign in to Memnox Cloud', async () => {
     const home = await freshHome();
-    const { point } = await keptSpace(home);
+    await keptSpace(home);
     const sent = fakeCloud({
       '/v1/workspaces/dsp_1/me/work/run': {
         status: 200,
         body: { workClass: 'act', data: {} },
       },
     });
-    const args = '{"to":"sam@example.com"}';
 
-    const ran = await runPersonalTool(home, 'GMAIL_SEND_EMAIL', args, {
-      proposalId: 'prp_1',
-    });
-
-    expect(ran.ok).toBe(true);
-    const body = sent[0]?.body ?? {};
-    expect(sent[0]?.authorization).toBe('Bearer mch_space');
-    expect(body['deviceId']).toBe('pdv_1');
-    const message = confirmationMessage(
-      workSubject('prp_1'),
-      workDigest('GMAIL_SEND_EMAIL', args),
+    const ran = await runPersonalTool(
+      home,
+      'GMAIL_SEND_EMAIL',
+      '{"to":"sam@example.com"}',
+      {
+        proposalId: 'prp_1',
+      },
     );
-    expect(verifiesSigned(point, message, String(body['signature']))).toBe(true);
+
+    expect(ran).toMatchObject({ ok: false, code: ACCOUNT_REQUIRED });
+    expect(ran.ok ? '' : ran.said).toMatch(/needs a Memnox Cloud account/);
+    expect(ran.ok ? '' : ran.said).toMatch(/memnox_sign_in/);
+    expect(sent).toEqual([]);
   });
 
   it("lists the space's connections without a person signed in", async () => {

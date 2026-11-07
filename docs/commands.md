@@ -1222,6 +1222,16 @@ control plane is unreachable.
 ### `memnox sync now`
 Does a pass immediately rather than waiting. `--json` for the result.
 
+### `memnox sync pair [machine] [--fingerprint <fingerprint>]`
+Moves the personal sync key to another of your own machines from a terminal. Run
+it on the new machine first, which registers it and says what it is called; then
+on the machine holding the key, which lists every machine waiting with the
+fingerprint it pairs under. Once both show the same fingerprint, run it again
+with `--fingerprint` on each side: the holder proposes sealing the key to the new
+machine and the new machine proposes taking it, the same proposals
+`personal-sync-key-offer` and `personal-sync-key-accept` raise. Nothing moves
+until each proposal is signed in the Memnox app.
+
 ### What crosses the wire
 
 **Pulled:** a rule bundle, written to `~/.memnox/org.policies.json` and

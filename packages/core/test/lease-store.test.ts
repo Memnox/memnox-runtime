@@ -215,16 +215,20 @@ describe('letting go', () => {
 });
 
 describe('what lands on disk', () => {
-  it('writes leases only the owner can read', async () => {
-    const where = await home();
-    const registry = new LeaseRegistry(where, living);
-    await registry.take({ path: 'src', holder: cursor }, NOW);
+  // Windows has no POSIX mode bits, so 0o600 reads back as 0o666.
+  it.skipIf(process.platform === 'win32')(
+    'writes leases only the owner can read',
+    async () => {
+      const where = await home();
+      const registry = new LeaseRegistry(where, living);
+      await registry.take({ path: 'src', holder: cursor }, NOW);
 
-    const dir = join(where, MEMNOX_HOME, 'leases');
-    const [file] = (await readdir(dir)).filter((name) => name.endsWith('.json'));
-    const mode = (await stat(join(dir, file as string))).mode & 0o777;
-    expect(mode).toBe(0o600);
-  });
+      const dir = join(where, MEMNOX_HOME, 'leases');
+      const [file] = (await readdir(dir)).filter((name) => name.endsWith('.json'));
+      const mode = (await stat(join(dir, file as string))).mode & 0o777;
+      expect(mode).toBe(0o600);
+    },
+  );
 
   it('ignores a file that is not a lease rather than failing the read', async () => {
     const where = await home();

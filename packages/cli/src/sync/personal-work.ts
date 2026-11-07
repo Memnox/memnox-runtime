@@ -19,6 +19,13 @@ import {
   spaceBaseUrl,
   type PersonalCaller,
 } from './device-space';
+import { MACHINE } from '../this-machine';
+import {
+  ACCOUNT_REQUIRED,
+  SIGN_IN_TO_CONNECT,
+  VOICE_SIGN_IN_FIRST,
+} from './cloud-account';
+import { connectionsFrom, type PersonGrant } from './grant-connections';
 
 /**
  * The person's own tools through their own sign ins, so the voice reads and replies as them, never a
@@ -73,16 +80,16 @@ interface ConfirmedRun {
 }
 
 export type PersonalAnswer<T> =
-  { ok: true; value: T } | { ok: false; said: string; status?: number };
+  { ok: true; value: T } | { ok: false; said: string; status?: number; code?: string };
 
 export interface PersonalRun {
   workClass: WorkClass;
   data: Record<string, unknown>;
 }
 
-/** Only when this Mac could not set itself up to act for them, since acting for themselves needs no Memnox account. */
-const NOT_SIGNED_IN =
-  'Memnox Cloud could not be reached to set this Mac up to act in their own tools just now. Say so in a sentence and offer to try again; they need no Memnox account for their own tools, so never ask them to sign in to Memnox for this.';
+/** Only when this Mac could not set itself up to read their own tools, so it is said as a moment's trouble. */
+const NOT_SIGNED_IN = `Memnox Cloud could not be reached to read their own tools just now. Say so in a sentence and offer to try again.`;
+
 const NOT_REACHABLE =
   'The workspace could not be asked just now. Say so in a sentence; never say there is nothing there.';
 
@@ -134,7 +141,7 @@ export async function runPersonalTool(
   argumentsText: string,
   confirmed?: ConfirmedRun,
 ): Promise<PersonalAnswer<PersonalRun>> {
-  return asPerson(home, async (person) => {
+  return asSignedInPerson(home, VOICE_SIGN_IN_FIRST, async (person) => {
     const signed =
       confirmed === undefined
         ? {}
@@ -167,7 +174,7 @@ export async function signInPersonal(
   home: string,
   toolkit: string,
 ): Promise<PersonalAnswer<{ url: string; opened: boolean }>> {
-  const link = await signInLink(home, toolkit);
+  const link = await signInLink(home, toolkit, VOICE_SIGN_IN_FIRST);
   if (!link.ok) return link;
   // The person asked the voice for this, so they are at the Mac even with no terminal open.
   const opened = await openBrowser(link.value, {
@@ -177,12 +184,16 @@ export async function signInPersonal(
   return { ok: true, value: { url: link.value, opened } };
 }
 
-/** The page that signs the person in to one tool, opened by nobody, for the notch to offer. */
+/**
+ * The page that signs the person in to one tool, opened by nobody, for the notch to offer. Only for a
+ * person signed in to Memnox Cloud, so no personal space is registered just to be refused.
+ */
 export async function signInLink(
   home: string,
   toolkit: string,
+  signInFirst: string = SIGN_IN_TO_CONNECT,
 ): Promise<PersonalAnswer<string>> {
-  return asPerson(home, async (person) => {
+  return asSignedInPerson(home, signInFirst, async (person) => {
     const answer = await callCloud<{ redirectUrl?: string }>({
       baseUrl: person.baseUrl,
       path: workPath(person, `grants/${encodeURIComponent(toolkit)}/link`),
@@ -342,20 +353,8 @@ export async function signOutOf(
   });
 }
 
-/** One of the person's sign ins as the workspace lists it under `me/grants`. */
-interface PersonGrant {
-  id: string;
-  toolkit: string;
-  status?: string;
-  enabled?: boolean;
-}
-
-/** The cloud's word for a sign in that works right now. */
-const GRANT_ACTIVE = 'active';
-
 /** Said by the Mac's menu bar as it stands, so these are words for the person rather than for the voice. */
-export const CONNECTIONS_NOT_SIGNED_IN =
-  'This Mac could not reach Memnox Cloud to connect your apps just now. Try again in a moment; you need no Memnox account for your own apps.';
+export const CONNECTIONS_NOT_SIGNED_IN = `This ${MACHINE} could not reach Memnox Cloud to show the apps you can connect just now. Try again in a moment.`;
 const CONNECTIONS_NOT_REACHABLE =
   'Memnox Cloud could not be reached just now, so your connected apps cannot be shown.';
 
@@ -380,20 +379,6 @@ export async function connectionsOf(
       return { ok: false, said: CONNECTIONS_NOT_REACHABLE };
     throw err;
   }
-}
-
-/** One entry per toolkit, connected when any of its sign ins is active and enabled, sorted by toolkit. */
-export function connectionsFrom(grants: readonly PersonGrant[]): ToolConnection[] {
-  const byToolkit = new Map<string, boolean>();
-  for (const grant of grants) {
-    if (typeof grant.toolkit !== 'string' || grant.toolkit === '') continue;
-    const toolkit = grant.toolkit.toLowerCase();
-    const live = grant.status?.toLowerCase() === GRANT_ACTIVE && grant.enabled === true;
-    byToolkit.set(toolkit, (byToolkit.get(toolkit) ?? false) || live);
-  }
-  return [...byToolkit.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([toolkit, connected]) => ({ toolkit, connected }));
 }
 
 /** The account as a card names it, and the key a run is checked against. */
@@ -422,6 +407,26 @@ function signWork(
     key: createPrivateKey(person.privateKey),
     dsaEncoding: 'der',
   }).toString('base64');
+}
+
+/** Only for the person signed in to Memnox Cloud here; anybody else is told `signInFirst` with the cloud's own code. */
+async function asSignedInPerson<T>(
+  home: string,
+  signInFirst: string,
+  call: (person: PersonalCaller) => Promise<PersonalAnswer<T>>,
+): Promise<PersonalAnswer<T>> {
+  const person = await readPerson(home);
+  if (person === null) return { ok: false, said: signInFirst, code: ACCOUNT_REQUIRED };
+  try {
+    const answer = await call(person);
+    // A cloud that refused anyway, say for a credential it no longer knows as a person, reads the same.
+    return !answer.ok && answer.code === ACCOUNT_REQUIRED
+      ? { ...answer, said: signInFirst }
+      : answer;
+  } catch (err) {
+    if (err instanceof CloudUnreachable) return { ok: false, said: NOT_REACHABLE };
+    throw err;
+  }
 }
 
 async function asPerson<T>(
@@ -454,8 +459,9 @@ export async function existingCaller(home: string): Promise<PersonalCaller | nul
 }
 
 /**
- * Who acts in the person's own tools: the person where they signed in, else this Mac's personal space,
- * registered the first time it is needed so nobody needs a Memnox account to act as themselves.
+ * Who reads in the person's own tools: the person where they signed in, else this Mac's personal space,
+ * registered the first time it is needed. A space browses the catalogue and lists what it connected
+ * before, and the cloud refuses it a new connection or any run until somebody signs in.
  */
 export async function personalCaller(home: string): Promise<PersonalCaller | null> {
   const found = await existingCaller(home);
@@ -478,5 +484,14 @@ export function refusal<T>(answer: {
     typeof body === 'object' && body !== null && 'message' in body
       ? String((body as { message: unknown }).message) // narrowed by the `in` check above
       : `The workspace answered ${answer.status}.`;
-  return { ok: false, said: message, status: answer.status };
+  const code =
+    typeof body === 'object' && body !== null && 'error' in body
+      ? (body as { error: unknown }).error // narrowed by the `in` check above
+      : undefined;
+  return {
+    ok: false,
+    said: message,
+    status: answer.status,
+    ...(typeof code === 'string' ? { code } : {}),
+  };
 }

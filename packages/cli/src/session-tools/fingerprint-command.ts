@@ -2,9 +2,8 @@
  * `/fingerprint` in each agent: a hook can tell a person a repository has no fingerprint but
  * cannot put a prompt in their input, so the prompt is one word they can type instead.
  */
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { NATIVE_PLACED, placeNativeFile, removeNativeFile } from '@memnox/core';
 
 /** How a file of ours is told from one a person wrote under the same name, which is kept. */
 const OURS = 'memnox: written by memnox setup, and removed with the session tools';
@@ -99,13 +98,11 @@ export async function placeFingerprintCommands(
 }
 
 async function placeOne(home: string, command: FingerprintCommand): Promise<boolean> {
-  const path = join(home, command.file);
-  const current = await readOrNull(path);
-  if (current === command.text) return false;
-  if (current !== null && !current.includes(OURS)) return false;
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, command.text, 'utf8');
-  return true;
+  const placed = await placeNativeFile(
+    { path: join(home, command.file), content: command.text },
+    OURS,
+  );
+  return placed === NATIVE_PLACED.WRITTEN;
 }
 
 /** Every one of ours taken out, and only ours; the files removed. */
@@ -113,20 +110,7 @@ export async function removeFingerprintCommands(home: string): Promise<string[]>
   const removed: string[] = [];
   for (const command of FINGERPRINT_COMMANDS) {
     const path = join(home, command.file);
-    const current = await readOrNull(path);
-    if (current === null || !current.includes(OURS)) continue;
-    await rm(path, { force: true });
-    removed.push(path);
+    if (await removeNativeFile(path, OURS)) removed.push(path);
   }
   return removed;
-}
-
-async function readOrNull(path: string): Promise<string | null> {
-  if (!existsSync(path)) return null;
-  try {
-    return await readFile(path, 'utf8');
-  } catch {
-    // Unreadable is read as a person's file, since only a file of ours is ever touched.
-    return '';
-  }
 }

@@ -152,68 +152,81 @@ describe('Codex hooks it no longer runs', () => {
   });
 });
 
-describe('every hook behind a launcher that never moves', () => {
-  /* Codex trusts a hook by a hash of its entry, so an entry naming Memnox's Node and build
+// Windows writes no sh launcher, since it has no sh to run one, so hooks name node directly.
+describe.skipIf(process.platform === 'win32')(
+  'every hook behind a launcher that never moves',
+  () => {
+    /* Codex trusts a hook by a hash of its entry, so an entry naming Memnox's Node and build
      went back for review at every update and stopped running until somebody noticed. */
-  const BUILT = '/opt/memnox/dist/bin/edit-hook.js';
-  const built = (): boolean => true;
+    const BUILT = '/opt/memnox/dist/bin/edit-hook.js';
+    const built = (): boolean => true;
 
-  it('gives every host the launcher by its path, and no Node or build that moves', () => {
-    const command = editHookCommand(built, BUILT, home);
-    const argv = namedHookArgv('codex-cli', built, BUILT, home);
+    it('gives every host the launcher by its path, and no Node or build that moves', () => {
+      const command = editHookCommand(built, BUILT, home);
+      const argv = namedHookArgv('codex-cli', built, BUILT, home);
 
-    expect(command).toBe(`"${join(home, HOOK_LAUNCHER)}"`);
-    expect(command).not.toContain(BUILT);
-    expect(argv).toEqual([join(home, HOOK_LAUNCHER), '--policy', '--agent', 'codex-cli']);
-  });
+      expect(command).toBe(`"${join(home, HOOK_LAUNCHER)}"`);
+      expect(command).not.toContain(BUILT);
+      expect(argv).toEqual([
+        join(home, HOOK_LAUNCHER),
+        '--policy',
+        '--agent',
+        'codex-cli',
+      ]);
+    });
 
-  it('knows a launcher that runs an old build from one that runs this one', async () => {
-    await writeHookLauncher(home);
-    expect(launcherIsCurrent(home)).toBe(true);
+    it('knows a launcher that runs an old build from one that runs this one', async () => {
+      await writeHookLauncher(home);
+      expect(launcherIsCurrent(home)).toBe(true);
 
-    await writeFile(
-      join(home, HOOK_LAUNCHER),
-      hookLauncherScript(['/old/node', '/old/hook.js']),
-      'utf8',
-    );
-    expect(launcherIsCurrent(home)).toBe(false);
+      await writeFile(
+        join(home, HOOK_LAUNCHER),
+        hookLauncherScript(['/old/node', '/old/hook.js']),
+        'utf8',
+      );
+      expect(launcherIsCurrent(home)).toBe(false);
 
-    await writeHookLauncher(home);
-    expect(launcherIsCurrent(home)).toBe(true);
-  });
+      await writeHookLauncher(home);
+      expect(launcherIsCurrent(home)).toBe(true);
+    });
 
-  it('hands the hook every argument the entry gives it, quoting and all', async () => {
-    const echo = join(home, "it's echo.cjs");
-    await writeFile(echo, 'console.log(JSON.stringify(process.argv.slice(2)));', 'utf8');
-    await writeFile(
-      join(home, 'launcher'),
-      hookLauncherScript([process.execPath, echo, '--memnox-edit-hook']),
-      'utf8',
-    );
+    it('hands the hook every argument the entry gives it, quoting and all', async () => {
+      const echo = join(home, "it's echo.cjs");
+      await writeFile(
+        echo,
+        'console.log(JSON.stringify(process.argv.slice(2)));',
+        'utf8',
+      );
+      await writeFile(
+        join(home, 'launcher'),
+        hookLauncherScript([process.execPath, echo, '--memnox-edit-hook']),
+        'utf8',
+      );
 
-    const out = execFileSync(
-      'sh',
-      [join(home, 'launcher'), '--policy', '--agent', 'codex-cli'],
-      {
-        encoding: 'utf8',
-      },
-    );
+      const out = execFileSync(
+        'sh',
+        [join(home, 'launcher'), '--policy', '--agent', 'codex-cli'],
+        {
+          encoding: 'utf8',
+        },
+      );
 
-    expect(JSON.parse(out)).toEqual([
-      '--memnox-edit-hook',
-      '--policy',
-      '--agent',
-      'codex-cli',
-    ]);
-  });
+      expect(JSON.parse(out)).toEqual([
+        '--memnox-edit-hook',
+        '--policy',
+        '--agent',
+        'codex-cli',
+      ]);
+    });
 
-  it('is written executable, so a host can run it by its path', async () => {
-    const path = await writeHookLauncher(home);
-    const { statSync } = await import('node:fs');
+    it('is written executable, so a host can run it by its path', async () => {
+      const path = await writeHookLauncher(home);
+      const { statSync } = await import('node:fs');
 
-    expect(statSync(path).mode & 0o111).not.toBe(0);
-  });
-});
+      expect(statSync(path).mode & 0o111).not.toBe(0);
+    });
+  },
+);
 
 describe('the Codex inside the ChatGPT app', () => {
   it('is asked when no codex is on PATH, since that is the only Codex such a Mac has', async () => {

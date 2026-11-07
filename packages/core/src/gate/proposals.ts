@@ -8,6 +8,9 @@ import { JsonRecordDir } from '../store/json-records';
 import type { HoldAnswer } from './hold';
 import { PROPOSAL_ANSWER, type ProposalAnswer } from './answers';
 import type { WorkAccount } from '../daemon/work-cards';
+import type { HubChange } from '../mcp/registry';
+import type { SkillsChange } from '../skills/hub';
+import type { ProjectChange } from '../projects/project';
 
 export { PROPOSAL_ANSWER, type ProposalAnswer };
 
@@ -37,6 +40,24 @@ export const PROPOSAL_KIND = {
   WORK: 'work',
   /** An account a sign in reached, said once to be the person's own so it is matched from then on. */
   ACCOUNT: 'account',
+  /** A server added to the MCP Hub or given to an agent, written into configs once the person signs. */
+  MCP_HUB: 'mcp-hub',
+  /** A person's own deny or ask taken out of its file, which widens, so it waits on a signature. */
+  RULE_REMOVE: 'rule-remove',
+  /** A paused agent let carry on, lifting the pause here and the workspace's freeze on it. */
+  AGENT_RESUME: 'agent-resume',
+  /** A skill accepted, given to an agent, or rolled back, written into agents once the person signs. */
+  SKILLS_HUB: 'skills-hub',
+  /** A project's servers, skills and rule file handed to the agents opened in it, once the person signs. */
+  PROJECT: 'project',
+  /** A backup put back over this machine's setup, from a copy staged and checked by its digest. */
+  BACKUP_RESTORE: 'backup-restore',
+  /** This machine listening on the local network, which widens who can reach it, so only the Mac signs it. */
+  LAN: 'lan',
+  /** The personal sync key sealed to another of the person's machines, or taken from one, behind a fingerprint both show. */
+  PERSONAL_SYNC_KEY: 'personal-sync-key',
+  /** The community index read from another source, which decides what can be installed here, so only the Mac signs it. */
+  INDEX_SOURCE: 'index-source',
 } as const;
 
 export type ProposedChange =
@@ -84,6 +105,30 @@ export type ProposedChange =
       toolkit: string;
       /** The account as the person heard it named: "maya on GitHub". */
       label: string;
+    }
+  | { kind: typeof PROPOSAL_KIND.MCP_HUB; hub: HubChange }
+  | { kind: typeof PROPOSAL_KIND.RULE_REMOVE; file: string; rule: string }
+  | { kind: typeof PROPOSAL_KIND.AGENT_RESUME; agent: string }
+  | { kind: typeof PROPOSAL_KIND.SKILLS_HUB; skills: SkillsChange }
+  | { kind: typeof PROPOSAL_KIND.PROJECT; project: ProjectChange }
+  | {
+      kind: typeof PROPOSAL_KIND.BACKUP_RESTORE;
+      /** The staged copy's SHA-256, which names its file and is checked again before anything is written. */
+      staged: string;
+      files: string[];
+      ledger: boolean;
+      createdAt: string;
+    }
+  | { kind: typeof PROPOSAL_KIND.LAN; on: true }
+  | { kind: typeof PROPOSAL_KIND.INDEX_SOURCE; source: string }
+  | {
+      kind: typeof PROPOSAL_KIND.PERSONAL_SYNC_KEY;
+      /** What both machines showed, checked again before the key moves. */
+      fingerprint: string;
+      /** On the machine holding the key: seal it to this one. */
+      seal?: { machineId: string; publicKey: string };
+      /** On the machine waiting: take the key sealed to it. */
+      open?: { envelope: string; keyId: string };
     };
 
 export interface Proposal {

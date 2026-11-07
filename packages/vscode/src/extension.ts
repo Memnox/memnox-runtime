@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { watch } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { watch, type FSWatcher } from 'node:fs';
+import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -49,8 +49,11 @@ const typing = new Set<string>();
 /** Marks a request this window took, so a window the link reached instead never answers it as missing. */
 const CLAIMED_BY = 'claimedBy';
 
-/** Long enough for the window holding the terminal to see the request and claim it. */
-const CLAIM_GRACE_MS = 1_500;
+/** Long enough for the window holding the terminal to see the request and claim it, even asking every terminal for its device. */
+const CLAIM_GRACE_MS = 3_000;
+
+/** How often a window checks that the folder it watches is still the one on disk, since `~/.memnox` can be made again while it runs. */
+const REWATCH_MS = 5_000;
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
@@ -74,15 +77,56 @@ export function activate(context: vscode.ExtensionContext): void {
  * follow up lands in the session itself and never in a new chat.
  */
 function watchRequests(context: vscode.ExtensionContext): void {
-  void mkdir(DISPLAYS, { recursive: true, mode: 0o700 })
-    .then(() => {
-      const watcher = watch(DISPLAYS, (_event, name) => {
+  let watcher: FSWatcher | undefined;
+  let watched: number | undefined;
+  let checking = false;
+  const rewatch = async (): Promise<void> => {
+    // One check at a time, since two overlapping would each start a watch and every request would be acted on twice.
+    if (checking) return;
+    checking = true;
+    try {
+      await check();
+    } finally {
+      checking = false;
+    }
+  };
+  const check = async (): Promise<void> => {
+    await mkdir(DISPLAYS, { recursive: true, mode: 0o700 }).catch(() => undefined);
+    const folder = await stat(DISPLAYS).then(
+      (each) => each.ino,
+      () => undefined,
+    );
+    // A watch on a folder removed since keeps running and hears nothing, so a new folder gets a new watch.
+    if (folder === undefined || (watcher !== undefined && folder === watched)) return;
+    watcher?.close();
+    try {
+      watcher = watch(DISPLAYS, (_event, name) => {
         const request = requestOfFile(typeof name === 'string' ? name : null);
         if (request !== null) void actIfHeldHere(request);
       });
-      context.subscriptions.push({ dispose: () => watcher.close() });
-    })
-    .catch(() => undefined);
+      watcher.on('error', () => {
+        watcher?.close();
+        watcher = undefined;
+      });
+      watched = folder;
+    } catch {
+      watcher = undefined;
+      return;
+    }
+    // Written while nothing was watching, so looked at once now; each is acted on only while still waiting.
+    for (const name of await readdir(DISPLAYS).catch(() => [] as string[])) {
+      const request = requestOfFile(name);
+      if (request !== null) void actIfHeldHere(request);
+    }
+  };
+  void rewatch();
+  const timer = setInterval(() => void rewatch(), REWATCH_MS);
+  context.subscriptions.push({
+    dispose: () => {
+      clearInterval(timer);
+      watcher?.close();
+    },
+  });
 }
 
 /** Acts on a request whose terminal this window holds, claiming it first so no other window answers it. */
@@ -92,10 +136,13 @@ async function actIfHeldHere(request: string): Promise<void> {
   const named = deviceOfRequest(record);
   if (named === null || claimedElsewhere(record, process.pid)) return;
   if ('why' in actionOf(record, named.tty, named.kind)) return;
-  if ((await terminalAt(named.tty)) === undefined) return;
+  const terminal = await terminalAt(named.tty);
+  if (terminal === undefined) return;
+  // Handed on rather than looked up again, so the claim lands well inside the grace the window the link reached gives it.
   await actOnRequest(
     new URLSearchParams({ request, tty: named.tty }).toString(),
     named.kind,
+    terminal,
   );
 }
 
@@ -130,7 +177,11 @@ function actionOf(record: unknown, tty: string, kind: HeldKind): Action {
  * Types an instruction or presses the keys that answer a question, in the window holding the
  * terminal only, and only with an agent in front there, so nothing lands in a bare shell.
  */
-async function actOnRequest(query: string, kind: HeldKind): Promise<void> {
+async function actOnRequest(
+  query: string,
+  kind: HeldKind,
+  held?: vscode.Terminal,
+): Promise<void> {
   const link = typeLinkOf(query);
   if (link === null || typing.has(link.request)) return;
   typing.add(link.request);
@@ -145,7 +196,7 @@ async function actOnRequest(query: string, kind: HeldKind): Promise<void> {
       return;
     }
     if (claimedElsewhere(record, process.pid)) return;
-    const terminal = await terminalAt(link.tty);
+    const terminal = held ?? (await terminalAt(link.tty));
     if (terminal === undefined) return await sayNowhereHere(path, link.tty, kind);
     if (!(await claim(path, record))) return;
     if (!agentInFront(await foreground(link.tty))) {

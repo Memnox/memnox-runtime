@@ -80,6 +80,29 @@ export async function unwrapProjectLocally(
   return ours;
 }
 
+/** Claude Code's local servers for one project, or null where it keeps no config to put them in. */
+export async function readLocalServers(
+  home: string,
+  root: string,
+): Promise<Record<string, unknown> | null> {
+  const config = await readJson(join(home, CLAUDE_CONFIG));
+  if (config === null) return null;
+  return record(record(record(config[PROJECTS])[root])[LOCAL_SERVERS]);
+}
+
+/** One project's local servers replaced whole, the rest of the file and of the project kept as it was. */
+export async function writeLocalServers(
+  home: string,
+  root: string,
+  servers: Readonly<Record<string, unknown>>,
+): Promise<boolean> {
+  const config = await readJson(join(home, CLAUDE_CONFIG));
+  if (config === null) return false;
+  const project = record(record(config[PROJECTS])[root]);
+  await writeProject(home, config, root, { ...project, [LOCAL_SERVERS]: { ...servers } });
+  return true;
+}
+
 function isOurCopy(entry: unknown): boolean {
   if (entry === null || typeof entry !== 'object') return false;
   // Shape checked: an entry with a command is a launch line, which is all isWrapped reads.

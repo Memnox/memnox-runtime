@@ -22,7 +22,12 @@ import { voicePrompt } from './voice-prompts';
 interface AcpBrainOptions {
   spec: VoiceBrainSpec;
   home: string;
-  operator: { command: string; args: readonly string[] };
+  /** The operator server handed to the session; absent, the agent gets no tools from Memnox at all. */
+  operator?: { command: string; args: readonly string[] };
+  /** Said once at the opening in place of the voice's instructions, for a brain that is not the voice. */
+  instructions?: string;
+  /** False for a one shot read: no conversation is carried on or kept. */
+  remember?: boolean;
   /** The binary, where a test stands one in for the agent. */
   command?: string;
   env?: NodeJS.ProcessEnv;
@@ -217,7 +222,9 @@ export class AcpBrain implements Brain {
       clientInfo: { name: 'memnox', version: '1' },
     });
     const cwd = this.options.cwd ?? process.cwd();
-    const mcpServers = spec.sessionTools ? [this.operatorServer()] : [];
+    const operator = this.options.operator;
+    const mcpServers =
+      spec.sessionTools && operator !== undefined ? [operatorServer(operator)] : [];
     const resumed = await this.resume(connection, ready, cwd, mcpServers);
     const session =
       resumed?.session ?? (await connection.request('session/new', { cwd, mcpServers }));
@@ -244,7 +251,7 @@ export class AcpBrain implements Brain {
     cwd: string,
     mcpServers: unknown[],
   ): Promise<{ session: unknown; sessionId: string } | null> {
-    if (!canLoad(ready)) return null;
+    if (!canLoad(ready) || this.options.remember === false) return null;
     const kept = await this.conversations.resumable(
       this.name,
       this.now(),
@@ -265,18 +272,15 @@ export class AcpBrain implements Brain {
     }
   }
 
-  private operatorServer(): unknown {
-    return {
-      name: OPERATOR_SERVER,
-      command: this.options.operator.command,
-      args: [...this.options.operator.args],
-      env: [],
-    };
-  }
-
   /** The voice's instructions ride on the first prompt, since the protocol has no system prompt. */
   private async prompt(said: string, opening: boolean): Promise<unknown[]> {
     if (!opening) return [{ type: 'text', text: said }];
+    const instructions = this.options.instructions;
+    if (instructions !== undefined)
+      return [
+        { type: 'text', text: instructions },
+        { type: 'text', text: said },
+      ];
     const words = (await this.options.vocabulary?.().catch(() => [])) ?? [];
     const address = await this.options.address?.().catch(() => undefined);
     const name = await this.options.name?.().catch(() => undefined);
@@ -288,6 +292,7 @@ export class AcpBrain implements Brain {
   }
 
   private async keep(sessionId: string): Promise<void> {
+    if (this.options.remember === false) return;
     try {
       await this.conversations.keep(
         this.name,
@@ -375,6 +380,15 @@ async function endSession(running: Live): Promise<void> {
   await Promise.race([closed, late]);
   clearTimeout(timer);
   running.child.kill('SIGTERM');
+}
+
+function operatorServer(operator: { command: string; args: readonly string[] }): unknown {
+  return {
+    name: OPERATOR_SERVER,
+    command: operator.command,
+    args: [...operator.args],
+    env: [],
+  };
 }
 
 function readSessionId(session: unknown): string | null {

@@ -17,6 +17,7 @@ import {
   type DaemonEvent,
   type DaemonResponse,
   type DeviceRecord,
+  type RemoteCapability,
   type DisplayKind,
 } from '@memnox/core';
 import { NOT_ALLOWED_ON_MAC, OPEN_THE_MAC } from '../src/daemon/done-lines';
@@ -25,6 +26,7 @@ import { askedFromPhone } from '../src/daemon/asked-from';
 import type { Peer } from '../src/daemon/socket-write';
 import { VoiceSurface } from '../src/daemon/voice-surface';
 import { BRAIN_CHUNK, type Brain } from '../src/operator/brain';
+import { THE_DESKTOP } from '../src/this-machine';
 
 /**
  * When a phone asks, words go back to the phone and hands stay on the Mac: a show only the Mac can
@@ -45,7 +47,12 @@ class Lines implements Peer {
   }
 }
 
-function phone(capabilities = [...PHONE_DEFAULT_CAPABILITIES]): DeviceRecord {
+/** A phone the Mac took mac back from, since a phone pairs holding everything and these tests are about one without it. */
+const WITHOUT_MAC = PHONE_DEFAULT_CAPABILITIES.filter(
+  (each) => each !== REMOTE_CAPABILITY.MAC,
+);
+
+function phone(capabilities: RemoteCapability[] = [...WITHOUT_MAC]): DeviceRecord {
   return {
     id: 'dev_phone',
     name: 'iPhone',
@@ -511,7 +518,7 @@ describe('the Mac staying silent while a phone holds the voice', () => {
       mac.lines.flatMap((each) =>
         each.event?.voiceOn === undefined ? [] : [each.event.summary],
       ),
-    ).toEqual(['Talking on iPhone', 'Back on the Mac']);
+    ).toEqual(['Talking on iPhone', `Back on ${THE_DESKTOP}`]);
     expect(voiceOnOf(remote)).toEqual([]);
   });
 

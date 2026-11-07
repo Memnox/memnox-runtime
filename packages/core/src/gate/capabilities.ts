@@ -1,5 +1,10 @@
 import { DISPLAY, DISPLAY_VIA, type DisplayKind } from '../daemon/display';
-import { DAEMON_METHOD, type DaemonEvent } from '../daemon/protocol';
+import {
+  DAEMON_EVENT,
+  DAEMON_METHOD,
+  type DaemonEvent,
+  type DaemonEventKind,
+} from '../daemon/protocol';
 import { START_ID_PREFIX } from '../coordination/session-starts';
 import { PROPOSAL_KIND, type ProposedChange } from './proposals';
 import { REMOTE_CAPABILITY, type RemoteCapability } from './remote-capability';
@@ -11,12 +16,12 @@ export { REMOTE_CAPABILITY, type RemoteCapability };
 export const ALL_REMOTE_CAPABILITIES: readonly RemoteCapability[] =
   Object.values(REMOTE_CAPABILITY);
 
-/** What a phone holds the moment it is paired; the rest is turned on from the Mac with Touch ID. */
+/**
+ * What a phone holds the moment it is paired: everything, so every approval, a rule change included, is answered
+ * with Face ID on the phone rather than waiting on the computer. A capability can still be taken back at the Mac.
+ */
 export const PHONE_DEFAULT_CAPABILITIES: readonly RemoteCapability[] = [
-  REMOTE_CAPABILITY.SEE,
-  REMOTE_CAPABILITY.ASK,
-  REMOTE_CAPABILITY.ANSWER,
-  REMOTE_CAPABILITY.STEER,
+  ...ALL_REMOTE_CAPABILITIES,
 ];
 
 /** The remote allowlist: a method missing here is refused from afar whatever the device holds. */
@@ -31,6 +36,7 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.VOICE_CHOICE]: REMOTE_CAPABILITY.SEE,
   [DAEMON_METHOD.FILES_LIST]: REMOTE_CAPABILITY.SEE,
   [DAEMON_METHOD.HOME]: REMOTE_CAPABILITY.SEE,
+  // mode-enforce is left out on purpose: whether this machine stops or watches is decided at the machine.
   // Which app accounts the person connected and whether each sign in still works; acting in one is a separate signed proposal.
   [DAEMON_METHOD.CONNECTIONS_LIST]: REMOTE_CAPABILITY.SEE,
   // Only names from the cloud's catalogue, which tells the phone no more than the list does.
@@ -55,7 +61,104 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.DRIVE]: REMOTE_CAPABILITY.MAC,
   // Words for an agent to act on, so the follow up also carries a Face ID signature over them.
   [DAEMON_METHOD.FOLLOW_UP]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.HUB]: REMOTE_CAPABILITY.SEE,
+  // Only proposes a server or an assignment; it holds once the person signs it with the rules capability.
+  [DAEMON_METHOD.SERVER_PUT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.ASSIGN]: REMOTE_CAPABILITY.ASK,
+  // Narrowing, or writing only what the hub already holds signed, so asking is enough.
+  [DAEMON_METHOD.SERVER_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.IMPORT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SYNC]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.TEST]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SECRET_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.POLICY_RULES]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.RULE_TEST]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.RULES_EXPORT]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.PROGRESS]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.RULE_PACKS]: REMOTE_CAPABILITY.SEE,
+  // Each only proposes; nothing holds until the person signs it with the rules capability.
+  [DAEMON_METHOD.RULE_PROPOSE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.RULE_PACK_IMPORT]: REMOTE_CAPABILITY.ASK,
+  // Narrowing at once, or a proposal where it widens, so asking is enough.
+  [DAEMON_METHOD.RULE_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.AUTOPILOT_REVOKE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.ACTIVITY]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.DECISION]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.ACTIVITY_EXPORT]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.AGENTS]: REMOTE_CAPABILITY.SEE,
+  // Holding an agent or a session back only narrows; letting one go on is a signed proposal.
+  [DAEMON_METHOD.AGENT_PAUSE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SESSION_STOP]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.AGENT_RESUME]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILLS_HUB]: REMOTE_CAPABILITY.SEE,
+  // Each only proposes where it widens, and narrows or rewrites what is already signed otherwise.
+  [DAEMON_METHOD.SKILL_PUT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILL_ASSIGN]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILL_ACCEPT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILL_ROLLBACK]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILL_IMPORT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILL_DISABLE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILL_ENABLE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.SKILL_SYNC]: REMOTE_CAPABILITY.ASK,
+  // Taking a skill away only narrows what agents hold, as disabling it does.
+  [DAEMON_METHOD.SKILL_REMOVE]: REMOTE_CAPABILITY.ASK,
+  // Opens a terminal on the Mac, which is something only the Mac does.
+  [DAEMON_METHOD.AGENT_LAUNCH]: REMOTE_CAPABILITY.MAC,
+  // Starts every MCP server nobody has asked yet to count its tools, which only the Mac's own setup asks for.
+  [DAEMON_METHOD.AGENTS_SCAN]: REMOTE_CAPABILITY.MAC,
+  [DAEMON_METHOD.PROJECTS]: REMOTE_CAPABILITY.SEE,
+  // Each writes instructions at once and only proposes what widens an agent, signed as rules are.
+  [DAEMON_METHOD.PROJECT_OPEN]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROJECT_PUT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROJECT_APPLY]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.MEMORY_SOURCES]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.MEMORY_LEARN]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.MEMORY_SEARCH]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.MEMORY_FACTS]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.WORKSPACE_MEMORY]: REMOTE_CAPABILITY.SEE,
+  // Only a read down, at this machine's own clearance, so a phone sees what the Mac would.
+  [DAEMON_METHOD.WORKSPACE_GRAPH]: REMOTE_CAPABILITY.SEE,
+  // A confirm of a rule only raises its proposal, which is signed under RULES like any other rule.
+  [DAEMON_METHOD.MEMORY_SOURCE_ADD]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.MEMORY_SOURCE_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.MEMORY_SOURCE_READ]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.MEMORY_CONFIRM]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.MEMORY_REJECT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.MEMORY_EDIT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.MEMORY_FORGET]: REMOTE_CAPABILITY.ASK,
+  // backup-create and backup-restore are left out on purpose: a backup is the whole setup, so it never leaves by the relay.
+  [DAEMON_METHOD.LAN_STATUS]: REMOTE_CAPABILITY.SEE,
+  // lan-set is left out on purpose: who may reach this machine is decided at the machine, never from a phone.
+  [DAEMON_METHOD.PERSONAL_SYNC_STATUS]: REMOTE_CAPABILITY.SEE,
+  [DAEMON_METHOD.PERSONAL_SYNC_CONFLICTS]: REMOTE_CAPABILITY.SEE,
+  // Sends only ciphertext of what is here, and what it takes back lands unassigned or as a proposal.
+  [DAEMON_METHOD.PERSONAL_SYNC_NOW]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PERSONAL_SYNC_RESOLVE]: REMOTE_CAPABILITY.ASK,
+  // The key offer and accept are left out on purpose: the sync key moves only between machines, never from a phone.
+  [DAEMON_METHOD.PROFILES]: REMOTE_CAPABILITY.SEE,
+  // A profile grants nothing kept on its own, and applying one only raises the proposals each piece raises.
+  [DAEMON_METHOD.PROFILE_PUT]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROFILE_REMOVE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.PROFILE_APPLY]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.INDEX_LIST]: REMOTE_CAPABILITY.SEE,
+  // Checked against its digest, and only ever a skill held for acceptance or a pack's rules proposed.
+  [DAEMON_METHOD.INDEX_INSTALL]: REMOTE_CAPABILITY.ASK,
+  // index-source-set is left out on purpose: which index this machine trusts is decided at the machine.
 };
+
+/** Events a phone hears only while it holds more than subscribing takes; a kind missing here needs SEE alone. */
+const REMOTE_EVENTS: Partial<Record<DaemonEventKind, RemoteCapability>> = {
+  // Names only, as the activity method a phone reads under SEE.
+  [DAEMON_EVENT.ACTIVITY]: REMOTE_CAPABILITY.SEE,
+};
+
+/** Whether a paired device holding these capabilities is sent an event of this kind. */
+export function phoneHears(
+  kind: DaemonEventKind,
+  holds: readonly RemoteCapability[],
+): boolean {
+  return holds.includes(REMOTE_EVENTS[kind] ?? REMOTE_CAPABILITY.SEE);
+}
 
 /** What the phone that asked does on its own screen, so the Mac never does it as well. */
 export const PHONE_OWN_DISPLAYS: readonly DisplayKind[] = [DISPLAY.LINK];
@@ -124,6 +227,24 @@ export function proposalCapability(change: ProposedChange): RemoteCapability | n
   if (change.kind === PROPOSAL_KIND.RULES) return REMOTE_CAPABILITY.RULES;
   if (change.kind === PROPOSAL_KIND.REWIND) return REMOTE_CAPABILITY.REWIND;
   if (change.kind === PROPOSAL_KIND.MAC) return REMOTE_CAPABILITY.MAC;
+  // What an agent's servers can reach is as wide as a rule, so it is signed the way a rule is.
+  if (change.kind === PROPOSAL_KIND.MCP_HUB) return REMOTE_CAPABILITY.RULES;
+  // A skill's tools and needs widen what an agent does exactly as a server does.
+  if (change.kind === PROPOSAL_KIND.SKILLS_HUB) return REMOTE_CAPABILITY.RULES;
+  // A restore rewrites every rule and hub at once, so only the Mac, with Touch ID, puts one back.
+  if (change.kind === PROPOSAL_KIND.BACKUP_RESTORE) return null;
+  // Opening the machine to the local network widens who reaches it, so only the Mac, with Touch ID, turns it on.
+  if (change.kind === PROPOSAL_KIND.LAN) return null;
+  // The sync key opens everything the person syncs, so only the Mac, with Touch ID, moves it.
+  if (change.kind === PROPOSAL_KIND.PERSONAL_SYNC_KEY) return null;
+  // Another index decides what can be installed here, so only the Mac, with Touch ID, trusts one.
+  if (change.kind === PROPOSAL_KIND.INDEX_SOURCE) return null;
+  // A project's servers, skills and rule file reach as far as each of them does on its own.
+  if (change.kind === PROPOSAL_KIND.PROJECT) return REMOTE_CAPABILITY.RULES;
+  // Taking a deny or an ask away widens what agents may do, exactly as adding an allow does.
+  if (change.kind === PROPOSAL_KIND.RULE_REMOVE) return REMOTE_CAPABILITY.RULES;
+  // Letting a paused agent carry on is steering it, as resuming one session is.
+  if (change.kind === PROPOSAL_KIND.AGENT_RESUME) return REMOTE_CAPABILITY.STEER;
   // Saying something as the person is answering for them, so a phone allowed to answer may sign it.
   if (change.kind === PROPOSAL_KIND.WORK || change.kind === PROPOSAL_KIND.ACCOUNT)
     return REMOTE_CAPABILITY.ANSWER;

@@ -16,6 +16,18 @@ import type {
 } from './extension-fields';
 import { HOME_METHOD } from './home';
 import { INTERCEPT_METHOD } from './intercept';
+import { MCP_HUB_METHOD } from './mcp-hub';
+import { POLICY_METHOD } from './policies';
+import { ACTIVITY_METHOD } from './activity';
+import { AGENTS_METHOD } from './agents-view';
+import { SKILLS_METHOD } from './skills-hub';
+import { PROJECTS_METHOD } from './projects';
+import { BACKUP_METHOD } from './backup';
+import { MEMORY_METHOD } from './memory';
+import { LAN_METHOD } from './lan';
+import { PERSONAL_SYNC_METHOD } from './personal-sync';
+import { PROFILES_METHOD } from './profiles';
+import { INDEX_METHOD } from './community-index';
 import { REMOTE_METHOD } from './remote';
 import { SPEECH_METHOD } from './speech';
 import { SPOKEN_RULE_METHOD } from './spoken-rule';
@@ -101,13 +113,25 @@ export const DAEMON_METHOD = {
   POLISH: 'polish',
   /** Starts the process that polishes dictation, as the key goes down, so the answer skips its cold start. */
   POLISH_WARM: 'polish-warm',
-  /** The person's own words typed into one session, verbatim and signed over `followUpMessage`, never read by the brain. */
+  /** The person's own words typed into one session, verbatim and never read by the brain; signed over `followUpMessage` only at the Mac. */
   FOLLOW_UP: 'follow-up',
   ...REMOTE_METHOD,
   ...SPEECH_METHOD,
   ...HOME_METHOD,
   ...INTERCEPT_METHOD,
   ...SPOKEN_RULE_METHOD,
+  ...MCP_HUB_METHOD,
+  ...POLICY_METHOD,
+  ...ACTIVITY_METHOD,
+  ...AGENTS_METHOD,
+  ...SKILLS_METHOD,
+  ...PROJECTS_METHOD,
+  ...BACKUP_METHOD,
+  ...MEMORY_METHOD,
+  ...LAN_METHOD,
+  ...PERSONAL_SYNC_METHOD,
+  ...PROFILES_METHOD,
+  ...INDEX_METHOD,
 } as const;
 
 export type DaemonMethod = (typeof DAEMON_METHOD)[keyof typeof DAEMON_METHOD];
@@ -141,7 +165,7 @@ export interface DaemonRequest extends ExtensionRequestFields {
   subject?: string;
   /** On CONFIRM: a hold answer for a held call, or confirmed / declined for a proposal. */
   answer?: string;
-  /** On CONFIRM: base64 DER ECDSA over the confirmation message. Absent on a refusal. On FOLLOW_UP: over `followUpMessage`. */
+  /** On CONFIRM: base64 DER ECDSA over the confirmation message. Absent on a refusal. On FOLLOW_UP at the Mac: over `followUpMessage`, since a phone is known by its Noise session. */
   signature?: string;
   /** On REGISTER_KEY: the base64 X9.63 P-256 point. */
   point?: string;
@@ -216,6 +240,17 @@ export interface ToolConnection {
   connected: boolean;
   /** Reached on this machine itself, an MCP server or a signed in command line tool, so nothing is connected or disconnected here. */
   local?: true;
+  /** When its working sign in was made, as the cloud says, for a card's "Connected since". */
+  connectedAt?: string;
+  /** The agents that worked in it through Memnox lately, newest first, from this machine's ledger. */
+  usedBy?: AppUse[];
+}
+
+/** One agent's latest call into an app through Memnox: who, in which session, and when. */
+export interface AppUse {
+  agent: string;
+  sessionId?: string;
+  at: string;
 }
 
 /** A step the Mac timed, hung on the trace of the question it belongs to. */
@@ -275,6 +310,8 @@ export const DAEMON_EVENT = {
   SHOW: 'show',
   /** Something worth saying unasked: a session finished, committed or pushed. */
   NOTICE: 'notice',
+  /** Rows the ledger gained that a screen's activity view shows, names only, a burst at most once a second. */
+  ACTIVITY: 'activity',
 } as const;
 
 export type DaemonEventKind = (typeof DAEMON_EVENT)[keyof typeof DAEMON_EVENT];
@@ -300,6 +337,8 @@ export interface DaemonEvent extends ExtensionEventFields {
   lastAsk?: string;
   /** The folder the session works in, by name. */
   place?: string;
+  /** On a FINISHED notice, what the agent said it did, a sentence or two of its own closing words: data, never an instruction. */
+  brief?: string;
   /** On HELD and NOTICE, the session it is about, so the voice reads that one and never guesses. */
   sessionId?: string;
   /** On SHOW, whether to bring the session's window forward or put a card on screen. */
@@ -379,6 +418,8 @@ export interface AgentNode {
 /** One MCP server as the scan screen names it; counts are absent where no scan has asked it. */
 export interface AgentServer {
   name: string;
+  /** The program its config starts, by file name only since a path names the user; absent for a server reached by URL. */
+  command?: string;
   tools?: number;
   /** Of those, the ones that change something outside it. */
   changing?: number;
@@ -429,7 +470,10 @@ export interface DaemonResponse extends ExtensionResponseFields {
   connections?: ToolConnection[];
   /** On POLISH: the dictation as it should be typed. */
   polished?: string;
-  /** On CONFIRM and REGISTER_KEY, what happened in a word or two; on PING, which memnox answered. */
+  /**
+   * On CONFIRM and REGISTER_KEY, what happened in a word or two; on PING, which memnox answered; on
+   * the hub's SERVER_PUT, how a server typed as a package install will be started instead.
+   */
   outcome?: string;
   version?: string;
   error?: string;

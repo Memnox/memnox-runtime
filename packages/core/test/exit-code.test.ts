@@ -42,17 +42,25 @@ describe('exit codes for a child', () => {
     expect(exitCodeForChild(null, null)).toBe(EXIT.FAILED);
   });
 
-  it('reports a child killed by SIGKILL as 137', async () => {
-    expect(await exitOf('/bin/sh', ['-c', 'kill -KILL $$'])).toBe(137);
-  });
+  // Windows has no /bin/sh and no signals, so a killed child exits with a code instead.
+  it.skipIf(process.platform === 'win32')(
+    'reports a child killed by SIGKILL as 137',
+    async () => {
+      expect(await exitOf('/bin/sh', ['-c', 'kill -KILL $$'])).toBe(137);
+    },
+  );
 
-  it('reports a missing binary as 127 and one it cannot execute as 126', async () => {
-    expect(await exitOf(join(dir, 'missing'), [])).toBe(EXIT.NOT_FOUND);
-    const locked = join(dir, 'locked');
-    await writeFile(locked, '#!/bin/sh\n');
-    await chmod(locked, 0o644);
-    expect(await exitOf(locked, [])).toBe(EXIT.NOT_EXECUTABLE);
-  });
+  // Windows has no execute bit, so a 0o644 file is not refused for that reason.
+  it.skipIf(process.platform === 'win32')(
+    'reports a missing binary as 127 and one it cannot execute as 126',
+    async () => {
+      expect(await exitOf(join(dir, 'missing'), [])).toBe(EXIT.NOT_FOUND);
+      const locked = join(dir, 'locked');
+      await writeFile(locked, '#!/bin/sh\n');
+      await chmod(locked, 0o644);
+      expect(await exitOf(locked, [])).toBe(EXIT.NOT_EXECUTABLE);
+    },
+  );
 
   it('reports a spawn error it does not recognise as an ordinary failure', () => {
     expect(exitCodeForSpawnError(new Error('boom'))).toBe(EXIT.FAILED);

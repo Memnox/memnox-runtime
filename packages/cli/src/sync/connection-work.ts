@@ -1,11 +1,19 @@
 import {
+  connectorSourceOf,
+  CONNECTOR_WEIGHT,
   HTTP,
   MOST_TOOLKITS_FOUND,
+  rankedBySource,
   secondsToMs,
+  TOOLKIT_KIND,
+  TOOLKIT_SUPPORT,
   type ToolConnection,
+  type ToolkitKind,
   type ToolkitSummary,
+  type ToolkitSupport,
 } from '@memnox/core';
 import { callCloud, CloudUnreachable } from './client';
+import { ACCOUNT_REQUIRED } from './cloud-account';
 import {
   CONNECTIONS_NOT_SIGNED_IN,
   connectionsOf,
@@ -16,10 +24,12 @@ import {
   signOutOf,
   type PersonalAnswer,
 } from './personal-work';
+import { MACHINE } from '../this-machine';
 
 /**
  * Connecting and disconnecting the person's own tools from a screen, in words for the person rather than
- * for the voice: every person on every plan connects any tool the cloud's catalogue holds, as themselves.
+ * for the voice: every person signed in to Memnox Cloud, on every plan, connects any tool the cloud's
+ * catalogue holds, as themselves; signed out, the catalogue is browsed and nothing is connected.
  */
 
 /** A person waits on a picker for this, so it is a read's patience rather than a send's. */
@@ -45,13 +55,11 @@ export async function connectLink(
 ): Promise<PersonalAnswer<string>> {
   const slug = toolkitSlug(toolkit);
   if (slug === null) return { ok: false, said: NAME_A_TOOL };
-  // The first connect registers this Mac's personal space, so nobody needs a Memnox account for it.
-  if ((await personalCaller(home)) === null)
-    return { ok: false, said: CONNECTIONS_NOT_SIGNED_IN };
   const answer = await link(home, slug);
-  return answer.ok
-    ? answer
-    : couldNot(answer, `${toolkitTitle(slug)} could not be connected.`);
+  if (answer.ok) return answer;
+  // Signing in is the step, so it is said alone rather than as a failure to connect.
+  if (answer.code === ACCOUNT_REQUIRED) return answer;
+  return couldNot(answer, `${toolkitTitle(slug)} could not be connected.`);
 }
 
 /** Every sign in to one tool undone, answering the list as it now stands. */
@@ -63,7 +71,7 @@ export async function disconnect(
   const slug = toolkitSlug(toolkit);
   if (slug === null) return { ok: false, said: 'Name the tool to disconnect.' };
   if ((await existingCaller(home)) === null)
-    return { ok: false, said: 'Nothing is connected on this Mac yet.' };
+    return { ok: false, said: `Nothing is connected on this ${MACHINE} yet.` };
   const undone = await (seams.signOut ?? signOutOf)(home, slug);
   if (!undone.ok)
     return couldNot(undone, `${toolkitTitle(slug)} could not be disconnected.`);
@@ -81,12 +89,23 @@ export async function connectedAlready(
   return listed.value.some((each) => each.toolkit === toolkit && each.connected);
 }
 
-/** One catalogue entry as the cloud answers it; only the fields a picker shows are read. */
+/** One catalogue entry as the cloud answers it; only the fields a card shows are read. */
 interface CatalogueToolkit {
   slug?: unknown;
   name?: unknown;
   logo?: unknown;
+  description?: unknown;
+  categories?: unknown;
+  kind?: unknown;
+  support?: unknown;
+  source?: unknown;
+  verified?: unknown;
 }
+
+const KINDS: readonly string[] = Object.values(TOOLKIT_KIND);
+const SUPPORTS: readonly string[] = Object.values(TOOLKIT_SUPPORT);
+/** Tags a card's rail counts; a toolkit carrying more is a catalogue gone wrong, not a richer card. */
+const MOST_CATEGORIES = 12;
 
 /** Tools from the cloud's whole catalogue matching the words, read with the person's own token. */
 export async function searchToolkits(
@@ -127,9 +146,55 @@ export function toolkitsFrom(items: unknown): ToolkitSummary[] {
         ? entry.name
         : toolkitTitle(slug);
     const logo = typeof entry.logo === 'string' && entry.logo !== '' ? entry.logo : null;
-    found.push({ slug, name, ...(logo === null ? {} : { logo }) });
+    found.push({
+      slug,
+      name,
+      ...(logo === null ? {} : { logo }),
+      ...cardFieldsOf(entry),
+      ...sourceFieldsOf(entry),
+    });
   }
-  return found.slice(0, MOST_TOOLKITS_FOUND);
+  return rankedBySource(found).slice(0, MOST_TOOLKITS_FOUND);
+}
+
+/** What a newer cloud adds for the console's card, each kept only when it is what it says it is. */
+function cardFieldsOf(entry: CatalogueToolkit): Partial<ToolkitSummary> {
+  const description =
+    typeof entry.description === 'string' && entry.description.trim() !== ''
+      ? entry.description.trim()
+      : undefined;
+  const listed: unknown[] = Array.isArray(entry.categories) ? entry.categories : [];
+  const categories = listed
+    .filter((tag): tag is string => typeof tag === 'string' && tag.trim() !== '')
+    .slice(0, MOST_CATEGORIES);
+  const kind =
+    typeof entry.kind === 'string' && KINDS.includes(entry.kind)
+      ? (entry.kind as ToolkitKind) // one of TOOLKIT_KIND, checked just above
+      : undefined;
+  const level =
+    typeof entry.support === 'object' &&
+    entry.support !== null &&
+    'level' in entry.support
+      ? (entry.support as { level: unknown }).level // narrowed by the `in` check above
+      : undefined;
+  const support =
+    typeof level === 'string' && SUPPORTS.includes(level)
+      ? (level as ToolkitSupport) // one of TOOLKIT_SUPPORT, checked just above
+      : undefined;
+  return {
+    ...(description === undefined ? {} : { description }),
+    ...(categories.length === 0 ? {} : { categories }),
+    ...(kind === undefined ? {} : { kind }),
+    ...(support === undefined ? {} : { support }),
+  };
+}
+
+/** Where the entry comes from and the weight a search sorts it by. */
+function sourceFieldsOf(
+  entry: CatalogueToolkit,
+): Pick<ToolkitSummary, 'source' | 'weight'> {
+  const source = connectorSourceOf(entry.source, entry.verified);
+  return { source, weight: CONNECTOR_WEIGHT[source] };
 }
 
 /** The cloud's own reason after a plain sentence; a failure with no status never reached the cloud at all. */

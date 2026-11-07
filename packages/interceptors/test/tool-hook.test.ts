@@ -402,6 +402,8 @@ describe("the machine's mode, read and never written", () => {
     expect(await readMachineMode(home)).toBe(ENFORCEMENT_MODE.ENFORCE);
 
     await writeFile(config, 'mode = "observe"\n');
+    // Windows chmod only sets a read-only flag, so a 0o000 file stays readable there.
+    if (process.platform === 'win32') return;
     await chmod(config, 0o000);
     expect(await readMachineMode(home)).toBe(ENFORCEMENT_MODE.ENFORCE);
     await chmod(config, 0o600);

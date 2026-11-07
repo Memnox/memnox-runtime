@@ -17,6 +17,7 @@ import {
 } from '@memnox/core';
 import {
   containmentFor,
+  egressPlaces,
   EgressSeam,
   HookAuthorizer,
   recordEgress,
@@ -40,16 +41,19 @@ interface EgressSeamInput {
   /** The rules in force; absent, only containment and the payload inspector rule. */
   gate?: LocalGate;
   log: (message: string) => void;
-  /** A proxy of one session's own, which ignores whatever a client claims to be. */
+  /** A proxy of one session's own, which ignores whatever session or agent a client claims to be. */
   fixed?: EgressCaller;
   now?: () => Date;
 }
 
 /** The seam every proxy here is built around, the daemon's and a session's alike. */
 export function egressSeamFor(input: EgressSeamInput): EgressSeam {
-  const { home, fixed } = input;
+  const { home } = input;
+  // The key is the client's to prove on every request, so the fixed caller never carries one.
+  const fixed = input.fixed === undefined ? undefined : withoutKey(input.fixed);
   const now = input.now ?? ((): Date => new Date());
   const record = recordEgress(openLedger(home), new DestinationRecords(home), now);
+  const places = egressPlaces(home);
   return new EgressSeam({
     authorizer: new HookAuthorizer({
       ...(input.gate === undefined ? {} : { gate: input.gate }),
@@ -67,7 +71,21 @@ export function egressSeamFor(input: EgressSeamInput): EgressSeam {
       }),
     ruled: (ruling) =>
       record(fixed === undefined ? ruling : { ...ruling, caller: fixed }),
+    // A session's own proxy is that session's, though only a client with its key is placed in it.
+    placeOf:
+      fixed === undefined
+        ? places
+        : (caller): ReturnType<typeof places> =>
+            places({
+              ...fixed,
+              ...(caller.key === undefined ? {} : { key: caller.key }),
+            }),
   });
+}
+
+function withoutKey(caller: EgressCaller): EgressCaller {
+  const { key: _key, ...named } = caller;
+  return named;
 }
 
 /** The caller as the variables a seam reads, so containment is decided one way everywhere. */

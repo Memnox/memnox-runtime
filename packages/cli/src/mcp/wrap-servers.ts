@@ -55,6 +55,22 @@ async function wrapOwn(home: string, file: ConfigFile): Promise<string[]> {
 }
 
 /**
+ * Only a repository's own shared servers, behind the proxy through Claude Code's local scope, for
+ * opening a project. Governing what the repository already gives changes nobody's reach.
+ */
+export async function wrapProjectServers(
+  home: string,
+  project: string,
+  resolveBinary?: BinaryResolver,
+): Promise<string[]> {
+  if (!isProxyOnPath(resolveBinary)) return [];
+  const names: string[] = [];
+  for (const file of await readConfigs(home, project))
+    if (file.shared === true) names.push(...(await wrapShared(home, project, file)));
+  return names;
+}
+
+/**
  * A repository's own file, left as the team committed it: an older wrap in it is put back,
  * and its servers go behind the proxy as local copies only this machine reads.
  */

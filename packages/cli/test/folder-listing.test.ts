@@ -88,23 +88,31 @@ describe('listing a folder for a phone', () => {
     expectRefused(await list(home, '/etc'));
   });
 
-  it('refuses a link inside the home that leads out of it', async () => {
-    const home = await homeWithFiles();
-    const outside = await mkdtemp(join(tmpdir(), 'memnox-outside-'));
-    await symlink(outside, join(home, 'Elsewhere'));
-    expectRefused(await list(home, 'Elsewhere'));
-  });
+  // Creating a symlink on Windows needs admin rights or developer mode, which a runner may lack.
+  it.skipIf(process.platform === 'win32')(
+    'refuses a link inside the home that leads out of it',
+    async () => {
+      const home = await homeWithFiles();
+      const outside = await mkdtemp(join(tmpdir(), 'memnox-outside-'));
+      await symlink(outside, join(home, 'Elsewhere'));
+      expectRefused(await list(home, 'Elsewhere'));
+    },
+  );
 
-  it('refuses a folder where credentials sit, named or reached through a link', async () => {
-    const home = await homeWithFiles();
-    await mkdir(join(home, 'Library', 'Keychains'), { recursive: true });
-    await symlink(join(home, '.ssh'), join(home, 'keys'));
+  // Creating a symlink on Windows needs admin rights or developer mode, which a runner may lack.
+  it.skipIf(process.platform === 'win32')(
+    'refuses a folder where credentials sit, named or reached through a link',
+    async () => {
+      const home = await homeWithFiles();
+      await mkdir(join(home, 'Library', 'Keychains'), { recursive: true });
+      await symlink(join(home, '.ssh'), join(home, 'keys'));
 
-    expectRefused(await list(home, '.ssh'));
-    expectRefused(await list(home, 'keys'));
-    expectRefused(await list(home, 'Library/Keychains'));
-    expect((await list(home, 'Library')).ok).toBe(true);
-  });
+      expectRefused(await list(home, '.ssh'));
+      expectRefused(await list(home, 'keys'));
+      expectRefused(await list(home, 'Library/Keychains'));
+      expect((await list(home, 'Library')).ok).toBe(true);
+    },
+  );
 
   it('refuses a file and a folder that is not there, in a plain line', async () => {
     const home = await homeWithFiles();

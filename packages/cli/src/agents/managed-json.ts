@@ -7,7 +7,7 @@ import {
 } from 'jsonc-parser';
 import { serversKeyOf } from '@memnox/core';
 
-import { MANAGED_SERVER, type ManagedServer, type RewriteResult } from './managed-shape';
+import { MANAGED_SERVER, type ManagedEntry, type RewriteResult } from './managed-shape';
 
 /**
  * The Memnox entry in a JSON config, edited by span through `jsonc-parser`, because these
@@ -63,7 +63,7 @@ function editedEntry(
 export function withManagedJsonServer(
   raw: string,
   serversKey: string,
-  server: ManagedServer,
+  server: ManagedEntry,
 ): RewriteResult {
   return withJsonEntry(raw, serversKey, MANAGED_SERVER, server);
 }

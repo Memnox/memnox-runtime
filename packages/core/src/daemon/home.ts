@@ -9,7 +9,18 @@ export const HOME_METHOD = {
   HOME: 'home',
   /** Turns the ready suggestion into a rule proposal the person confirms with Touch ID or Face ID. */
   HAND_OVER: 'hand-over',
+  /**
+   * Puts this machine from observe into enforce, unsigned because it only narrows what agents may do. Going back
+   * to observe widens, so no surface offers it here and it stays `memnox protect --observe` at the terminal.
+   */
+  MODE_ENFORCE: 'mode-enforce',
 } as const;
+
+/** What a mode change moved, so a screen says where it was and where it is now. */
+export interface HomeModeSet {
+  was: string;
+  now: string;
+}
 
 /** An agent at work right now, as one line on the home. */
 export interface HomeWorking {
@@ -67,4 +78,6 @@ export interface HomeResponseFields {
   home?: HomeView;
   /** On HAND_OVER: the proposal the person now confirms, by its id. */
   proposed?: string;
+  /** On MODE_ENFORCE: the mode this machine was in and the one it is in now. */
+  modeSet?: HomeModeSet;
 }

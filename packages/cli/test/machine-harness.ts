@@ -12,22 +12,32 @@ export const HOME = '/home/dev';
 /** A directory the reader is standing in, which holds the credentials a repo has. */
 export const PROJECT = '/srv/checkout';
 
+/**
+ * A path as the fixtures write it, with `/`, since the code joins with `\\` on Windows and the same file must be
+ * found whichever separator built its name.
+ */
+const asWritten = (path: string): string => path.split('\\').join('/');
+
 /** No fixtures anywhere else: this stands in for the reader's own machine in tests. */
 export class FakeMachine implements MachineReader, HardenWriter {
-  constructor(private readonly files: Map<string, string>) {}
+  private readonly files: Map<string, string>;
+
+  constructor(files: Map<string, string>) {
+    this.files = new Map([...files].map(([path, text]) => [asWritten(path), text]));
+  }
 
   static from(files: Record<string, string>): FakeMachine {
     return new FakeMachine(new Map(Object.entries(files)));
   }
 
   async exists(path: string): Promise<boolean> {
-    return this.files.has(path);
+    return this.files.has(asWritten(path));
   }
   async read(path: string): Promise<string | null> {
-    return this.files.get(path) ?? null;
+    return this.files.get(asWritten(path)) ?? null;
   }
   async list(path: string): Promise<string[]> {
-    const prefix = `${path}/`;
+    const prefix = `${asWritten(path)}/`;
     return [...this.files.keys()]
       .filter((each) => each.startsWith(prefix))
       .map((each) => each.slice(prefix.length));
@@ -39,10 +49,10 @@ export class FakeMachine implements MachineReader, HardenWriter {
     return 'dev';
   }
   async write(path: string, contents: string): Promise<void> {
-    this.files.set(path, contents);
+    this.files.set(asWritten(path), contents);
   }
   async remove(path: string): Promise<void> {
-    this.files.delete(path);
+    this.files.delete(asWritten(path));
   }
   get paths(): string[] {
     return [...this.files.keys()];

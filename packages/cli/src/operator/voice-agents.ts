@@ -9,6 +9,7 @@ import {
   type VoiceBrainKind,
   type VoiceBrainSpec,
 } from './voice-brains';
+import { MACHINE } from '../this-machine';
 
 /**
  * Which of the person's agents the voice thinks with. Nothing here is asked of a person in
@@ -62,7 +63,7 @@ export class VoiceAgents {
     const spec = voiceBrainSpec(kind);
     if (spec === null) return `the voice knows no agent called ${kind}`;
     if (!this.installed().some((each) => each.kind === spec.kind)) {
-      return `${spec.label} is not installed on this Mac`;
+      return `${spec.label} is not installed on this ${MACHINE}`;
     }
     await this.keepChoice(spec.kind);
     return this.roster();
@@ -88,6 +89,23 @@ export class VoiceAgents {
     }
     // None answered, so the first one's own failure is what the person hears.
     return first;
+  }
+
+  /**
+   * Every agent to try, without checking any: the one named in the env, the one chosen, then the
+   * rest installed in preference order, each once.
+   */
+  async preferred(): Promise<VoiceBrainSpec[]> {
+    const installed = this.installed();
+    const named = this.seams.env[VOICE_BRAIN_VAR];
+    const pinned = named === undefined ? null : voiceBrainSpec(named);
+    const chosen = await this.chosen(installed);
+    const first = [pinned, chosen].filter(
+      (spec): spec is VoiceBrainSpec => spec !== null,
+    );
+    return [...first, ...installed].filter(
+      (spec, index, all) => all.findIndex((other) => other.kind === spec.kind) === index,
+    );
   }
 
   private checkAll(): Promise<VoiceAgentStatus[]> {

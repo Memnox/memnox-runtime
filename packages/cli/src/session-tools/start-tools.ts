@@ -33,6 +33,7 @@ import { editorName, PLACE, placeFor, surfaceOf } from './start-place';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import { withBrief } from './work-tools';
 import { APP_BUNDLE_SUFFIX, SAID, TOOL_ARG } from './session-tools.constants';
+import { MACHINE } from '../this-machine';
 
 /**
  * Starting a new agent session out loud: "start Claude in memnox cloud on the failing test". It
@@ -452,8 +453,7 @@ const TOO_LONG =
 const ONLY_KNOWN_AGENTS = `Only ${Object.keys(STARTABLE_AGENT).join(' or ')} can be started by voice, so nothing was proposed and nothing earlier is waiting any more. Ask which of these they meant, as one question; never start an earlier proposal in its place.`;
 const UNKNOWN_EDITOR =
   'That is not an editor a session can start in, which are VS Code, Cursor and Windsurf, so nothing was proposed. When they meant the Cursor agent itself, propose it again with agent cursor and app "true"; otherwise ask which editor or agent they meant, as one question. Never start it in another editor or as another agent.';
-const NO_SUCH_REPOSITORY =
-  'No repository or folder on this Mac goes by that name. Offer the closest from known, by name, or to create a folder by that name with create_folder and start there, as one question.';
+const NO_SUCH_REPOSITORY = `No repository or folder on this ${MACHINE} goes by that name. Offer the closest from known, by name, or to create a folder by that name with create_folder and start there, as one question.`;
 const READ_BACK =
   'Nothing has started. Read it back once, as one whole sentence that ends in a courteous question, saying the app when in names one, such as "Shall I open the Codex app in memnox runtime to review your changes?", "Shall I start Codex in memnox macos to review the changes?" or "I can start Claude Code in memnox cloud on the failing auth test. Would you like me to go ahead?", varying the words. Say nothing before it and nothing after the question. Call start_session with this id only after they say yes. When they asked for exactly this plainly, the agent, the repository and what to do, or only to open an app such as "open Hermes", or they already said yes to it or corrected it to this, skip the read back: their asking is their yes, so call start_session with this id now. Never ask the same thing twice.';
 const READ_BACK_CHAT =
@@ -464,7 +464,5 @@ const START_NOW =
   'They asked for exactly this, naming the agent and the repository, so their asking is their yes: call start_session with this id now, in this same reply, without a word before it. Never read it back, and never say that nothing has started.';
 const GONE =
   'That start is gone or more than five minutes old. Read it back again with propose_start.';
-const NO_TERMINAL =
-  'The terminal they named is not installed on this Mac, or no tmux or WezTerm is running to open a window in, so nothing was proposed. Say so plainly and offer a new terminal tab instead, as a question.';
-const NO_EDITOR =
-  'The editor they named is not installed on this Mac, so nothing was proposed. Say so plainly and offer a new terminal tab instead, as a question; never start it anywhere else unasked.';
+const NO_TERMINAL = `The terminal they named is not installed on this ${MACHINE}, or no tmux or WezTerm is running to open a window in, so nothing was proposed. Say so plainly and offer a new terminal tab instead, as a question.`;
+const NO_EDITOR = `The editor they named is not installed on this ${MACHINE}, so nothing was proposed. Say so plainly and offer a new terminal tab instead, as a question; never start it anywhere else unasked.`;

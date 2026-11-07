@@ -14,6 +14,7 @@ import { createFolder } from '../operator/new-folder';
 import type { OperatorCall } from './operator-call';
 import { textArg, type SessionToolDeps, type ToolArgs } from './read-tools';
 import type { ToolDefinition } from './session-tools';
+import { MACHINE } from '../this-machine';
 
 /**
  * Any folder in the person's home, found by how they said its name and opened where they ask,
@@ -42,8 +43,7 @@ const OPENERS: readonly string[] = Object.values(FOLDER_OPENER);
 export const FOLDER_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'folders',
-    description:
-      'Find a folder on this Mac by its name as they said it, even misheard, like "mem nocks mac OS" for memnox-macos, or with no name, the folders they use most. Each comes with its path and how much they use it, most used first. Call it before open_folder when you do not already have the path.',
+    description: `Find a folder on this ${MACHINE} by its name as they said it, even misheard, like "mem nocks mac OS" for memnox-macos, or with no name, the folders they use most. Each comes with its path and how much they use it, most used first. Call it before open_folder when you do not already have the path.`,
     inputSchema: {
       type: 'object',
       properties: {

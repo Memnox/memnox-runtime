@@ -12,7 +12,6 @@ import type { Command } from 'commander';
 
 import {
   DECISION_EFFECT,
-  EFFECT_PRECEDENCE,
   EXIT,
   loadPoliciesFromFile,
   loadPolicySet,
@@ -20,16 +19,7 @@ import {
   MEMNOX_HOME,
   readPolicyRegistry,
   renameEffectsIn,
-  resolveShellLine,
-  classifyToolCall,
-  ownToolDeclaration,
-  HTTP_METHOD_ARGUMENT,
-  verbForAction,
-  verbTableFor,
   POLICY_REGISTRY_FILE,
-  targetsRuledOn,
-  alternativeFor,
-  type ActionRequest,
   type Alternative,
   type LocalVerdict,
   type PolicySet,
@@ -45,6 +35,7 @@ import {
   renderWhatDidNotLoad,
 } from '../policy-path';
 import { forgetPolicyFiles, registerPolicyFile } from '../policy-registry';
+import { dryRun, insteadOf } from '../policy-requests';
 
 interface TestOptions {
   file?: string;
@@ -63,58 +54,6 @@ interface CheckOptions {
 interface PolicyDeps {
   home: () => string;
   env: NodeJS.ProcessEnv;
-}
-
-/**
- * Classified exactly as a seam would: the whole line through the shell resolver, so a
- * redirect or a second command is ruled on, and each with the class a rule narrows by.
- */
-function requestsFor(
-  input: string,
-  options: TestOptions,
-  env: NodeJS.ProcessEnv,
-): ActionRequest[] {
-  // Already a namespaced action, e.g. from a git hook.
-  if (!input.includes(' ') && input.includes('.')) {
-    const toolClass = options.class ?? classOfAction(input);
-    return [
-      {
-        action: input,
-        ...(options.target === undefined ? {} : { target: options.target }),
-        ...(toolClass === undefined ? {} : { toolClass }),
-      },
-    ];
-  }
-
-  const actions = resolveShellLine(input, env).actions;
-  if (actions.length === 0) return [{ action: input }];
-  return actions.flatMap((resolved) => {
-    const common = {
-      action: resolved.action,
-      toolClass: options.class ?? String(resolved.class),
-      ...(resolved.method === undefined
-        ? {}
-        : { arguments: { [HTTP_METHOD_ARGUMENT]: resolved.method } }),
-    };
-    if (options.target !== undefined) return [{ ...common, target: options.target }];
-    // One per file named, through the shell seam's own helper, so this stays a dry run.
-    return targetsRuledOn(resolved).map((target) => ({
-      ...common,
-      ...(target === undefined ? {} : { target }),
-    }));
-  });
-}
-
-/** The class a seam would send for an action named outright: its verb, or its tool name. */
-function classOfAction(action: string): string | undefined {
-  const verb = verbForAction(action, verbTableFor);
-  if (verb !== null) return verb.class;
-  if (!action.startsWith('mcp.')) return undefined;
-  const parts = action.split('.');
-  const tool = parts.pop() ?? '';
-  // `mcp.<server>.<tool>` names its server, which the hook reads Memnox's own tools by.
-  const server = parts.length === 2 ? (parts[1] ?? '') : '*';
-  return classifyToolCall(tool, {}, ownToolDeclaration(server, tool)).class;
 }
 
 export function registerPolicyCommand(
@@ -220,23 +159,8 @@ async function runTest(
   renderWhatDidNotLoad(context, rules);
 
   const gate = new LocalGate(rules.policies, { agentName: options.agent });
-  // The strictest verdict of every target the action names, since any one of them decides.
-  const verdict = requestsFor(action, options, deps.env)
-    .map((request) => gate.evaluate(request))
-    .reduce((worst, each) =>
-      EFFECT_PRECEDENCE[each.effect] > EFFECT_PRECEDENCE[worst.effect] ? each : worst,
-    );
-
-  // The verb table's way forward where a rule only said to ask, the same one a seam prints.
-  const fromTable = resolveShellLine(action, deps.env).actions.find(
-    (each) => each.alternative !== undefined,
-  );
-  const alternative = alternativeFor(
-    verdict.alternative,
-    fromTable?.alternative,
-    fromTable?.action ?? action,
-  );
-  flow.rows(action, verdictRows(context, verdict, alternative, fromTable?.action));
+  const { verdict, alternative, refused } = dryRun(gate, action, options, deps.env);
+  flow.rows(action, verdictRows(context, verdict, alternative, refused));
   flow.close(style.effect(verdict.effect, `${verdict.effect.toUpperCase()}  ${action}`));
   flow.hint('Nothing was run, and nothing on this machine changed.');
   if (verdict.effect !== DECISION_EFFECT.ALLOW) process.exitCode = EXIT.FAILED;
@@ -376,19 +300,4 @@ async function fixOneFile(
     },
   ]);
   return true;
-}
-
-/**
- * What to do, in the rule's words, with the action beside it where it names another one.
- * The verb table's way forward is filed under the refused action, which is no help to repeat.
- */
-function insteadOf(alternative: Alternative, refused: string | undefined): string {
-  if (alternative.action === refused) return alternative.note;
-  const action =
-    alternative.resource === undefined
-      ? alternative.action
-      : `${alternative.action} ${alternative.resource}`;
-  return alternative.note === alternative.action
-    ? action
-    : `${alternative.note} (${action})`;
 }

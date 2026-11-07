@@ -104,6 +104,13 @@ export function noiseKeyPath(home: string): string {
   return join(home, MEMNOX_HOME, REMOTE_DIR, NOISE_KEY_FILE);
 }
 
+const LAN_IDENTITY_FILE = 'lan.json';
+
+/** The random name and id this machine goes by on the local network, so a paired phone finds it again. */
+export function lanIdentityPath(home: string): string {
+  return join(home, MEMNOX_HOME, REMOTE_DIR, LAN_IDENTITY_FILE);
+}
+
 const UPDATES_FILE = 'updates.jsonl';
 
 /** One line per upgrade `memnox update` ran, so an unverified install stays on the record. */
