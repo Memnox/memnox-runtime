@@ -396,9 +396,16 @@ Memnox knows:
 
 Memnox becomes the shared coordination layer.
 
-**Coordination is tasks people write.** A person creates a task, assigns it to an agent and closes it. The agent reports progress, says when it is blocked, claims it is done, and may ask to hand the task to another agent; a person accepts that handoff. A handoff carries references rather than copies, so the agent that receives it reads each one through its own clearance and learns nothing it could not already see.
+**Memnox coordinates agent work; it does not replace project management.** Where a team already runs its work in Linear, Jira, Asana or anything like them, that system stays the source of truth for its issues, assignees, priorities and deadlines, and Memnox joins the issue where it already lives rather than asking anybody to write it again. A product manager files *Implement payment retry* and gives it to Alice; Alice connects Claude Code to it in Memnox; Claude Code receives the architecture notes and the standards, starts, asks before it touches a protected resource, and its completion reaches Linear only through an integration somebody authorised. The developer and the manager keep working in Linear.
 
-Memnox never plans the work, splits it, schedules it, picks an assignee or runs anything. The orchestration an agent already has keeps executing the workflow. And a task grants nothing: being assigned work changes no rule, so the authority an agent holds is the same before and after.
+So four things are kept apart, because an issue can have many sessions, many attempts and many handoffs:
+
+* **An external task** is a reference to the issue in the system that owns it, never a copy.
+* **Agent work** is the relationship between one agent and one piece of work: who answers for it, which sessions it ran, what it reported, where it stands.
+* **A handoff** asks to move work or responsibility to another agent or another person, and a person accepts it.
+* **An internal task** is a light work item for somebody with no task manager at all: *ask my research agent to compare five payment providers, then have my writing agent prepare a comparison.*
+
+Memnox never plans the work, splits it, schedules it, picks an assignee or runs anything. The orchestration an agent already has keeps executing it. Agent work grants nothing: being joined to an issue changes no rule, and a handoff carries references rather than copies, so whoever receives it reads each one through its own clearance and learns nothing it could not already see.
 
 ---
 
@@ -445,6 +452,8 @@ Cannot:
 The important difference is that Memnox doesn't just define what an agent **can technically access**.
 
 It understands what the agent is **supposed to accomplish**.
+
+**Every agent has a person who answers for it.** An agent is represented by the person responsible for it, the way a colleague is in Linear or Jira: Alice answers for her Claude Code, decides what work it is given, what it is told and what it may reach, and watches what it does. A manager can give an issue to Alice and Alice can give part of it to her agent, so the person who assigned the work and the person who answers for the agent need not be the same. The agent does not inherit Alice's authority, and when Alice leaves, the organization hands her agents to somebody else rather than leaving them answering to nobody.
 
 **A profile is the job; a connection is how it reaches us.** The identity, role, mission and responsibilities belong to an agent profile, which no harness and no machine owns. The same profile can be reached through a hook on a laptop, a gateway in front of a hosted agent and an MCP door inside a SaaS product, and two agents of the same harness can hold two different jobs. A profile can exist before anything is connected to it, which is what a template is: a job description waiting for a real agent, never an agent pretending to run.
 
