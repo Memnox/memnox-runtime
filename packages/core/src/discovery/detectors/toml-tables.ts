@@ -1,4 +1,5 @@
 import { findOutsideQuotes, openBrackets, unquote } from '../scalar-text';
+import { withoutLeading, withoutTrailing } from '../../domain/plain-text';
 
 /**
  * Enough TOML to read a config's server tables, because a full parser is a dependency
@@ -26,7 +27,7 @@ export function parseTomlTables(raw: string | null): TomlTables {
 
     if (text.startsWith('[')) {
       // `[[x]]` is an array of tables; it names one and we only ever read the last.
-      const header = text.replace(/^\[+/, '').replace(/\]+$/, '').trim();
+      const header = withoutTrailing(withoutLeading(text, '['), ']').trim();
       current = tables.get(header) ?? new Map<string, TomlValue>();
       tables.set(header, current);
       continue;

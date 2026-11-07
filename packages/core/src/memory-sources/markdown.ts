@@ -12,7 +12,8 @@ export const MOST_PASSAGES_PER_DOCUMENT = 50;
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const HEADING = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
-const WIKI_LINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
+// No part may hold a `[`, so a scan from one `[[` stops at the next rather than running on past it.
+const WIKI_LINK = /\[\[([^[\]|#]+)(?:#[^[\]|]*)?(?:\|([^[\]]+))?\]\]/g;
 const FENCE = /^(```|~~~)/;
 
 /** `key: value` lines of a frontmatter block; nested YAML is kept as written, never parsed. */

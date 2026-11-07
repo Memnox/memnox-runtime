@@ -6,6 +6,7 @@ import {
   type NativeBlockMarkers,
 } from '../distribute/native-files';
 import type { MemoryLayerFilePlan } from '../daemon/memory-layers';
+import { withoutLeading, withoutTrailing } from '../domain/plain-text';
 
 /**
  * The three memory layers as text, with no file read here: the MEMORY.md index with one line per
@@ -54,8 +55,8 @@ export interface RouterInput {
   keep: readonly string[];
 }
 
-/** A link in Markdown, which is what makes a line of the index point at a file. */
-const LINK = /\]\([^)]+\)/;
+/** Where a Markdown link's target opens, which is what makes a line of the index point at a file. */
+const LINK_OPEN = '](';
 /** Words that say a skill reads data live rather than from what it was told. */
 const LIVE_DATA =
   /\b(database|table|sql|query|postgres|mysql|sqlite|bigquery|snowflake|endpoint|api)\b|https?:\/\//i;
@@ -74,7 +75,22 @@ export function unlinkedLines(text: string): number {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '' && !line.startsWith('#') && !line.startsWith('<!--'))
-    .filter((line) => !LINK.test(line)).length;
+    .filter((line) => !hasLink(line)).length;
+}
+
+/** Whether a line holds a markdown link, `](target)`, found by index so a long run of `](` costs its length. */
+function hasLink(line: string): boolean {
+  const lastClose = line.lastIndexOf(')');
+  for (
+    let open = line.indexOf(LINK_OPEN);
+    open !== -1;
+    open = line.indexOf(LINK_OPEN, open + 1)
+  ) {
+    const target = open + LINK_OPEN.length;
+    if (target >= lastClose) return false;
+    if (line[target] !== ')') return true;
+  }
+  return false;
 }
 
 /** The router's lines: the index first, then each department, each live data skill, and what to keep. */
@@ -140,11 +156,11 @@ export function memoryFileText(memory: { title: string; statement: string }): st
 
 /** A file name from a memory's subject, lowercase and plain, never a path. */
 export function memorySlug(subject: string, id: string): string {
-  const words = subject
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MOST_SLUG_CHARS);
+  const dashed = subject.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const words = withoutLeading(withoutTrailing(dashed, '-'), '-').slice(
+    0,
+    MOST_SLUG_CHARS,
+  );
   return words === '' ? id.toLowerCase().replace(/[^a-z0-9]+/g, '-') : words;
 }
 

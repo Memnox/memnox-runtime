@@ -39,8 +39,11 @@ const PLAIN_FLAGS: readonly string[] = [
 /** Words that end one shell command and start another, so the line is more than one install. */
 const SHELL_JOINS = /[;&|<>`$()]/;
 
-/** A Python package spec split into the name it runs as and the rest: `comfy-mcp[all]>=1.0`. */
-const PYTHON_SPEC = /^([A-Za-z0-9][A-Za-z0-9._-]*)(.*)$/;
+/** The name a Python package spec runs as, at its start: `comfy-mcp` in `comfy-mcp[all]>=1.0`. */
+const PYTHON_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*/;
+
+/** A spec is one line, so a break in it is refused rather than read as more of the spec. */
+const LINE_BREAK = /[\n\r\u2028\u2029]/;
 
 type Ecosystem = 'python' | 'node';
 
@@ -110,9 +113,8 @@ function nodeLine(spec: string): RunnerLine {
 
 /** A bare name runs as itself; a spec with a version or extras is fetched as written and run by its name. */
 function pythonLine(spec: string): RunnerLine | null {
-  const match = PYTHON_SPEC.exec(spec);
-  const name = match?.[1];
-  if (match === null || name === undefined) return null;
-  const args = match[2] === '' ? [name] : [UVX_FROM, spec, name];
+  const name = PYTHON_NAME.exec(spec)?.[0];
+  if (name === undefined || LINE_BREAK.test(spec)) return null;
+  const args = name === spec ? [name] : [UVX_FROM, spec, name];
   return { command: PYTHON_RUNNER, args, installs: spec };
 }

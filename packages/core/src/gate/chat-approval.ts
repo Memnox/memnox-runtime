@@ -19,6 +19,7 @@ import {
   APPROVAL_ROUTE,
   type ApprovalRoute,
 } from '../constants/approval-route.constants';
+import { withoutTrailing } from '../domain/plain-text';
 
 /** Long enough for somebody to come back from a meeting, short enough to be about now. */
 export const CHAT_APPROVAL_MS = 30 * 60 * 1000;
@@ -391,7 +392,7 @@ function saidWithNo(held: PendingApproval): string {
   const reason =
     held.answerReason === undefined
       ? ''
-      : ` They said: ${held.answerReason.replace(/[.!?]+$/, '')}.`;
+      : ` They said: ${withoutTrailing(held.answerReason, '.!?')}.`;
   const instead =
     held.request.alternative === undefined ? '' : ` ${held.request.alternative}`;
   return `${reason}${instead}`;

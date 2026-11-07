@@ -11,6 +11,7 @@ import {
   type MemorySource,
   type MemorySourceRecord,
 } from './memory-source';
+import { withoutTrailing } from '../domain/plain-text';
 
 /** A source record turned into the reader for its kind, with whatever reaches outside injected. */
 
@@ -35,7 +36,9 @@ export function memorySourceFor(
       const secret = record.secret;
       return new SupermemorySource({
         baseUrl:
-          record.location === '' ? SUPERMEMORY_URL : record.location.replace(/\/+$/, ''),
+          record.location === ''
+            ? SUPERMEMORY_URL
+            : withoutTrailing(record.location, '/'),
         key: () =>
           secret === undefined ? Promise.resolve(undefined) : reach.secret(secret),
         fetch: reach.fetch,

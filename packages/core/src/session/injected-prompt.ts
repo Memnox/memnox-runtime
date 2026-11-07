@@ -18,8 +18,8 @@ const INJECTED_TAGS = [
   'local-command-caveat',
 ];
 
-/** A tag the host wraps around what it adds, with everything inside it. */
-const HOST_TAG = /<([a-z_-]+)[^>]*>[\s\S]*?<\/\1>/gi;
+/** The name a host tag opens with, read where the scan stands. */
+const TAG_NAME = /[a-z_-]+/iy;
 
 /** Lines the harness or Memnox writes at the head of a turn it adds, read case blind. */
 const INJECTED_LINES: readonly RegExp[] = [
@@ -55,7 +55,7 @@ function withoutHostTags(said: string): string {
   let text = said;
   for (let before = ''; before !== text;) {
     before = text;
-    text = text.replace(HOST_TAG, '');
+    text = withoutOneRoundOfHostTags(text);
   }
   return text;
 }
@@ -67,4 +67,31 @@ export function isInjectedOrigin(origin: unknown): boolean {
   const { kind, handback } = origin as { kind?: unknown; handback?: unknown };
   if (handback === true) return true;
   return typeof kind === 'string' && INJECTED_ORIGINS.has(kind);
+}
+
+/**
+ * Every tag the host wraps around what it adds, `<name ...>` to the first `</name>`, taken off with everything inside.
+ * Found by index rather than one pattern, and every search is remembered, so a long or hostile turn costs its length.
+ */
+function withoutOneRoundOfHostTags(text: string): string {
+  const lower = text.toLowerCase();
+  const lastClose = new Map<string, number>();
+  let kept = '';
+  let from = 0;
+  let nextGt = -1;
+  for (let open = text.indexOf('<'); open !== -1; open = text.indexOf('<', open + 1)) {
+    TAG_NAME.lastIndex = open + 1;
+    const name = TAG_NAME.exec(text)?.[0].toLowerCase();
+    if (name === undefined) continue;
+    if (nextGt < TAG_NAME.lastIndex) nextGt = text.indexOf('>', TAG_NAME.lastIndex);
+    if (nextGt === -1) break;
+    const closer = `</${name}>`;
+    if (!lastClose.has(name)) lastClose.set(name, lower.lastIndexOf(closer));
+    if ((lastClose.get(name) ?? -1) <= nextGt) continue;
+    const close = lower.indexOf(closer, nextGt + 1);
+    kept += text.slice(from, open);
+    from = close + closer.length;
+    open = from - 1;
+  }
+  return kept + text.slice(from);
 }

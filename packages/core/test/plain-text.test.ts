@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mcpToolParts, withoutTrailing } from '../src/domain/plain-text';
+import { mcpToolParts, withoutLeading, withoutTrailing } from '../src/domain/plain-text';
 
 describe('text taken apart by index', () => {
   it('drops every copy of one character at the end, and only there', () => {
@@ -7,6 +7,19 @@ describe('text taken apart by index', () => {
     expect(withoutTrailing('/a/b', '/')).toBe('/a/b');
     expect(withoutTrailing('///', '/')).toBe('');
     expect(withoutTrailing('C:\\memnox\\bin\\\\', '\\')).toBe('C:\\memnox\\bin');
+  });
+
+  it('drops a run of any of several characters, at either end', () => {
+    expect(withoutTrailing('Not now!?.', '.!?')).toBe('Not now');
+    expect(withoutLeading('[[servers]]', '[')).toBe('servers]]');
+    expect(withoutLeading('---', '-')).toBe('');
+    expect(withoutLeading('a-b', '-')).toBe('a-b');
+  });
+
+  it('takes a long run in time linear in its length', () => {
+    const run = '-'.repeat(200_000);
+    expect(withoutTrailing(`a${run}`, '-')).toBe('a');
+    expect(withoutLeading(`${run}a`, '-')).toBe('a');
   });
 
   it('splits an MCP tool name at the first separator after its server', () => {

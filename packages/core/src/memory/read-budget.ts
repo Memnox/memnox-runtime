@@ -180,7 +180,8 @@ function spanOf(
 ): { from: number; to: number } | null {
   if (range.heading !== undefined) return headingSpan(all, range.heading);
   if (range.lines === undefined) return { from: 1, to: all.length };
-  const match = /^\s*(\d+)\s*(?:(-)\s*(\d+)?)?\s*$/.exec(range.lines);
+  // Trimmed first, so no two runs of spaces sit side by side for the pattern to split between them.
+  const match = /^(\d+)\s*(?:(-)\s*(\d+)?)?$/.exec(range.lines.trim());
   if (match === null) return null;
   const from = Math.max(1, Number(match[1]));
   const to =

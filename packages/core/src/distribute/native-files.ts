@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { withoutTrailing } from '../domain/plain-text';
 
 /**
  * Files Memnox writes in an agent's own format, so each agent reads them natively. Every file
@@ -146,7 +147,7 @@ export function withNativeBlock(
   body: string,
   markers: NativeBlockMarkers,
 ): string {
-  const theirs = withoutNativeBlock(text, markers).replace(/\n+$/, '');
+  const theirs = withoutTrailing(withoutNativeBlock(text, markers), '\n');
   const block = `${markers.begin}\n${body.trim()}\n${markers.end}\n`;
   return theirs === '' ? block : `${theirs}\n\n${block}`;
 }
