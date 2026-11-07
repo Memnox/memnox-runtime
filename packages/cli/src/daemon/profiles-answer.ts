@@ -1,6 +1,7 @@
 import { PROFILES_METHOD, type DaemonRequest, type DaemonResponse } from '@memnox/core';
 import { applyProfile, readProfileViews } from '../profiles/profile-apply';
 import { profileFrom, removeProfile, writeProfile } from '../profiles/profile-store';
+import { responsiblePersonHere } from '../profiles/responsible-person';
 
 /**
  * The profile methods. Keeping, replacing or forgetting a profile grants nothing, so each is done
@@ -37,7 +38,11 @@ async function answerOf(
     case PROFILES_METHOD.PROFILE_PUT: {
       const read = profileFrom(request.profileDraft, now.toISOString());
       if ('problems' in read) return refused(read.problems.join(' '));
-      await writeProfile(home, read.profile);
+      await writeProfile(home, {
+        ...read.profile,
+        responsiblePerson:
+          read.profile.responsiblePerson ?? (await responsiblePersonHere(home)),
+      });
       return { ok: true };
     }
     case PROFILES_METHOD.PROFILE_REMOVE:

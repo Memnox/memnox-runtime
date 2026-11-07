@@ -29,10 +29,11 @@ export interface AgentProfile {
   /** MCP Hub servers, by name. */
   mcpServers: string[];
   rulePack?: ProfileRulePack;
-  /** The people who answer for this job, by the names their workspace knows them by. */
-  owners: string[];
-  /** The operating system user, until a person names an owner. */
-  ownerHint?: string;
+  /**
+   * The one person who answers for this job: the signed in account, else the person at this
+   * machine. Asks go to them; the agent never holds their authority, and the gate never reads it.
+   */
+  responsiblePerson?: string;
   /** Projects this job works in, by id or root; empty is not narrowed by project. */
   projects: string[];
   /** The catalog template it was copied from, which grants nothing and is only a label. */

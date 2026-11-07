@@ -96,7 +96,12 @@ function profileJobOf(
     'instructions',
     problems,
   );
-  const ownerHint = textOf(raw.ownerHint, MOST_NAME_CHARS, 'ownerHint', problems);
+  const responsiblePerson = textOf(
+    raw.responsiblePerson,
+    MOST_NAME_CHARS,
+    'responsiblePerson',
+    problems,
+  );
   const templateOf = textOf(raw.templateOf, MOST_ID_CHARS, 'templateOf', problems);
   const role = roleOf(raw.role, problems);
   return {
@@ -104,8 +109,7 @@ function profileJobOf(
     ...(role === undefined ? {} : { role }),
     responsibilities: namesOf(raw.responsibilities, 'responsibilities', problems),
     ...(instructions === undefined ? {} : { instructions }),
-    owners: namesOf(raw.owners, 'owners', problems),
-    ...(ownerHint === undefined ? {} : { ownerHint }),
+    ...(responsiblePerson === undefined ? {} : { responsiblePerson }),
     projects: namesOf(raw.projects, 'projects', problems),
     ...(templateOf === undefined ? {} : { templateOf }),
   };

@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DAEMON_METHOD, type DaemonRequest, type DaemonResponse } from '@memnox/core';
@@ -50,7 +50,6 @@ describe('agent profiles kept on this machine', () => {
       name: 'Backend',
       description: 'What a backend change needs',
       responsibilities: [],
-      owners: [],
       projects: [],
       skills: ['review'],
       mcpServers: ['linear'],
@@ -68,7 +67,7 @@ describe('agent profiles kept on this machine', () => {
         role: 'reviewer',
         responsibilities: ['read the diff', 'say what is risky'],
         instructions: 'Never push.',
-        owners: ['ana'],
+        responsiblePerson: 'ana',
         projects: ['prj_0123456789ab'],
         templateOf: 'code-review',
       },
@@ -80,10 +79,20 @@ describe('agent profiles kept on this machine', () => {
       role: 'reviewer',
       responsibilities: ['read the diff', 'say what is risky'],
       instructions: 'Never push.',
-      owners: ['ana'],
+      responsiblePerson: 'ana',
       projects: ['prj_0123456789ab'],
       templateOf: 'code-review',
     });
+  });
+
+  it('names the person at this machine as responsible when the form names nobody', async () => {
+    const home = await homeWithV1();
+    const put = await ask(home, {
+      method: DAEMON_METHOD.PROFILE_PUT,
+      profileDraft: { name: 'Writer' },
+    });
+    const writer = (put.profiles ?? []).find((each) => each.id === 'writer');
+    expect(writer?.responsiblePerson).toBe(userInfo().username);
   });
 
   it('refuses a role a rule could never match', async () => {

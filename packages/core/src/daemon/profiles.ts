@@ -35,8 +35,7 @@ export interface ProfileDraft {
   role?: string;
   responsibilities?: string[];
   instructions?: string;
-  owners?: string[];
-  ownerHint?: string;
+  responsiblePerson?: string;
   projects?: string[];
   templateOf?: string;
 }
@@ -47,8 +46,8 @@ export interface ProfileJob {
   role?: string;
   responsibilities: string[];
   instructions?: string;
-  owners: string[];
-  ownerHint?: string;
+  /** Who answers for it; on a view, the person at this machine when none was named. */
+  responsiblePerson?: string;
   projects: string[];
   templateOf?: string;
 }
