@@ -11,6 +11,8 @@ export interface WrapOptions<Input> {
   /** The arguments as the rules read them; the input itself when it is already an object. */
   argsOf?: (input: Input) => Readonly<Record<string, unknown>>;
   cwd?: string;
+  /** The agent profile this tool works under, so its records name the job. */
+  profileId?: string;
 }
 
 /** What a refused call throws, carrying the decision so a caller can say why in its own words. */
@@ -32,6 +34,7 @@ export function wrapTool<Input, Output>(
     const context: CallContext = {
       sessionId: options.session(input),
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.profileId === undefined ? {} : { profileId: options.profileId }),
     };
     const decision = await guard.authorize(name, args, context);
     if (!decision.allowed) throw new ToolRefused(decision);

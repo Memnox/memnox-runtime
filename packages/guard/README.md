@@ -43,6 +43,34 @@ For any other function a framework calls a tool, `wrapTool` asks first and throw
 const refund = wrapTool(guard, 'issue_refund', issueRefund, { session: () => sessionId });
 ```
 
+## The job, and the work a person gave it
+
+Name the agent's profile, its job, and every record carries it beside the agent: pass
+`profileId` to `createGuard` (or set `MEMNOX_PROFILE`), or to one `wrapTool` whose tool works
+under another job.
+
+```ts
+const guard = createGuard({ agent: 'support-bot', profileId: 'customer-support' });
+const triage = wrapTool(guard, 'get_ticket', getTicket, {
+  session: () => sessionId,
+  profileId: 'triage',
+});
+```
+
+A person points the agent at an issue in Linear, Jira, GitHub or Asana. The agent reads it and
+reports how it is going; only the person closes it or hands it on:
+
+```ts
+const [work] = await guard.myWork(); // { id, status, issue: { source, externalId, url } }
+await guard.reportProgress({ workId: work.id, note: 'drafted the reply', refs: [{ kind: 'pr', id: '17' }] });
+await guard.reportProgress({ workId: work.id, note: 'sent for review', state: 'done_claimed' });
+await guard.requestHandoff({ workId: work.id, toProfile: 'billing', reason: 'needs a refund' });
+```
+
+These call the workspace's MCP door, `POST /v1/workspaces/<ws>/mcp`, with the tools
+`memnox_my_work`, `memnox_report_progress` and `memnox_request_handoff`. Nothing here starts,
+assigns or closes work, and Memnox keeps a reference to the issue rather than a copy.
+
 An agent that only speaks MCP needs no library: point its MCP client at the workspace's
 gateway, `/v1/workspaces/<ws>/gateway/<server>`, with its token and an `x-memnox-agent`
 header, and every `tools/call` is ruled on before it reaches the server.
