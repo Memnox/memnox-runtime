@@ -1,0 +1,42 @@
+name: Release the Apple Noise framework
+
+# The Mac app links MemnoxNoise.xcframework, which git never holds, so every release tag attaches a
+# built one to its GitHub release and somebody working on memnox-desktop alone downloads it there
+# rather than cloning this repo and building it with cargo. Run by hand for a tag made before this.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to build and attach to, such as v0.15.0
+        required: true
+
+# Writing the release is all this needs, and npm is left to release.yml.
+permissions:
+  contents: write
+
+jobs:
+  xcframework:
+    runs-on: macos-15
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - run: sh native/noise/scripts/build-xcframework.sh
+      # ditto keeps the framework's symlinks and layout, which a plain zip of the folder can lose.
+      - name: Pack it with its checksum
+        working-directory: native/noise/build
+        run: |
+          ditto -c -k --keepParent MemnoxNoise.xcframework MemnoxNoise.xcframework.zip
+          shasum -a 256 MemnoxNoise.xcframework.zip > MemnoxNoise.xcframework.zip.sha256
+      # The release is made here when the tag has none yet, and an earlier upload is replaced, so a rerun is safe.
+      - name: Attach it to the release
+        working-directory: native/noise/build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "memnox $TAG on npm, with the Noise framework the Mac app links."
+          gh release upload "$TAG" MemnoxNoise.xcframework.zip MemnoxNoise.xcframework.zip.sha256 --clobber
