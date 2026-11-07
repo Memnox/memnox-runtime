@@ -2,7 +2,7 @@ import { readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   AGENT_PROFILE_VERSION,
-  MEMNOX_HOME,
+  profilesDirFor,
   MOST_RULE_PACK_CHARS,
   readJsonFile,
   writeJsonFile,
@@ -17,7 +17,6 @@ import {
  * names its job and what it bundles and grants nothing by being kept: only applying it proposes.
  */
 
-const PROFILES_DIR = 'profiles';
 const JSON_SUFFIX = '.json';
 const MOST_NAME_CHARS = 80;
 const MOST_DESCRIPTION_CHARS = 500;
@@ -30,10 +29,6 @@ const ROLE_PATTERN = new RegExp(`^[A-Za-z0-9._-]{1,${MOST_ID_CHARS}}$`);
 
 /** A version 1 file reads as this with no job set, and is written back as version 2. */
 export type StoredProfile = AgentProfile;
-
-function profilesDirFor(home: string): string {
-  return join(home, MEMNOX_HOME, PROFILES_DIR);
-}
 
 /** The name made safe for a file: lower case words joined by a hyphen, as `backend-engineering`. */
 function profileIdOf(name: string): string {

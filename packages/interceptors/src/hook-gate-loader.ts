@@ -1,6 +1,8 @@
 import { homedir } from 'node:os';
 
 import {
+  agentIdFor,
+  boundRoleOf,
   CODE_FINGERPRINT_FILE,
   FileAllowances,
   fingerprintPolicies,
@@ -59,6 +61,7 @@ export async function loadHookGate(
     return null;
   }
   const overlays = await overlaysInForce(home);
+  const agentRole = await roleFor(config, home);
 
   // A registered file that is gone stopped every command on the machine, git included,
   // so it is skipped out loud and the rules that are still there stay in force.
@@ -78,7 +81,7 @@ export async function loadHookGate(
     [...(await loadPolicyFiles(config.policyFiles, sources)), ...fingerprint],
     {
       agentName: config.agentName ?? DEFAULT_AGENT_NAME,
-      ...(config.agentRole === undefined ? {} : { agentRole: config.agentRole }),
+      ...(agentRole === undefined ? {} : { agentRole }),
       ...(config.principal === undefined ? {} : { principal: config.principal }),
       task,
       stateFacts: stateLabelsOf(overlays, now()),
@@ -94,6 +97,15 @@ export async function loadHookGate(
     },
   );
   return noticing(gate, config, home);
+}
+
+/**
+ * `--role` and `MEMNOX_AGENT_ROLE` arrive as `config.agentRole` and win; otherwise the role of
+ * the profile bound to this agent, so a hook session matches the rules a `memnox run` would.
+ */
+async function roleFor(config: HookConfig, home: string): Promise<string | undefined> {
+  if (config.agentRole !== undefined) return config.agentRole;
+  return boundRoleOf(home, agentIdFor(config.agentName ?? DEFAULT_AGENT_NAME));
 }
 
 /**

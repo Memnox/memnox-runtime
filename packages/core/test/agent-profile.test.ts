@@ -1,6 +1,12 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  agentBindingsPathFor,
   agentIdFor,
+  boundRoleOf,
+  profilesDirFor,
   defaultProfileIdFor,
   isDefaultProfileId,
   sessionRoleOf,
@@ -27,5 +33,37 @@ describe('agent profiles', () => {
     expect(sessionRoleOf({ profile: 'coder' })).toBe('coder');
     expect(sessionRoleOf({ flag: ' ', profile: 'coder' })).toBe('coder');
     expect(sessionRoleOf({})).toBeUndefined();
+  });
+});
+
+describe('the role of a bound profile, read off disk', () => {
+  const homeWith = (bindings: unknown, profile?: unknown): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'memnox-bound-role-'));
+    mkdirSync(join(dir, '.memnox', 'agents'), { recursive: true });
+    mkdirSync(join(dir, '.memnox', 'profiles'), { recursive: true });
+    writeFileSync(agentBindingsPathFor(dir), JSON.stringify(bindings));
+    if (profile !== undefined) {
+      writeFileSync(join(profilesDirFor(dir), 'release.json'), JSON.stringify(profile));
+    }
+    return dir;
+  };
+  const bound = { agt_codex: { profileId: 'release', boundAt: '2026-11-07' } };
+
+  it('is the role the bound profile states', async () => {
+    const dir = homeWith(bound, { id: 'release', role: 'deployer' });
+    expect(await boundRoleOf(dir, 'agt_codex')).toBe('deployer');
+    expect(await boundRoleOf(dir, 'agt_cursor')).toBeUndefined();
+  });
+
+  it('is nothing for a missing profile, a role that is not one, or a binding naming a path', async () => {
+    expect(await boundRoleOf(homeWith(bound), 'agt_codex')).toBeUndefined();
+    expect(
+      await boundRoleOf(homeWith(bound, { role: 'deploy er; rm' }), 'agt_codex'),
+    ).toBeUndefined();
+    const escaping = { agt_codex: { profileId: '../../etc/role', boundAt: 'x' } };
+    expect(await boundRoleOf(homeWith(escaping), 'agt_codex')).toBeUndefined();
+    expect(
+      await boundRoleOf(mkdtempSync(join(tmpdir(), 'memnox-none-')), 'agt_codex'),
+    ).toBeUndefined();
   });
 });

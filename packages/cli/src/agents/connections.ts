@@ -1,6 +1,5 @@
-import { join } from 'node:path';
 import {
-  MEMNOX_HOME,
+  agentBindingsPathFor,
   readJsonFile,
   writeJsonFile,
   type ProfileBinding,
@@ -12,15 +11,8 @@ import {
  * an agent nobody bound answers to its default profile, which is computed and never written.
  */
 
-const AGENTS_DIR = 'agents';
-const CONNECTIONS_FILE = 'connections.json';
-
-function connectionsPath(home: string): string {
-  return join(home, MEMNOX_HOME, AGENTS_DIR, CONNECTIONS_FILE);
-}
-
 export async function readBindings(home: string): Promise<ProfileBindings> {
-  const parsed = await readJsonFile<unknown>(connectionsPath(home));
+  const parsed = await readJsonFile<unknown>(agentBindingsPathFor(home));
   if (parsed === null || typeof parsed !== 'object') return {};
   const kept: Record<string, ProfileBinding> = {};
   // Narrowed to an object above, and every entry is checked below.
@@ -43,7 +35,7 @@ export async function bindProfile(
   agentId: string,
   binding: ProfileBinding,
 ): Promise<void> {
-  await writeJsonFile(connectionsPath(home), {
+  await writeJsonFile(agentBindingsPathFor(home), {
     ...(await readBindings(home)),
     [agentId]: binding,
   });
@@ -54,6 +46,6 @@ export async function unbindProfile(home: string, agentId: string): Promise<bool
   const bindings = await readBindings(home);
   if (bindings[agentId] === undefined) return false;
   const { [agentId]: _dropped, ...rest } = bindings;
-  await writeJsonFile(connectionsPath(home), rest);
+  await writeJsonFile(agentBindingsPathFor(home), rest);
   return true;
 }
