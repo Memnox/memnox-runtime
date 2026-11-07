@@ -54,16 +54,13 @@ export async function readConnections(
     readBindings(home),
     readNames(home),
   ]);
+  const levelled = (
+    found: Parameters<typeof connectionsFor>[0],
+    views: ReadonlyMap<string, AgentView>,
+  ): Promise<AgentConnection[]> =>
+    withLevels(home, connectionsFor(found, bindings), views, deps.seamDigest);
   if (snapshot === null)
-    return {
-      connections: await withLevels(
-        home,
-        connectionsFor([], bindings),
-        new Map(),
-        deps.seamDigest,
-      ),
-      agents: [],
-    };
+    return { connections: await levelled([], new Map()), agents: [] };
   const views = deps.views ?? (await readAgentsView(home, deps));
   const agents = snapshot.agents.map((agent, index) => {
     const view = views[index];
@@ -79,12 +76,7 @@ export async function readConnections(
     agents.flatMap((agent) => (agent.view === undefined ? [] : [[agent.id, agent.view]])),
   );
   return {
-    connections: await withLevels(
-      home,
-      connectionsFor(evidence, bindings),
-      byId,
-      deps.seamDigest,
-    ),
+    connections: await levelled(evidence, byId),
     agents,
     takenAt: snapshot.takenAt,
   };
