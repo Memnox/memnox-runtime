@@ -383,11 +383,10 @@ describe('a machine pulling from a control plane', () => {
     expect(facts).toContain('freeze:deploys');
   });
 
-  /* An open-ended condition is held for a day past the last sync, so a machine that
-     keeps syncing keeps holding it. The 304 is the ordinary answer, so a horizon
-     that only moved on a changed bundle would let a standing incident lapse on
-     every machine still faithfully checking in. */
-  it('moves the horizon of an open-ended condition on a 304', async () => {
+  /* An open-ended condition is held until the plane lifts it, so a machine whose last
+     sync was days ago, and the 304 it gets once it checks in again, still enforce a
+     standing incident rather than letting it lapse while the network was away. */
+  it('holds an open-ended condition however long ago the last sync was', async () => {
     const first = await pullBundle(home, account());
     expect(first.outcome).toBe('applied');
 
@@ -399,7 +398,7 @@ describe('a machine pulling from a control plane', () => {
     );
     expect(
       stateLabelsOf(await overlaysInForce(home), new Date().toISOString()),
-    ).not.toContain('incident:*');
+    ).toContain('incident:*');
 
     await pullBundle(home, account(), first.hash);
 
