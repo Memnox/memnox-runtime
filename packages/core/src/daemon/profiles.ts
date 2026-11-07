@@ -30,9 +30,30 @@ export interface ProfileDraft {
   /** MCP Hub servers, by name. */
   mcpServers?: string[];
   rulePack?: ProfileRulePack;
+  /** The job, each field optional so a version 1 form still fills a profile in. */
+  purpose?: string;
+  role?: string;
+  responsibilities?: string[];
+  instructions?: string;
+  owners?: string[];
+  ownerHint?: string;
+  projects?: string[];
+  templateOf?: string;
 }
 
-export interface ProfileView {
+/** The job fields a profile shows beside what it bundles. */
+export interface ProfileJob {
+  purpose?: string;
+  role?: string;
+  responsibilities: string[];
+  instructions?: string;
+  owners: string[];
+  ownerHint?: string;
+  projects: string[];
+  templateOf?: string;
+}
+
+export interface ProfileView extends ProfileJob {
   /** The name made safe for a file, which every method names the profile by too. */
   id: string;
   name: string;

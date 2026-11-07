@@ -40,6 +40,7 @@ export * from './policy/index';
 export * from './ledger/index';
 export * from './recovery/index';
 export * from './coordination/index';
+export * from './agents/index';
 export * from './session/index';
 export * from './session/money';
 export * from './sync/index';

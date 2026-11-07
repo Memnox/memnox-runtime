@@ -11,6 +11,7 @@ import {
   skillNamed,
   type DiscoveredAgentKind,
   type ProfileApplied,
+  type ProfileJob,
   type ProfileView,
 } from '@memnox/core';
 import { assignSkill } from '../skills/skills-changes';
@@ -136,6 +137,21 @@ async function proposePack(
   else applied.proposed.push(...imported.proposed);
 }
 
+/** The job fields as a screen shows them, absent ones left out rather than sent empty. */
+function jobOf(profile: StoredProfile): ProfileJob {
+  const { purpose, role, instructions, ownerHint, templateOf } = profile;
+  return {
+    ...(purpose === undefined ? {} : { purpose }),
+    ...(role === undefined ? {} : { role }),
+    responsibilities: profile.responsibilities,
+    ...(instructions === undefined ? {} : { instructions }),
+    owners: profile.owners,
+    ...(ownerHint === undefined ? {} : { ownerHint }),
+    projects: profile.projects,
+    ...(templateOf === undefined ? {} : { templateOf }),
+  };
+}
+
 async function isFolder(path: string): Promise<boolean> {
   if (!isAbsolute(path)) return false;
   try {
@@ -171,6 +187,7 @@ export async function readProfileViews(home: string): Promise<ProfileView[]> {
       id: profile.id,
       name: profile.name,
       ...(profile.description === undefined ? {} : { description: profile.description }),
+      ...jobOf(profile),
       skills: profile.skills,
       mcpServers: profile.mcpServers,
       ...(pack === undefined

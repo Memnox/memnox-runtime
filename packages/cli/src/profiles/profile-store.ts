@@ -1,38 +1,35 @@
 import { readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  AGENT_PROFILE_VERSION,
   MEMNOX_HOME,
   MOST_RULE_PACK_CHARS,
   readJsonFile,
   writeJsonFile,
+  type AgentProfile,
   type ProfileDraft,
+  type ProfileJob,
   type ProfileRulePack,
 } from '@memnox/core';
 
 /**
  * Profiles as this machine keeps them, one JSON file each under `~/.memnox/profiles/`. A profile
- * names what it bundles and grants nothing by being kept: only applying it raises proposals.
+ * names its job and what it bundles and grants nothing by being kept: only applying it proposes.
  */
 
 const PROFILES_DIR = 'profiles';
-const PROFILE_VERSION = 1;
 const JSON_SUFFIX = '.json';
 const MOST_NAME_CHARS = 80;
 const MOST_DESCRIPTION_CHARS = 500;
 /** Past what any one person bundles, so a hand written file cannot make a screen draw for ever. */
 const MOST_NAMES = 100;
 const MOST_ID_CHARS = 64;
+/** Room for a page of standing words, past which they belong in a skill. */
+const MOST_INSTRUCTIONS_CHARS = 4000;
+const ROLE_PATTERN = new RegExp(`^[A-Za-z0-9._-]{1,${MOST_ID_CHARS}}$`);
 
-export interface StoredProfile {
-  version: typeof PROFILE_VERSION;
-  id: string;
-  name: string;
-  description?: string;
-  skills: string[];
-  mcpServers: string[];
-  rulePack?: ProfileRulePack;
-  updatedAt: string;
-}
+/** A version 1 file reads as this with no job set, and is written back as version 2. */
+export type StoredProfile = AgentProfile;
 
 function profilesDirFor(home: string): string {
   return join(home, MEMNOX_HOME, PROFILES_DIR);
@@ -70,19 +67,60 @@ export function profileFrom(
   const skills = namesOf(raw.skills, 'skills', problems);
   const mcpServers = namesOf(raw.mcpServers, 'mcpServers', problems);
   const rulePack = rulePackOf(raw.rulePack, problems);
+  const job = profileJobOf(raw, problems);
   if (problems.length > 0) return { problems };
   return {
     profile: {
-      version: PROFILE_VERSION,
+      version: AGENT_PROFILE_VERSION,
       id: profileIdOf(name),
       name,
       ...(description === undefined ? {} : { description }),
+      ...job,
       skills,
       mcpServers,
       ...(rulePack === undefined ? {} : { rulePack }),
       updatedAt: at,
     },
   };
+}
+
+/** The job fields, each optional, so a version 1 file reads whole with none of them. */
+function profileJobOf(
+  raw: Partial<Record<keyof ProfileDraft, unknown>>,
+  problems: string[],
+): ProfileJob {
+  const purpose = textOf(raw.purpose, MOST_DESCRIPTION_CHARS, 'purpose', problems);
+  const instructions = textOf(
+    raw.instructions,
+    MOST_INSTRUCTIONS_CHARS,
+    'instructions',
+    problems,
+  );
+  const ownerHint = textOf(raw.ownerHint, MOST_NAME_CHARS, 'ownerHint', problems);
+  const templateOf = textOf(raw.templateOf, MOST_ID_CHARS, 'templateOf', problems);
+  const role = roleOf(raw.role, problems);
+  return {
+    ...(purpose === undefined ? {} : { purpose }),
+    ...(role === undefined ? {} : { role }),
+    responsibilities: namesOf(raw.responsibilities, 'responsibilities', problems),
+    ...(instructions === undefined ? {} : { instructions }),
+    owners: namesOf(raw.owners, 'owners', problems),
+    ...(ownerHint === undefined ? {} : { ownerHint }),
+    projects: namesOf(raw.projects, 'projects', problems),
+    ...(templateOf === undefined ? {} : { templateOf }),
+  };
+}
+
+/** One word a rule's `roles:` can match, since a role with a space in it could never match one. */
+function roleOf(value: unknown, problems: string[]): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !ROLE_PATTERN.test(value.trim())) {
+    problems.push(
+      `"role" is one word of at most ${MOST_ID_CHARS} letters, digits, dots, dashes or underscores.`,
+    );
+    return undefined;
+  }
+  return value.trim();
 }
 
 function textOf(
