@@ -69,6 +69,10 @@ export interface LevelEvidence {
   proof?: AgentProof;
   /** That run's result per seam. */
   seams?: readonly SeamProof[];
+  /** The enforcement path that proof ran against, as its record keeps it. */
+  proofDigest?: string;
+  /** The enforcement path installed now; a proof counts only while the two match. */
+  currentDigest?: string;
   /** The ledger holds something this agent did. */
   seen: boolean;
 }
@@ -119,12 +123,22 @@ function seamLevel(evidence: LevelEvidence, seam: EnforcementSeam): CapabilityLe
     connection.kind === CONNECTION_KIND.GATEWAY
   )
     return CAPABILITY_LEVEL.MEDIATED;
-  if (proof !== undefined) return provedLevel(evidence, proof, seam);
+  if (proof !== undefined && proofIsCurrent(evidence))
+    return provedLevel(evidence, proof, seam);
   const held =
     connection.kind === CONNECTION_KIND.RUNTIME_MCP_PROXY
       ? seam === SURFACE_KIND.MCP
       : HOOK_SURFACES.includes(seam);
   return held ? CAPABILITY_LEVEL.MEDIATED : seenOnly(evidence);
+}
+
+/** A proof run against another path proves nothing about this one, so it is read as no proof. */
+function proofIsCurrent(evidence: LevelEvidence): boolean {
+  return (
+    evidence.proofDigest !== undefined &&
+    evidence.currentDigest !== undefined &&
+    evidence.proofDigest === evidence.currentDigest
+  );
 }
 
 /** Enforced only where the seam was tested on this agent and refused; held without that is checked. */

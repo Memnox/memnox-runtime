@@ -35,12 +35,39 @@ const SEAMS: SeamProof[] = [
   { seam: 'shell', state: PROOF.NOT_ENFORCED, detail: 'went through' },
 ];
 
+/** The proof ran against the path installed now. */
+const CURRENT = { proofDigest: 'path-a', currentDigest: 'path-a' };
+
 describe('capability levels', () => {
+  it('read a proof run against another path as no proof, so nothing reads enforced', () => {
+    for (const stale of [
+      { proofDigest: 'path-a', currentDigest: 'path-b' },
+      { proofDigest: 'path-a' },
+      { currentDigest: 'path-a' },
+      {},
+    ]) {
+      const levels = levelsOf({
+        connection: HOOKED,
+        proof: PROVED,
+        seams: SEAMS,
+        ...stale,
+        seen: true,
+      });
+      expect(Object.values(levels.enforcement)).not.toContain(CAPABILITY_LEVEL.ENFORCED);
+      // What the hook itself holds is still checked, and what it does not is only seen.
+      expect(levels.enforcement[ENFORCEMENT_SEAM.MCP]).toBe(CAPABILITY_LEVEL.MEDIATED);
+      expect(levels.enforcement[ENFORCEMENT_SEAM.FILES]).toBe(CAPABILITY_LEVEL.MEDIATED);
+      expect(levels.enforcement[ENFORCEMENT_SEAM.SHELL]).toBe(CAPABILITY_LEVEL.OBSERVED);
+      expect(levels.approval).toBe(CAPABILITY_LEVEL.MEDIATED);
+    }
+  });
+
   it('read enforced only where a tested seam refused, and held elsewhere as checked', () => {
     const levels = levelsOf({
       connection: HOOKED,
       proof: PROVED,
       seams: SEAMS,
+      ...CURRENT,
       seen: true,
     });
     expect(levels.enforcement[ENFORCEMENT_SEAM.MCP]).toBe(CAPABILITY_LEVEL.ENFORCED);
@@ -83,6 +110,7 @@ describe('capability levels', () => {
       connection: HOOKED,
       proof: PROVED,
       seams: SEAMS,
+      ...CURRENT,
       seen: true,
     });
     const weak = levelsOf({ connection: ADVISORY, seen: true });

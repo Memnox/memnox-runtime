@@ -16,7 +16,7 @@ import {
 import { readBindings } from '../agents/connections';
 import { displayName, readNames, resolveAgent } from '../agents/names';
 import { readAgentsView } from '../studio/agents-read';
-import { withLevels } from './connection-levels';
+import { withLevels, type SeamDigestRead } from './connection-levels';
 import { readProfileViews } from './profile-apply';
 import { responsiblePersonHere } from './responsible-person';
 
@@ -31,6 +31,8 @@ export interface ConnectionDeps {
   cards: () => Promise<SessionCard[]>;
   /** The agent cards already read, so a caller that has them does not read them twice. */
   views?: AgentView[];
+  /** The installed enforcement path's digest, where a caller has a cheaper read of it than a scan. */
+  seamDigest?: SeamDigestRead;
 }
 
 /** Each connection, and the agents they were read from, so a bind resolves what a person typed. */
@@ -54,7 +56,12 @@ export async function readConnections(
   ]);
   if (snapshot === null)
     return {
-      connections: await withLevels(home, connectionsFor([], bindings), new Map()),
+      connections: await withLevels(
+        home,
+        connectionsFor([], bindings),
+        new Map(),
+        deps.seamDigest,
+      ),
       agents: [],
     };
   const views = deps.views ?? (await readAgentsView(home, deps));
@@ -72,7 +79,12 @@ export async function readConnections(
     agents.flatMap((agent) => (agent.view === undefined ? [] : [[agent.id, agent.view]])),
   );
   return {
-    connections: await withLevels(home, connectionsFor(evidence, bindings), byId),
+    connections: await withLevels(
+      home,
+      connectionsFor(evidence, bindings),
+      byId,
+      deps.seamDigest,
+    ),
     agents,
     takenAt: snapshot.takenAt,
   };

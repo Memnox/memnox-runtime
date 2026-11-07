@@ -4,7 +4,10 @@ import {
   type AgentView,
   type ProofRecord,
 } from '@memnox/core';
-import { readProofRecord } from '../verify/proof-file';
+import { currentSeamDigest, readProofRecord } from '../verify/proof-file';
+
+/** The enforcement path installed now, in the digest a proof keeps. */
+export type SeamDigestRead = () => Promise<string>;
 
 /**
  * Each connection with how sure Memnox is of every capability through it, from the last proof
@@ -14,13 +17,18 @@ export async function withLevels(
   home: string,
   connections: readonly AgentConnection[],
   views: ReadonlyMap<string, AgentView>,
+  seamDigest: SeamDigestRead = () =>
+    currentSeamDigest({ home, dir: home, env: process.env }),
 ): Promise<AgentConnection[]> {
   const record = await readProofRecord(home);
+  // Only worth a scan where there is a proof to hold against it.
+  const currentDigest = record === null ? undefined : await seamDigest();
   return connections.map((connection) => ({
     ...connection,
     levels: levelsOf({
       connection,
       ...proofOf(record, connection.agentId),
+      ...(currentDigest === undefined ? {} : { currentDigest }),
       seen: seenIn(
         connection.agentId === undefined ? undefined : views.get(connection.agentId),
       ),
@@ -31,10 +39,12 @@ export async function withLevels(
 function proofOf(
   record: ProofRecord | null,
   agentId: string | undefined,
-): Pick<Parameters<typeof levelsOf>[0], 'proof' | 'seams'> {
+): Pick<Parameters<typeof levelsOf>[0], 'proof' | 'seams' | 'proofDigest'> {
   if (record === null || agentId === undefined) return {};
   const proof = record.agents.find((each) => each.agentId === agentId);
-  return proof === undefined ? {} : { proof, seams: record.seams };
+  return proof === undefined
+    ? {}
+    : { proof, seams: record.seams, proofDigest: record.seamConfigDigest };
 }
 
 /** Anything of its in the ledger lately is something Memnox at least saw. */
