@@ -3,10 +3,13 @@ import { homedir } from 'node:os';
 import type { Command } from 'commander';
 import type { CliContext } from '../cli-context';
 import {
+  runFromTemplate,
+  runTemplates,
   runBindProfile,
   runNewProfile,
   runShowProfile,
   runUnbindProfile,
+  type FromTemplateOptions,
   type NewProfileOptions,
   type ProfileDeps,
 } from './profile/run-profile';
@@ -43,4 +46,21 @@ export function registerProfileCommand(
     .command('unbind <agent>')
     .description('Put an agent back on its default profile')
     .action(async (agent: string) => runUnbindProfile(deps, agent));
+  registerTemplateSubcommands(profile, deps);
+}
+
+/** Starting from a job description, which copies it and connects no agent. */
+function registerTemplateSubcommands(profile: Command, deps: ProfileDeps): void {
+  profile
+    .command('templates')
+    .description('Job descriptions to start from, none with an agent behind it')
+    .action(async () => runTemplates(deps));
+  profile
+    .command('from-template <template>')
+    .description('Copy a template into a new profile of yours')
+    .option('--name <name>', 'what to call the copy; the template name by default')
+    .option('--skills <names>', 'suggested skills to take, comma separated')
+    .action(async (template: string, options: FromTemplateOptions) =>
+      runFromTemplate(deps, template, options),
+    );
 }

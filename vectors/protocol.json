@@ -256,6 +256,8 @@
       "profile-apply",
       "profile-bind",
       "profile-unbind",
+      "templates",
+      "profile-from-template",
       "index-list",
       "index-install",
       "index-source-set"

@@ -143,6 +143,9 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   // Choosing which job an agent works under steers it; a profile carrying a role binds only at the Mac.
   [DAEMON_METHOD.PROFILE_BIND]: REMOTE_CAPABILITY.STEER,
   [DAEMON_METHOD.PROFILE_UNBIND]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.TEMPLATES]: REMOTE_CAPABILITY.SEE,
+  // Only writes a new profile, which grants nothing until it is applied or bound.
+  [DAEMON_METHOD.PROFILE_FROM_TEMPLATE]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.INDEX_LIST]: REMOTE_CAPABILITY.SEE,
   // Checked against its digest, and only ever a skill held for acceptance or a pack's rules proposed.
   [DAEMON_METHOD.INDEX_INSTALL]: REMOTE_CAPABILITY.ASK,

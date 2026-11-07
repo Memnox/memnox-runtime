@@ -1,5 +1,8 @@
 import {
+  draftFromTemplate,
+  PROFILE_TEMPLATES,
   PROFILES_METHOD,
+  templateNamed,
   type DaemonRequest,
   type DaemonResponse,
   type SessionCard,
@@ -92,9 +95,31 @@ async function answerOf(
       );
     case PROFILES_METHOD.PROFILE_UNBIND:
       return outcomeOf(await unbindAgentProfile(home, request.agentId, deps));
+    case PROFILES_METHOD.TEMPLATES:
+      return { ok: true, templates: [...PROFILE_TEMPLATES] };
+    case PROFILES_METHOD.PROFILE_FROM_TEMPLATE:
+      return fromTemplate(home, request, now);
     default:
       return { ok: true };
   }
+}
+
+/** A copy of the job, never the template itself, so editing the profile leaves the catalog alone. */
+async function fromTemplate(
+  home: string,
+  request: DaemonRequest,
+  now: Date,
+): Promise<Answered> {
+  const template =
+    request.templateId === undefined ? undefined : templateNamed(request.templateId);
+  if (template === undefined) return refused('Name a template from the catalog.');
+  const draft = draftFromTemplate(template, {
+    ...(request.profileName === undefined ? {} : { name: request.profileName }),
+    ...(request.templateSkills === undefined ? {} : { skills: request.templateSkills }),
+  });
+  if ((await profileNamed(home, draft.name)) !== undefined)
+    return refused(`A profile is already called ${draft.name}. Name the copy.`);
+  return put(home, { ...request, profileDraft: draft }, now);
 }
 
 async function put(home: string, request: DaemonRequest, now: Date): Promise<Answered> {

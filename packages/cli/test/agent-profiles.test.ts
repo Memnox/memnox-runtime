@@ -105,3 +105,27 @@ describe('agent profiles kept on this machine', () => {
     expect(put.error).toContain('"role" is one word');
   });
 });
+
+describe('a profile from a template', () => {
+  it('is a copy with no agent connected and no skill taken unless named', async () => {
+    const home = await homeWithV1();
+    const listed = await ask(home, { method: DAEMON_METHOD.TEMPLATES });
+    expect(listed.templates?.length).toBe(7);
+    const made = await ask(home, {
+      method: DAEMON_METHOD.PROFILE_FROM_TEMPLATE,
+      templateId: 'testing',
+      profileName: 'Checkout tester',
+    });
+    expect(made.ok).toBe(true);
+    const copy = (made.profiles ?? []).find((each) => each.id === 'checkout-tester');
+    expect(copy).toMatchObject({ templateOf: 'testing', role: 'tester', skills: [] });
+    expect(copy?.connections).toEqual([]);
+    expect(copy?.levels.enforcement.shell).toBe('none');
+    const again = await ask(home, {
+      method: DAEMON_METHOD.PROFILE_FROM_TEMPLATE,
+      templateId: 'testing',
+      profileName: 'Checkout tester',
+    });
+    expect(again.ok).toBe(false);
+  });
+});
