@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, isAbsolute, join } from 'node:path';
 import {
+  agentKindsListed,
   allProjectStates,
   CURSOR_RULES_DIR,
   CURSOR_RULES_FILE,
@@ -11,6 +12,7 @@ import {
   projectFilePathFor,
   readProjectManifest,
   SessionHosts,
+  type ProfileBindings,
   type ProjectManifest,
   type ProjectState,
   type SessionHost,
@@ -110,8 +112,11 @@ async function instructionFilesIn(root: string): Promise<string[]> {
 export function projectAgents(
   manifest: ProjectManifest,
   hosts: readonly SessionHost[],
+  bindings: ProfileBindings,
 ): string[] {
-  return manifest.agents.length > 0 ? manifest.agents : agentsSeen(hosts);
+  return manifest.agents.length > 0
+    ? agentKindsListed(manifest.agents, bindings)
+    : agentsSeen(hosts);
 }
 
 export function agentsSeen(hosts: readonly SessionHost[]): string[] {
