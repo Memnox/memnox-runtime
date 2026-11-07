@@ -18,24 +18,39 @@ from .guard import Guard, ToolRefused, refusal_text
 def wrap_tool(
     guard: Guard, name: str, run: Callable[..., Any], session: Callable[[Mapping[str, Any]], str]
 ) -> Callable[..., Any]:
-    """Any function a framework calls a tool, keyword arguments in, refused with ToolRefused."""
+    """Any function a framework calls a tool, refused with ToolRefused, its outcome told to the breaker."""
     if inspect.iscoroutinefunction(run):
 
         @functools.wraps(run)
         async def governed_async(**arguments: Any) -> Any:
-            decision = await asyncio.to_thread(guard.authorize, name, arguments, session(arguments))
+            session_id = session(arguments)
+            decision = await asyncio.to_thread(guard.authorize, name, arguments, session_id)
             if not decision.allowed:
                 raise ToolRefused(decision)
-            return await run(**arguments)
+            try:
+                output = await run(**arguments)
+            except Exception as error:
+                guard.outcome(name, session_id, True, arguments, type(error).__name__)
+                raise
+            # The answer is read for instructions, so a ticket that steers the agent taints the run.
+            guard.outcome(name, session_id, False, arguments, output=output)
+            return output
 
         return governed_async
 
     @functools.wraps(run)
     def governed(**arguments: Any) -> Any:
-        decision = guard.authorize(name, arguments, session(arguments))
+        session_id = session(arguments)
+        decision = guard.authorize(name, arguments, session_id)
         if not decision.allowed:
             raise ToolRefused(decision)
-        return run(**arguments)
+        try:
+            output = run(**arguments)
+        except Exception as error:
+            guard.outcome(name, session_id, True, arguments, type(error).__name__)
+            raise
+        guard.outcome(name, session_id, False, arguments, output=output)
+        return output
 
     return governed
 

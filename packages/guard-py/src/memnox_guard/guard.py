@@ -21,10 +21,19 @@ from .cloud import (
     CloudPort,
     FetchCloud,
 )
+from .breaker import Breach, CircuitBreaker
 from .matcher import ALLOW, ASK, DENY, BundleRefused, Engine, Verdict
 from .signing import bundle_signed, verifies
+from .steering import answer_has_instruction_shape, redact_secrets, steerable
 
 ACTION_RECORDED = "agent.action.recorded"
+SESSION_PAUSED = "agent.session.paused"
+# How often a paused session asks whether a person lifted the pause, as the TypeScript guard does.
+RESUME_CHECK_SECONDS = 10
+TAINTED_REASON = (
+    "this agent recently read text written to give it instructions, so a person decides before it "
+    "speaks or loses anything"
+)
 ENV_TOKEN = "MEMNOX_TOKEN"
 ENV_WORKSPACE = "MEMNOX_WORKSPACE"
 ENV_URL = "MEMNOX_URL"
@@ -82,6 +91,11 @@ class Guard:
     _bundle_hash: Optional[str] = None
     _keys: dict[str, str] = field(default_factory=dict)
     _grants: set[str] = field(default_factory=set)
+    _breaker: CircuitBreaker = field(default_factory=CircuitBreaker)
+    # A paused session, with when it was paused and when the plane was last asked about it.
+    _paused: dict[str, tuple[Breach, float, float]] = field(default_factory=dict)
+    # Sessions that read instruction-shaped text, and the tool it came through.
+    _tainted: dict[str, str] = field(default_factory=dict)
     pending: list[dict[str, Any]] = field(default_factory=list)
 
     def refresh(self) -> bool:
@@ -104,7 +118,16 @@ class Guard:
     def authorize(
         self, tool: str, arguments: Mapping[str, Any], session_id: str, profile_id: Optional[str] = None
     ) -> Decision:
-        verdict = self._engine.decide(tool, self.agent)
+        paused = self._still_paused(session_id)
+        if paused is not None:
+            verdict = Verdict(DENY, f"Memnox paused this session: {paused.reason}")
+            decision = Decision(
+                DENY, False,
+                f"{verdict.reason}. Nothing further will run until a person looks at it.",
+            )
+            self._record(tool, arguments, session_id, verdict, decision, profile_id)
+            return decision
+        verdict = self._steered(self._engine.decide(tool, self.agent), tool, session_id)
         if verdict.effect == ASK:
             grant = f"{session_id}\u0000{tool}"
             decision = (
@@ -118,9 +141,43 @@ class Guard:
         self._record(tool, arguments, session_id, verdict, decision, profile_id)
         return decision
 
-    def outcome(self, tool: str, session_id: str, failed: bool) -> None:
-        """How a call ended, kept with the record; the TypeScript breaker is not ported here."""
-        self.pending.append(self._row(session_id, {"operation": tool, "failed": failed}, None))
+    def outcome(
+        self,
+        tool: str,
+        session_id: str,
+        failed: bool,
+        arguments: Optional[Mapping[str, Any]] = None,
+        failure_kind: Optional[str] = None,
+        output: Any = None,
+        profile_id: Optional[str] = None,
+    ) -> None:
+        """How a call ended: read for steering text, counted by the breaker, and kept with the record."""
+        if output is not None and answer_has_instruction_shape(output):
+            self.taint(session_id, tool)
+        self.pending.append(self._row(session_id, {"operation": tool, "failed": failed}, profile_id))
+        digest = args_digest_of(arguments or {})
+        fingerprint = hashlib.sha256(f"{tool}\u0000{digest}".encode("utf-8")).hexdigest()
+        breach = self._breaker.observe(session_id, fingerprint, tool, failed, failure_kind)
+        if breach is None:
+            return
+        at = self.now()
+        self._paused[session_id] = (breach, at, at)
+        row = self._row(session_id, {"reason": redact_secrets(breach.reason)}, profile_id)
+        row.update({"kind": SESSION_PAUSED, "dedupKey": f"pause:{session_id}:{int(at * 1000)}",
+                    "subjectId": session_id})
+        self.pending.append(row)
+
+    def taint(self, session_id: str, source: str) -> None:
+        """From now on this session's sends and losses ask a person, even where a rule allows them."""
+        self._tainted.setdefault(session_id, source)
+
+    def tainted_by(self, session_id: str) -> Optional[str]:
+        return self._tainted.get(session_id)
+
+    def resume(self, session_id: str) -> None:
+        """Lift a pause, as a person resuming the session does."""
+        self._paused.pop(session_id, None)
+        self._breaker.forget(session_id)
 
     def flush(self) -> None:
         rows, self.pending = self.pending, []
@@ -140,7 +197,7 @@ class Guard:
         """A line for the person; an agent can claim done and never close its own work."""
         self.cloud.tool(
             WORK_TOOL_REPORT_PROGRESS,
-            {"workId": work_id, "note": note, **({} if state is None else {"state": state}), "refs": list(refs)},
+            {"workId": work_id, "note": redact_secrets(note), **({} if state is None else {"state": state}), "refs": list(refs)},
         )
 
     def request_handoff(
@@ -156,12 +213,39 @@ class Guard:
             WORK_TOOL_REQUEST_HANDOFF,
             {
                 "workId": work_id,
-                "reason": reason,
+                "reason": redact_secrets(reason),
                 **({} if to_profile is None else {"toProfileId": to_profile}),
                 **({} if to_person is None else {"toPersonId": to_person}),
                 "refs": list(refs),
             },
         )
+
+    def _steered(self, verdict: Verdict, tool: str, session_id: str) -> Verdict:
+        """An allow turned into an ask where a tainted session is about to speak or lose something."""
+        if verdict.effect != ALLOW or session_id not in self._tainted or not steerable(tool):
+            return verdict
+        return Verdict(ASK, TAINTED_REASON, verdict.rule, verdict.alternative)
+
+    def _still_paused(self, session_id: str) -> Optional[Breach]:
+        """The pause, unless a person lifted it since; a plane that cannot be reached leaves it in place."""
+        held = self._paused.get(session_id)
+        if held is None:
+            return None
+        breach, at, checked = held
+        now = self.now()
+        if now - checked < RESUME_CHECK_SECONDS:
+            return breach
+        self._paused[session_id] = (breach, at, now)
+        resumed_since = getattr(self.cloud, "resumed_since", None)
+        if resumed_since is None:
+            return breach
+        try:
+            if resumed_since(session_id, int(at * 1000)) is True:
+                self.resume(session_id)
+                return None
+        except Exception:  # noqa: BLE001 because unreachable is not a resume, so a stuck loop stays stopped
+            return breach
+        return breach
 
     def _keys_now(self) -> dict[str, str]:
         if not self._keys:
@@ -173,7 +257,7 @@ class Guard:
         try:
             raised = self.cloud.raise_held({
                 "operation": tool, "argsDigest": digest, "agent": self.agent, "sessionId": session_id,
-                "reason": verdict.reason, "waitMinutes": max(1, -(-self.wait_seconds // 60)),
+                "reason": redact_secrets(verdict.reason), "waitMinutes": max(1, -(-self.wait_seconds // 60)),
                 "operationId": hashlib.sha256(f"{session_id}\u0000{tool}\u0000{digest}".encode()).hexdigest(),
                 **({} if verdict.rule is None else {"ruleId": verdict.rule}),
             })

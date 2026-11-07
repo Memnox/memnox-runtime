@@ -42,8 +42,19 @@ assigns or closes work.
   this call, its answer and a digest of its arguments is believed.
 - It fails closed. Without the `cryptography` package nothing signed is believed. A rule
   carrying a condition the port does not read still denies or asks, and an allow carrying one
-  is left out. The TypeScript guard's recommended defaults, its taint steering and its circuit
-  breaker are not ported yet, and tools are named as MCP tools or function tools only.
+  is left out.
+- A tool answer that reads as instructions to the model taints its session, as in the
+  TypeScript guard: from then on a call whose tool opens with a sending or losing verb asks a
+  person even where a rule allows it. `guard.taint(session, source)` marks one by hand.
+- The circuit breaker is ported for the two signals a guard counts alone: the same call
+  failing the same way five times, or eight failures in a row. The session is then refused
+  until a person resumes it from any door (`guard.resume(session)` lifts it locally); a plane
+  that cannot be reached leaves the pause in place. `wrap_tool` reports every outcome for you;
+  elsewhere call `guard.outcome(tool, session, failed, arguments, failure_kind, output)`.
+- Every progress note, handoff reason and question goes out with credentials masked.
+- Not ported yet: the TypeScript guard's recommended default rules, its tool classes and data
+  classifications, and the breaker's explosion, scope and spend signals. Tools are named as MCP
+  tools or function tools only.
 
 ## Tests
 

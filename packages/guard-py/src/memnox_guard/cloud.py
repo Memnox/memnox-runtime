@@ -35,6 +35,8 @@ class CloudPort(Protocol):
     def status(self, held_id: str, wait_seconds: int) -> dict[str, Any]: ...
     def record(self, rows: Sequence[dict[str, Any]]) -> None: ...
     def tool(self, name: str, arguments: dict[str, Any]) -> Any: ...
+    # Optional: a port without it can never lift a pause, so a paused session stays paused.
+    # def resumed_since(self, session_id: str, since_ms: int) -> bool: ...
 
 
 # What sends one request and gives back the status, headers and body; urllib by default.
@@ -90,6 +92,14 @@ class FetchCloud:
         path = self._path(f"/held-calls/{urllib.parse.quote(held_id, safe='')}?wait={wait_seconds}")
         status, _, body = self._call("GET", path, None)
         return json.loads(self._ok(status, body))
+
+    def resumed_since(self, session_id: str, since_ms: int) -> bool:
+        """Whether a person resumed this session since it was paused, from any door."""
+        path = self._path(
+            f"/cloud-agents/sessions/{urllib.parse.quote(session_id, safe='')}/resumed?since={since_ms}"
+        )
+        status, _, body = self._call("GET", path, None)
+        return json.loads(self._ok(status, body)).get("resumed") is True
 
     def record(self, rows: Sequence[dict[str, Any]]) -> None:
         if rows:
