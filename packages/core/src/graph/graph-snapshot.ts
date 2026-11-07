@@ -5,9 +5,9 @@ import type { CodeGraph, CodeGraphSource, ImportEdge } from './code-graph';
  * A dependency read off a stale graph is shown with its age, never as current.
  */
 
-export const GRAPH_SNAPSHOT_VERSION = 1;
+const GRAPH_SNAPSHOT_VERSION = 1;
 
-export interface GraphSnapshot {
+interface GraphSnapshot {
   version: typeof GRAPH_SNAPSHOT_VERSION;
   source: CodeGraphSource;
   /** The commit the graph was built at; absent where the source did not say. */
@@ -29,7 +29,7 @@ export const GRAPH_FRESHNESS = {
   UNKNOWN: 'unknown',
 } as const;
 
-export type GraphFreshness = (typeof GRAPH_FRESHNESS)[keyof typeof GRAPH_FRESHNESS];
+type GraphFreshness = (typeof GRAPH_FRESHNESS)[keyof typeof GRAPH_FRESHNESS];
 
 /** The folder Memnox keeps its own state in, spelled apart so no path reads as a write to it. */
 const OWN_STATE_FOLDER = ['.mem', 'nox'].join('');

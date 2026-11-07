@@ -32,7 +32,7 @@ const PROOF_FILE = 'proof.json';
 /** Long enough that a scan is not repeated every minute, short enough that a rewiring is noticed within the hour. */
 const DIGEST_EVERY_MS = 15 * 60 * 1000;
 
-export function proofPath(home: string): string {
+function proofPath(home: string): string {
   return join(home, MEMNOX_HOME, PROOF_FILE);
 }
 
