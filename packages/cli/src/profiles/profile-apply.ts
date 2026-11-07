@@ -164,7 +164,7 @@ async function isFolder(path: string): Promise<boolean> {
 /** Every kept profile as a screen draws it, each with what the hubs no longer hold said. */
 export async function readProfileViews(
   home: string,
-): Promise<Omit<ProfileView, 'connections'>[]> {
+): Promise<Omit<ProfileView, 'connections' | 'levels'>[]> {
   const [profiles, hub, skills] = await Promise.all([
     readProfiles(home),
     readHub(home),

@@ -1,4 +1,5 @@
 import type { AgentConnection } from '../agents/agent-connection';
+import type { CapabilityLevels } from '../discovery/capability-levels';
 
 /**
  * Profiles as every screen reads and applies them: one named bundle of Skills Hub skills, MCP Hub
@@ -74,6 +75,8 @@ export interface ProfileView extends ProfileJob {
   isDefault?: true;
   /** How it reaches the agents it works through; empty is a profile with no agent behind it. */
   connections: AgentConnection[];
+  /** The weakest level of its connections that are not gone, so one unguarded agent is never hidden. */
+  levels: CapabilityLevels;
 }
 
 /** What applying a profile raised, so a screen says it in a line and opens the cards. */

@@ -5,6 +5,7 @@ import {
   isDefaultProfileId,
   MEMNOX_HOME,
   NodeSnapshotStore,
+  profileLevelsOf,
   type AgentConnection,
   type AgentView,
   type ConnectionEvidence,
@@ -15,6 +16,7 @@ import {
 import { readBindings } from '../agents/connections';
 import { displayName, readNames, resolveAgent } from '../agents/names';
 import { readAgentsView } from '../studio/agents-read';
+import { withLevels } from './connection-levels';
 import { readProfileViews } from './profile-apply';
 import { responsiblePersonHere } from './responsible-person';
 
@@ -27,6 +29,8 @@ import { responsiblePersonHere } from './responsible-person';
 export interface ConnectionDeps {
   now: Date;
   cards: () => Promise<SessionCard[]>;
+  /** The agent cards already read, so a caller that has them does not read them twice. */
+  views?: AgentView[];
 }
 
 /** Each connection, and the agents they were read from, so a bind resolves what a person typed. */
@@ -48,8 +52,12 @@ export async function readConnections(
     readBindings(home),
     readNames(home),
   ]);
-  if (snapshot === null) return { connections: connectionsFor([], bindings), agents: [] };
-  const views = await readAgentsView(home, deps);
+  if (snapshot === null)
+    return {
+      connections: await withLevels(home, connectionsFor([], bindings), new Map()),
+      agents: [],
+    };
+  const views = deps.views ?? (await readAgentsView(home, deps));
   const agents = snapshot.agents.map((agent, index) => {
     const view = views[index];
     return {
@@ -60,8 +68,11 @@ export async function readConnections(
     };
   });
   const evidence = agents.map((agent) => evidenceOf(agent, snapshot.takenAt));
+  const byId = new Map(
+    agents.flatMap((agent) => (agent.view === undefined ? [] : [[agent.id, agent.view]])),
+  );
   return {
-    connections: connectionsFor(evidence, bindings),
+    connections: await withLevels(home, connectionsFor(evidence, bindings), byId),
     agents,
     takenAt: snapshot.takenAt,
   };
@@ -137,6 +148,7 @@ function defaultProfileViews(
           missing: [],
           isDefault: true,
           connections: [connection],
+          levels: profileLevelsOf([connection]),
         },
       ];
     });
@@ -153,11 +165,35 @@ export async function readProfilesWithConnections(
     responsiblePersonHere(home),
   ]);
   return [
-    ...kept.map((view) => ({
-      ...view,
-      responsiblePerson: view.responsiblePerson ?? person,
-      connections: machine.connections.filter((each) => each.profileId === view.id),
-    })),
+    ...kept.map((view) => {
+      const connections = machine.connections.filter(
+        (each) => each.profileId === view.id,
+      );
+      return {
+        ...view,
+        responsiblePerson: view.responsiblePerson ?? person,
+        connections,
+        levels: profileLevelsOf(connections),
+      };
+    }),
     ...defaultProfileViews(machine, person),
   ];
+}
+
+/** The agent cards with the profile each works under and how sure Memnox is of what it does. */
+export async function withProfiles(
+  home: string,
+  views: AgentView[],
+  deps: ConnectionDeps,
+): Promise<AgentView[]> {
+  const { connections } = await readConnections(home, { ...deps, views });
+  return views.map((view) => {
+    const connection = connections.find((each) => each.agentKind === view.kind);
+    if (connection === undefined) return view;
+    return {
+      ...view,
+      profileId: connection.profileId,
+      ...(connection.levels === undefined ? {} : { levels: connection.levels }),
+    };
+  });
 }

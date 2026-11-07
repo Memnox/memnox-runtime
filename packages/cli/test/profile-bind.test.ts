@@ -62,6 +62,8 @@ describe('binding a profile to an agent', () => {
       ['default-cursor', 'Cursor'],
     ]);
     expect(defaults[0]?.connections[0]?.agentId).toBe('agt_claude-code');
+    // Nothing holds either agent and the ledger is empty, so neither is claimed as covered.
+    expect(defaults[0]?.levels.enforcement.mcp).toBe('none');
     await expect(
       readFile(join(home, MEMNOX_HOME, 'agents', 'connections.json'), 'utf8'),
     ).rejects.toThrow();

@@ -1,4 +1,5 @@
 import { agentNameIn } from '../discovery/agent';
+import type { CapabilityLevels } from '../discovery/capability-levels';
 import { defaultProfileIdFor } from './agent-profile';
 
 /**
@@ -56,6 +57,8 @@ export interface AgentConnection {
   firstSeen: string;
   lastSeen: string;
   status: ConnectionStatus;
+  /** How sure Memnox is of each capability through this connection, computed and never claimed. */
+  levels?: CapabilityLevels;
 }
 
 /** A profile a person bound to an agent: the one thing about a connection that is stored. */
