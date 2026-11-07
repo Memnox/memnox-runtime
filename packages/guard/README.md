@@ -62,9 +62,21 @@ reports how it is going; only the person closes it or hands it on:
 
 ```ts
 const [work] = await guard.myWork(); // { id, status, issue: { source, externalId, url } }
-await guard.reportProgress({ workId: work.id, note: 'drafted the reply', refs: [{ kind: 'pr', id: '17' }] });
-await guard.reportProgress({ workId: work.id, note: 'sent for review', state: 'done_claimed' });
-await guard.requestHandoff({ workId: work.id, toProfile: 'billing', reason: 'needs a refund' });
+await guard.reportProgress({
+  workId: work.id,
+  note: 'drafted the reply',
+  refs: [{ kind: 'pr', id: '17' }],
+});
+await guard.reportProgress({
+  workId: work.id,
+  note: 'sent for review',
+  state: 'done_claimed',
+});
+await guard.requestHandoff({
+  workId: work.id,
+  toProfileId: 'billing',
+  reason: 'needs a refund',
+});
 ```
 
 These call the workspace's MCP door, `POST /v1/workspaces/<ws>/mcp`, with the tools

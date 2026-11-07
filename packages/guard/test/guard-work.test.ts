@@ -70,13 +70,17 @@ describe('a guard working under a profile', () => {
     await guard.reportProgress({
       workId: 'agw_1',
       note: 'drafted the reply',
-      state: 'active',
+      state: 'in_progress',
     });
     expect(cloud.reports).toEqual([
-      { workId: 'agw_1', note: 'drafted the reply', state: 'active' },
+      { workId: 'agw_1', note: 'drafted the reply', state: 'in_progress' },
     ]);
     await expect(
-      guard.requestHandoff({ workId: 'agw_1', toProfile: 'billing', reason: 'a refund' }),
+      guard.requestHandoff({
+        workId: 'agw_1',
+        toProfileId: 'billing',
+        reason: 'a refund',
+      }),
     ).rejects.toThrow('does not answer for agent work');
     await guard.close();
   });

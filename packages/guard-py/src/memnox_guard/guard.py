@@ -157,8 +157,8 @@ class Guard:
             {
                 "workId": work_id,
                 "reason": reason,
-                **({} if to_profile is None else {"toProfile": to_profile}),
-                **({} if to_person is None else {"toPerson": to_person}),
+                **({} if to_profile is None else {"toProfileId": to_profile}),
+                **({} if to_person is None else {"toPersonId": to_person}),
                 "refs": list(refs),
             },
         )

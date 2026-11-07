@@ -88,15 +88,15 @@ export interface GuardWork {
 export interface ProgressReport {
   workId: string;
   note: string;
-  /** `active`, `blocked` or `done_claimed`; only a person closes work. */
+  /** `in_progress`, `blocked` or `done_claimed`, the cloud's words; only a person closes work. */
   state?: string;
   refs?: readonly WorkRef[];
 }
 
 export interface HandoffAsk {
   workId: string;
-  toProfile?: string;
-  toPerson?: string;
+  toProfileId?: string;
+  toPersonId?: string;
   reason: string;
   refs?: readonly WorkRef[];
 }
