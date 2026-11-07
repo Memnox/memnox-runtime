@@ -190,7 +190,9 @@ describe('a rule naming a condition this gate cannot read', () => {
   });
 
   it('is asked about instead, under a name of its own, and never written as the rule', () => {
-    const document = documentFrom(bundleOf([unreadable({}), CREDENTIALS_DENY])) as Written & {
+    const document = documentFrom(
+      bundleOf([unreadable({}), CREDENTIALS_DENY]),
+    ) as Written & {
       notEnforced: unknown[];
     };
 
@@ -202,17 +204,24 @@ describe('a rule naming a condition this gate cannot read', () => {
       match: Record<string, unknown>;
       decision: { effect: string; reason: string };
     }[];
-    expect(fallback?.match).toEqual({ actions: ['filesystem.read'], targets: CREDENTIAL_TARGETS });
+    expect(fallback?.match).toEqual({
+      actions: ['filesystem.read'],
+      targets: CREDENTIAL_TARGETS,
+    });
     expect(fallback?.decision.effect).toBe(DECISION_EFFECT.ASK);
     expect(fallback?.decision.reason).toContain('cannot read owners');
-    expect(fallback?.decision.reason).toContain('instead of enforcing the rule as written');
+    expect(fallback?.decision.reason).toContain(
+      'instead of enforcing the rule as written',
+    );
     expect(document.notEnforced).toEqual([
       { id: 'r4', effect: DECISION_EFFECT.DENY, keys: ['owners'], fallback: 'ask' },
     ]);
   });
 
   it('asks nothing about a rule over every action, which would stop all work, and reports it', () => {
-    const document = documentFrom(bundleOf([unreadable({ actions: ['*'], targets: undefined })])) as Written & {
+    const document = documentFrom(
+      bundleOf([unreadable({ actions: ['*'], targets: undefined })]),
+    ) as Written & {
       notEnforced: unknown[];
     };
     expect(document.policies).toEqual([]);
@@ -222,7 +231,9 @@ describe('a rule naming a condition this gate cannot read', () => {
   });
 
   it('skips an allow, which permits nothing by being absent, and reports it', () => {
-    const document = documentFrom(bundleOf([unreadable({ effect: DECISION_EFFECT.ALLOW })])) as Written & {
+    const document = documentFrom(
+      bundleOf([unreadable({ effect: DECISION_EFFECT.ALLOW })]),
+    ) as Written & {
       notEnforced: unknown[];
     };
     expect(document.policies).toEqual([]);

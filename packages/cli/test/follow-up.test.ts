@@ -118,9 +118,9 @@ describe('a follow up typed on a phone', () => {
     expect((await followUpAnswer(request({ signature: otherWords }), p.deps)).ok).toBe(
       false,
     );
-    expect(
-      (await followUpAnswer(request({ signature: otherSession }), p.deps)).ok,
-    ).toBe(false);
+    expect((await followUpAnswer(request({ signature: otherSession }), p.deps)).ok).toBe(
+      false,
+    );
     expect(p.sent).toEqual([]);
   });
 

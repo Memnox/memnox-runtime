@@ -10,12 +10,20 @@ import { CLAIM_BASIS, holdImpact, plainAsk } from '../src/index';
 
 describe('a held action, explained', () => {
   it('names what it would affect from the request, and says so where nothing names it', () => {
-    expect(holdImpact({ operation: 'filesystem.delete', target: 'build/', class: 'destructive' }).affected).toEqual({
+    expect(
+      holdImpact({
+        operation: 'filesystem.delete',
+        target: 'build/',
+        class: 'destructive',
+      }).affected,
+    ).toEqual({
       text: 'It would affect build/.',
       basis: CLAIM_BASIS.RECORDED,
       source: 'the action as the agent asked for it',
     });
-    expect(holdImpact({ operation: 'shell.execute' }).affected.basis).toBe(CLAIM_BASIS.UNKNOWN);
+    expect(holdImpact({ operation: 'shell.execute' }).affected.basis).toBe(
+      CLAIM_BASIS.UNKNOWN,
+    );
   });
 
   it('only ever says "may" about undoing, and unknown where nothing classified the action', () => {

@@ -4,7 +4,11 @@
  */
 
 import type { CloudGraph, CloudNode } from './workspace-graph-cloud';
-import type { WorkspaceCandidate, WorkspaceFact, WorkspaceMemory } from './workspace-memory';
+import type {
+  WorkspaceCandidate,
+  WorkspaceFact,
+  WorkspaceMemory,
+} from './workspace-memory';
 import {
   WORKSPACE_GRAPH_SOURCE,
   WORKSPACE_LINK_KIND,
@@ -63,10 +67,15 @@ export function foldWorkspaceGraph(inputs: WorkspaceGraphInputs): WorkspaceGraph
   return {
     nodes: building.finished(),
     links: building.links,
-    withheld: Math.max(live === null ? 0 : live.withheld, memory === null ? 0 : memory.withheld),
+    withheld: Math.max(
+      live === null ? 0 : live.withheld,
+      memory === null ? 0 : memory.withheld,
+    ),
     truncated: live === null ? false : live.truncated,
     source: live === null ? WORKSPACE_GRAPH_SOURCE.SAVED : WORKSPACE_GRAPH_SOURCE.LIVE,
-    ...(live === null && inputs.fallback !== undefined ? { fallback: inputs.fallback } : {}),
+    ...(live === null && inputs.fallback !== undefined
+      ? { fallback: inputs.fallback }
+      : {}),
     ...(live === null || inputs.readAt === undefined ? {} : { readAt: inputs.readAt }),
     ...(memory === null || memory.syncedAt === '' ? {} : { syncedAt: memory.syncedAt }),
   };
@@ -87,7 +96,8 @@ class Building {
     const held = this.nodes.get(id);
     if (held === undefined) return;
     const missing = Object.entries(fields).filter(
-      ([key, value]) => value !== undefined && held[key as keyof WorkspaceGraphNode] === undefined,
+      ([key, value]) =>
+        value !== undefined && held[key as keyof WorkspaceGraphNode] === undefined,
     );
     this.nodes.set(id, { ...held, ...Object.fromEntries(missing) });
   }
@@ -104,7 +114,11 @@ class Building {
   person(name: string): string {
     const lowered = name.toLowerCase();
     for (const node of this.nodes.values()) {
-      if (node.kind === WORKSPACE_NODE_KIND.PERSON && node.label.toLowerCase() === lowered) return node.id;
+      if (
+        node.kind === WORKSPACE_NODE_KIND.PERSON &&
+        node.label.toLowerCase() === lowered
+      )
+        return node.id;
     }
     const id = `${PERSON_NAME_PREFIX}${lowered}`;
     this.add({ id, kind: WORKSPACE_NODE_KIND.PERSON, label: name, weight: 0 });
@@ -142,13 +156,17 @@ function addLive(live: CloudGraph, building: Building): void {
   for (const edge of live.edges) {
     if (edge.kind !== WORKSPACE_LINK_KIND.CONTAINS) continue;
     const parent = building.nodes.get(edge.fromRef);
-    if (parent !== undefined && parent.tool !== undefined) building.enrich(edge.toRef, { tool: parent.tool });
+    if (parent !== undefined && parent.tool !== undefined)
+      building.enrich(edge.toRef, { tool: parent.tool });
   }
   for (const edge of live.edges) {
     if (!LINK_KINDS.has(edge.kind)) continue;
     // Cast is safe: checked against the kinds this picture keeps.
     building.link(edge.fromRef, edge.toRef, edge.kind as WorkspaceLinkKind, edge.basis);
-    const author = edge.kind === WORKSPACE_LINK_KIND.SAID ? building.nodes.get(edge.fromRef) : undefined;
+    const author =
+      edge.kind === WORKSPACE_LINK_KIND.SAID
+        ? building.nodes.get(edge.fromRef)
+        : undefined;
     if (author !== undefined) building.enrich(edge.toRef, { saidBy: author.label });
   }
 }
@@ -156,36 +174,48 @@ function addLive(live: CloudGraph, building: Building): void {
 /** Which tool delivered each thing, by the `carries` lines from the tools the graph draws. */
 function carriedBy(live: CloudGraph): Map<string, string> {
   const systems = new Map(
-    live.nodes.filter((node) => node.kind === SOURCE_KIND).map((node) => [node.ref, node.label.toLowerCase()] as const),
+    live.nodes
+      .filter((node) => node.kind === SOURCE_KIND)
+      .map((node) => [node.ref, node.label.toLowerCase()] as const),
   );
   const carried = new Map<string, string>();
   for (const edge of live.edges) {
     const tool = systems.get(edge.fromRef);
-    if (edge.kind === WORKSPACE_LINK_KIND.CARRIES && tool !== undefined) carried.set(edge.toRef, tool);
+    if (edge.kind === WORKSPACE_LINK_KIND.CARRIES && tool !== undefined)
+      carried.set(edge.toRef, tool);
   }
   return carried;
 }
 
-function liveNode(node: CloudNode, carried: ReadonlyMap<string, string>): WorkspaceGraphNode | null {
+function liveNode(
+  node: CloudNode,
+  carried: ReadonlyMap<string, string>,
+): WorkspaceGraphNode | null {
   const kind = KIND_OF[node.kind];
   if (kind === undefined) return null;
   const tool = toolOf(node, carried);
   const count = node.repeats ?? node.messages;
   return {
     id: node.ref,
-    kind: kind === WORKSPACE_NODE_KIND.PERSON && node.app ? WORKSPACE_NODE_KIND.BOT : kind,
+    kind:
+      kind === WORKSPACE_NODE_KIND.PERSON && node.app ? WORKSPACE_NODE_KIND.BOT : kind,
     label: node.label,
     weight: node.degree,
     ...(tool === undefined ? {} : { tool }),
     ...(node.href === undefined ? {} : { href: node.href }),
     ...(node.excerpt === undefined ? {} : { excerpt: node.excerpt }),
     ...(count === undefined || count < LEAST_COUNTED ? {} : { count }),
-    ...(kind === WORKSPACE_NODE_KIND.DECISION ? { status: WORKSPACE_NODE_STATUS.VERIFIED } : {}),
+    ...(kind === WORKSPACE_NODE_KIND.DECISION
+      ? { status: WORKSPACE_NODE_STATUS.VERIFIED }
+      : {}),
     ...(node.said.length === 0 ? {} : { said: node.said }),
   };
 }
 
-function toolOf(node: CloudNode, carried: ReadonlyMap<string, string>): string | undefined {
+function toolOf(
+  node: CloudNode,
+  carried: ReadonlyMap<string, string>,
+): string | undefined {
   if (node.kind === SOURCE_KIND) return node.label.toLowerCase();
   if (node.system !== undefined) return node.system.toLowerCase();
   const delivered = carried.get(node.ref);
@@ -200,7 +230,9 @@ function addSaved(memory: WorkspaceMemory, building: Building): void {
   for (const fact of [...memory.facts].sort((a, b) => a.id.localeCompare(b.id))) {
     addFact(fact, building);
   }
-  for (const candidate of [...(memory.unconfirmed ?? [])].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const candidate of [...(memory.unconfirmed ?? [])].sort((a, b) =>
+    a.id.localeCompare(b.id),
+  )) {
     addCandidate(candidate, building);
   }
 }
@@ -215,18 +247,28 @@ function addFact(fact: WorkspaceFact, building: Building): void {
     ...(fact.provenance === undefined ? {} : { provenance: fact.provenance }),
     ...(fact.settledAt === undefined ? {} : { at: fact.settledAt }),
   };
-  building.add({ id, kind: WORKSPACE_NODE_KIND.DECISION, label: fact.subject || fact.statement, weight: 0, ...fields });
+  building.add({
+    id,
+    kind: WORKSPACE_NODE_KIND.DECISION,
+    label: fact.subject || fact.statement,
+    weight: 0,
+    ...fields,
+  });
   building.enrich(id, fields);
   const principal = named(fact.principal);
-  if (principal !== undefined) building.link(id, building.person(principal), WORKSPACE_LINK_KIND.NAMES);
+  if (principal !== undefined)
+    building.link(id, building.person(principal), WORKSPACE_LINK_KIND.NAMES);
   const confirmer = named(fact.verifiedBy);
-  if (confirmer !== undefined) building.link(building.person(confirmer), id, WORKSPACE_LINK_KIND.APPROVED);
+  if (confirmer !== undefined)
+    building.link(building.person(confirmer), id, WORKSPACE_LINK_KIND.APPROVED);
 }
 
 /** A candidate, waiting, read from its tools and said by its authors. */
 function addCandidate(candidate: WorkspaceCandidate, building: Building): void {
   const id = workspaceCandidateId(candidate.id);
-  const tools = candidate.sources.map((each) => each.trim().toLowerCase()).filter((each) => each !== '');
+  const tools = candidate.sources
+    .map((each) => each.trim().toLowerCase())
+    .filter((each) => each !== '');
   const said = (candidate.saidBy ?? []).flatMap((each) => named(each) ?? []);
   building.add({
     id,
@@ -241,10 +283,13 @@ function addCandidate(candidate: WorkspaceCandidate, building: Building): void {
     ...(said[0] === undefined ? {} : { saidBy: said[0] }),
     ...(candidate.untrusted === true ? { untrusted: true as const } : {}),
   });
-  for (const tool of tools) building.link(id, building.source(tool), WORKSPACE_LINK_KIND.READ_FROM);
-  for (const name of said) building.link(building.person(name), id, WORKSPACE_LINK_KIND.SAID);
+  for (const tool of tools)
+    building.link(id, building.source(tool), WORKSPACE_LINK_KIND.READ_FROM);
+  for (const name of said)
+    building.link(building.person(name), id, WORKSPACE_LINK_KIND.SAID);
   const principal = named(candidate.principal);
-  if (principal !== undefined) building.link(id, building.person(principal), WORKSPACE_LINK_KIND.NAMES);
+  if (principal !== undefined)
+    building.link(id, building.person(principal), WORKSPACE_LINK_KIND.NAMES);
 }
 
 function named(name: string | undefined): string | undefined {

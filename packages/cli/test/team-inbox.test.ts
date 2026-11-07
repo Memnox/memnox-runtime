@@ -90,7 +90,9 @@ describe('a person signed in from a terminal', () => {
 
   it('answers a team question with a yes signed over the words a phone signs, and a no unsigned', async () => {
     const { home } = await signedIn();
-    const sent = cloud({ '/held-calls/apr_team/answer': { id: 'apr_team', status: 'answered' } });
+    const sent = cloud({
+      '/held-calls/apr_team/answer': { id: 'apr_team', status: 'answered' },
+    });
     const run = async (args: string[]): Promise<void> => {
       const program = new Command();
       registerApprovalsCommand(

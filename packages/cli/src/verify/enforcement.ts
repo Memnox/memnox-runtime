@@ -231,7 +231,8 @@ function refusedIn(seam: SeamProof['seam'], output: string): SeamProof {
   return {
     seam,
     state: PROOF.NOT_ENFORCED,
-    detail: 'a forbidden command run from PATH was not refused, so the interceptors are not first on PATH or their rules did not load',
+    detail:
+      'a forbidden command run from PATH was not refused, so the interceptors are not first on PATH or their rules did not load',
     next: 'memnox doctor --wiring',
   };
 }

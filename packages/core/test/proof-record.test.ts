@@ -19,7 +19,10 @@ import {
  * is a refusal on the route this agent's own calls take.
  */
 
-const held = (surface: SeamCoverage['surface'], heldBy: HeldBy = HELD_BY.SEAM): SeamCoverage => ({
+const held = (
+  surface: SeamCoverage['surface'],
+  heldBy: HeldBy = HELD_BY.SEAM,
+): SeamCoverage => ({
   surface,
   state: SEAM_STATE.HELD,
   heldBy,
@@ -91,7 +94,9 @@ describe('the digest of the enforcement path', () => {
       { id: 'b', coverage: [held(SURFACE_KIND.SHELL), held(SURFACE_KIND.MCP)] },
       {
         id: 'a',
-        coverage: [{ surface: SURFACE_KIND.MCP, state: SEAM_STATE.OPEN, detail: 'unwrapped' }],
+        coverage: [
+          { surface: SURFACE_KIND.MCP, state: SEAM_STATE.OPEN, detail: 'unwrapped' },
+        ],
       },
     ];
     expect(seamConfigDigestOf(unwrapped)).not.toBe(seamConfigDigestOf(agents));

@@ -13,7 +13,7 @@ import { DEFAULT_SHELL, loginPathConfigured } from '../protect/shell-profile';
 const PROXY_VARS = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy'] as const;
 
 /** Where coverage is read from: this directory, this home and this environment. */
-export interface CoverageFactsInput {
+interface CoverageFactsInput {
   dir: string;
   home: string;
   env: NodeJS.ProcessEnv;
@@ -22,7 +22,9 @@ export interface CoverageFactsInput {
 }
 
 /** The facts coverage is decided from, read fresh, so wiring something up changes the answer. */
-export async function readCoverageFacts(input: CoverageFactsInput): Promise<CoverageFacts> {
+export async function readCoverageFacts(
+  input: CoverageFactsInput,
+): Promise<CoverageFacts> {
   const { dir, home, env, agent } = input;
   const health = await readHealth(home, dir, env);
   return {

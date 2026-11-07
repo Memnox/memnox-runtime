@@ -10,9 +10,7 @@ import {
 } from '@memnox/core';
 
 import { draftFrom } from '../src/sync/action-rows';
-import {
-  type Bundle,
-} from '../src/sync/bundle';
+import { type Bundle } from '../src/sync/bundle';
 import { documentFrom } from '../src/sync/bundle-document';
 import { censusFrom } from '../src/sync/census';
 

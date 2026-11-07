@@ -21,7 +21,10 @@ export const SEAM_TEST: Readonly<Record<string, { test: string; agentPath: boole
     test: 'git push --force through the git this shell finds first on PATH',
     agentPath: true,
   },
-  [SURFACE_KIND.GIT]: { test: 'only that the pre-push hook is present', agentPath: false },
+  [SURFACE_KIND.GIT]: {
+    test: 'only that the pre-push hook is present',
+    agentPath: false,
+  },
   [SURFACE_KIND.FILESYSTEM]: {
     test: 'only that the kernel profile is written',
     agentPath: false,
@@ -113,7 +116,5 @@ export function seamConfigDigestOf(
         .map((each) => [each.surface, each.state, each.heldBy ?? ''])
         .sort((a, b) => a.join().localeCompare(b.join())),
     }));
-  return createHash('sha256')
-    .update(JSON.stringify(canonical))
-    .digest('hex');
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }

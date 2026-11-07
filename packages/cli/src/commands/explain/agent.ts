@@ -44,7 +44,6 @@ interface RenderAgentInput {
   asJson: boolean;
 }
 
-
 /** What a harness runs rather than what it is, and what holds the agent right now. */
 export function renderAgent(context: CliContext, input: RenderAgentInput): void {
   const { agent, report, last, facts } = input;
@@ -230,4 +229,3 @@ export async function readLastProbedScan(
     .find((snapshot) => snapshot.servers.some((server) => server.tools.length > 0));
   return probed ?? null;
 }
-

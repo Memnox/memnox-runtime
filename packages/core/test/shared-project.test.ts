@@ -121,12 +121,12 @@ describe('a project spanning several repositories', () => {
   it('is the same project, under the same id, from a clone of any of them', () => {
     const [project] = orgProjectsFrom([SPANNING]);
     expect(project?.repositories).toEqual(SPANNING.repositories);
-    expect(sharedProjectFor(orgProjectsFrom([SPANNING]), 'github.com/acme/shop-api')?.id).toBe(
-      'proj_2',
-    );
-    expect(sharedProjectFor(orgProjectsFrom([SPANNING]), 'github.com/acme/shop-web')?.id).toBe(
-      'proj_2',
-    );
+    expect(
+      sharedProjectFor(orgProjectsFrom([SPANNING]), 'github.com/acme/shop-api')?.id,
+    ).toBe('proj_2');
+    expect(
+      sharedProjectFor(orgProjectsFrom([SPANNING]), 'github.com/acme/shop-web')?.id,
+    ).toBe('proj_2');
   });
 
   it('still reads a project an older cloud sent with one repository', () => {
@@ -137,7 +137,9 @@ describe('a project spanning several repositories', () => {
 
   it('leaves out one naming a path rather than a remote, rather than half laying it', () => {
     expect(
-      orgProjectsFrom([{ ...SPANNING, repositories: ['github.com/acme/shop-web', '/home/ada/shop'] }]),
+      orgProjectsFrom([
+        { ...SPANNING, repositories: ['github.com/acme/shop-web', '/home/ada/shop'] },
+      ]),
     ).toEqual([]);
   });
 });

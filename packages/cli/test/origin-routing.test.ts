@@ -48,7 +48,9 @@ class Lines implements Peer {
 }
 
 /** A phone the Mac took mac back from, since a phone pairs holding everything and these tests are about one without it. */
-const WITHOUT_MAC = PHONE_DEFAULT_CAPABILITIES.filter((each) => each !== REMOTE_CAPABILITY.MAC);
+const WITHOUT_MAC = PHONE_DEFAULT_CAPABILITIES.filter(
+  (each) => each !== REMOTE_CAPABILITY.MAC,
+);
 
 function phone(capabilities: RemoteCapability[] = [...WITHOUT_MAC]): DeviceRecord {
   return {

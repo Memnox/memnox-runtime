@@ -161,7 +161,9 @@ function repositoriesOf(raw: Record<string, unknown>): string[] | null {
   const listed = raw['repositories'];
   const first = raw['repository'];
   const named = Array.isArray(listed) ? listed : [first];
-  if (!named.every((each) => typeof each === 'string' && sharedRepositoryOf(each) === each)) {
+  if (
+    !named.every((each) => typeof each === 'string' && sharedRepositoryOf(each) === each)
+  ) {
     return null;
   }
   // Sent beside the list for older runtimes, so it must be the list's first, never a second story.

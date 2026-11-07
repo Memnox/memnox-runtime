@@ -26,7 +26,8 @@ export const WORKSPACE_NODE_KIND = {
   CANDIDATE: 'candidate',
 } as const;
 
-export type WorkspaceNodeKind = (typeof WORKSPACE_NODE_KIND)[keyof typeof WORKSPACE_NODE_KIND];
+export type WorkspaceNodeKind =
+  (typeof WORKSPACE_NODE_KIND)[keyof typeof WORKSPACE_NODE_KIND];
 
 /**
  * Where a decision stands. A machine is handed only what is in force and what waits, so a superseded
@@ -68,7 +69,8 @@ export const WORKSPACE_LINK_KIND = {
   NAMES: 'names',
 } as const;
 
-export type WorkspaceLinkKind = (typeof WORKSPACE_LINK_KIND)[keyof typeof WORKSPACE_LINK_KIND];
+export type WorkspaceLinkKind =
+  (typeof WORKSPACE_LINK_KIND)[keyof typeof WORKSPACE_LINK_KIND];
 
 /** Whether the picture was read live just now or stands on the facts this machine saved. */
 export const WORKSPACE_GRAPH_SOURCE = {

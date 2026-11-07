@@ -188,14 +188,10 @@ export async function applyBundle(
   const staging = `${path}.incoming`;
   const document = documentFrom(bundle, here.machineClass);
   await mkdir(dirname(path), { recursive: true, mode: OWNER_ONLY_DIR });
-  await writeFile(
-    staging,
-    JSON.stringify(document, null, 2),
-    {
-      encoding: 'utf8',
-      mode: OWNER_ONLY,
-    },
-  );
+  await writeFile(staging, JSON.stringify(document, null, 2), {
+    encoding: 'utf8',
+    mode: OWNER_ONLY,
+  });
 
   try {
     // The gate's own loader, so a bundle this accepts is one the gate can read.

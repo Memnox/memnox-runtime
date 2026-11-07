@@ -108,7 +108,10 @@ function ownHookTools(kind: string, facts: CoverageFacts): HookedTools {
 function hookSeam(surface: SurfaceKind, hooked: HookedTools): SeamCoverage | null {
   const tools = hooked[surface];
   if (tools === undefined) return null;
-  return { ...heldSeam(surface, `its own hook checks every ${tools}`), heldBy: HELD_BY.OWN_HOOK };
+  return {
+    ...heldSeam(surface, `its own hook checks every ${tools}`),
+    heldBy: HELD_BY.OWN_HOOK,
+  };
 }
 
 export function coverageFor(

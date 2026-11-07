@@ -20,7 +20,9 @@ export const ALL_REMOTE_CAPABILITIES: readonly RemoteCapability[] =
  * What a phone holds the moment it is paired: everything, so every approval, a rule change included, is answered
  * with Face ID on the phone rather than waiting on the computer. A capability can still be taken back at the Mac.
  */
-export const PHONE_DEFAULT_CAPABILITIES: readonly RemoteCapability[] = ALL_REMOTE_CAPABILITIES;
+export const PHONE_DEFAULT_CAPABILITIES: readonly RemoteCapability[] = [
+  ...ALL_REMOTE_CAPABILITIES,
+];
 
 /** The remote allowlist: a method missing here is refused from afar whatever the device holds. */
 const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {

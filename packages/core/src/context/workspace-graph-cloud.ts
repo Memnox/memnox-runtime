@@ -41,7 +41,8 @@ const REF_SEPARATOR = ':';
 /** The graph in the answer, or null for an answer that is not one. */
 export function parseCloudGraph(body: unknown): CloudGraph | null {
   const raw = objectOr(body);
-  if (raw === null || !Array.isArray(raw['nodes']) || !Array.isArray(raw['edges'])) return null;
+  if (raw === null || !Array.isArray(raw['nodes']) || !Array.isArray(raw['edges']))
+    return null;
   return {
     nodes: raw['nodes'].flatMap(cloudNodeOf),
     edges: raw['edges'].flatMap(cloudEdgeOf),
@@ -84,7 +85,9 @@ function saidOf(raw: unknown): WorkspaceSaid[] {
       ...optionalText(said, 'href'),
       ...optionalText(said, 'excerpt'),
       // The cloud writes epoch milliseconds; the wire to a screen is ISO, as every other time is.
-      ...(typeof at === 'number' && Number.isFinite(at) ? { at: new Date(at).toISOString() } : {}),
+      ...(typeof at === 'number' && Number.isFinite(at)
+        ? { at: new Date(at).toISOString() }
+        : {}),
     },
   ];
 }

@@ -1,9 +1,6 @@
 import { TOOL_CLASS, type ToolClass } from '../discovery/classify';
 import { redactSecrets } from '../domain/redact';
-import {
-  REVERSIBILITY,
-  reversibilityOf,
-} from '../session/reversibility';
+import { REVERSIBILITY, reversibilityOf } from '../session/reversibility';
 import { TESTS_STANDING, type WorkEvidence } from '../session/work-evidence';
 import type { HoldRequest } from './hold';
 
@@ -64,10 +61,18 @@ function undoOf(operation: string, toolClass: string | undefined): HoldClaim {
       source: 'the action was not classified',
     };
   }
-  const reversibility = reversibilityOf(operation, toolClass as ToolClass, surfaceOf(operation));
+  const reversibility = reversibilityOf(
+    operation,
+    toolClass as ToolClass,
+    surfaceOf(operation),
+  );
   const source = `read from the kind of action (${toolClass}), not checked against what it touches`;
   if (reversibility === REVERSIBILITY.IRREVERSIBLE) {
-    return { text: 'This may not be undoable once it runs.', basis: CLAIM_BASIS.INFERRED, source };
+    return {
+      text: 'This may not be undoable once it runs.',
+      basis: CLAIM_BASIS.INFERRED,
+      source,
+    };
   }
   if (reversibility === REVERSIBILITY.SNAPSHOT) {
     return {
@@ -86,14 +91,27 @@ function undoOf(operation: string, toolClass: string | undefined): HoldClaim {
 function testsOf(work: WorkEvidence | undefined): HoldClaim {
   const source = 'the test commands run in this session';
   if (work === undefined || work.tests === TESTS_STANDING.NONE) {
-    return { text: 'No test results are available yet.', basis: CLAIM_BASIS.UNKNOWN, source };
+    return {
+      text: 'No test results are available yet.',
+      basis: CLAIM_BASIS.UNKNOWN,
+      source,
+    };
   }
-  const command = work.testCommand === undefined ? '' : ` (${redactSecrets(work.testCommand)})`;
+  const command =
+    work.testCommand === undefined ? '' : ` (${redactSecrets(work.testCommand)})`;
   if (work.tests === TESTS_STANDING.PASSED) {
-    return { text: `The tests last passed${command}.`, basis: CLAIM_BASIS.RECORDED, source };
+    return {
+      text: `The tests last passed${command}.`,
+      basis: CLAIM_BASIS.RECORDED,
+      source,
+    };
   }
   if (work.tests === TESTS_STANDING.FAILED) {
-    return { text: `The tests last failed${command}.`, basis: CLAIM_BASIS.RECORDED, source };
+    return {
+      text: `The tests last failed${command}.`,
+      basis: CLAIM_BASIS.RECORDED,
+      source,
+    };
   }
   return {
     text: `The tests passed${command}, then files changed, so they no longer cover this work.`,

@@ -34,8 +34,12 @@ describe('a kept graph', () => {
 
   it('is current at its own commit, behind at another, dirty once a file it covers changed', () => {
     const kept = snapshotOf(GRAPH, { at: '2026-11-04T09:00:00.000Z', commit: 'c1' });
-    expect(freshnessOf(kept, { head: 'c1', changedFiles: [] })).toBe(GRAPH_FRESHNESS.CURRENT);
-    expect(freshnessOf(kept, { head: 'c2', changedFiles: [] })).toBe(GRAPH_FRESHNESS.BEHIND);
+    expect(freshnessOf(kept, { head: 'c1', changedFiles: [] })).toBe(
+      GRAPH_FRESHNESS.CURRENT,
+    );
+    expect(freshnessOf(kept, { head: 'c2', changedFiles: [] })).toBe(
+      GRAPH_FRESHNESS.BEHIND,
+    );
     expect(freshnessOf(kept, { head: 'c1', changedFiles: ['src/b.ts'] })).toBe(
       GRAPH_FRESHNESS.DIRTY,
     );
@@ -46,7 +50,9 @@ describe('a kept graph', () => {
 
   it('says unknown where its source never named a commit', () => {
     const kept = snapshotOf(GRAPH, { at: '2026-11-04T09:00:00.000Z' });
-    expect(freshnessOf(kept, { head: 'c1', changedFiles: [] })).toBe(GRAPH_FRESHNESS.UNKNOWN);
+    expect(freshnessOf(kept, { head: 'c1', changedFiles: [] })).toBe(
+      GRAPH_FRESHNESS.UNKNOWN,
+    );
   });
 });
 
@@ -61,12 +67,19 @@ describe('a Graphify graph', () => {
     links: [
       { source: 'a', target: 'b', relation: 'imports_from', confidence: 'EXTRACTED' },
       { source: 'a', target: 'c', relation: 'imports_from', confidence: 'INFERRED' },
-      { source: 'b', target: 'c', relation: 'semantically_similar_to', confidence: 'EXTRACTED' },
+      {
+        source: 'b',
+        target: 'c',
+        relation: 'semantically_similar_to',
+        confidence: 'EXTRACTED',
+      },
     ],
   };
 
   it('keeps only what the code states, never an inferred or similar edge, and names its commit', () => {
-    expect(graphFromGraphify(parsed)?.imports).toEqual([{ from: 'src/a.ts', to: 'src/b.ts' }]);
+    expect(graphFromGraphify(parsed)?.imports).toEqual([
+      { from: 'src/a.ts', to: 'src/b.ts' },
+    ]);
     expect(graphifyBuiltAt(parsed)).toBe('3ab81ab');
     expect(graphifyBuiltAt({})).toBeUndefined();
   });

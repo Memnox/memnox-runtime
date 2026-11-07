@@ -17,7 +17,7 @@ import type { Bundle, BundleDecision, BundleRule } from './bundle';
  */
 
 /** What this machine does about a workspace rule it cannot read whole. */
-export const NOT_ENFORCED_FALLBACK = {
+const NOT_ENFORCED_FALLBACK = {
   /** Its actions are asked about, wider than the rule, which is never the rule itself. */
   ASK: 'ask',
   /** Nothing: an allow, or a rule on every action, where asking about all of it would stop all work. */
@@ -90,7 +90,9 @@ function notEnforcedOf(rule: BundleRule, keys: string[]): RuleNotEnforced {
     id: rule.id,
     effect: effectOf(rule),
     keys,
-    fallback: askFallbackApplies(rule) ? NOT_ENFORCED_FALLBACK.ASK : NOT_ENFORCED_FALLBACK.NONE,
+    fallback: askFallbackApplies(rule)
+      ? NOT_ENFORCED_FALLBACK.ASK
+      : NOT_ENFORCED_FALLBACK.NONE,
   };
 }
 
@@ -263,32 +265,35 @@ const MACHINE_CLASSES = 'machineClasses';
  * Keyed by every match key the engine reads, so a key added to `PolicyMatch` and left
  * out here fails to compile rather than skipping every rule that uses it.
  */
-const HONOURED_CONDITIONS: Readonly<Record<Exclude<keyof PolicyMatch, 'actions'>, true>> = {
-  targets: true,
-  environments: true,
-  agents: true,
-  roles: true,
-  principals: true,
-  models: true,
-  providers: true,
-  dataClassifications: true,
-  jurisdictions: true,
-  workingDirectories: true,
-  branches: true,
-  classes: true,
-  capabilities: true,
-  arguments: true,
-  content: true,
-  aboveAmount: true,
-  windows: true,
-  scope: true,
-  state: true,
-  unless: true,
-};
+const HONOURED_CONDITIONS: Readonly<Record<Exclude<keyof PolicyMatch, 'actions'>, true>> =
+  {
+    targets: true,
+    environments: true,
+    agents: true,
+    roles: true,
+    principals: true,
+    models: true,
+    providers: true,
+    dataClassifications: true,
+    jurisdictions: true,
+    workingDirectories: true,
+    branches: true,
+    classes: true,
+    capabilities: true,
+    arguments: true,
+    content: true,
+    aboveAmount: true,
+    windows: true,
+    scope: true,
+    state: true,
+    unless: true,
+  };
 
 /** The condition keys on a rule this gate would have to ignore, which it never does silently. */
 function unreadableKeys(rule: BundleRule): string[] {
-  return Object.keys(matchConditions(rule)).filter((key) => !(key in HONOURED_CONDITIONS));
+  return Object.keys(matchConditions(rule)).filter(
+    (key) => !(key in HONOURED_CONDITIONS),
+  );
 }
 
 /**

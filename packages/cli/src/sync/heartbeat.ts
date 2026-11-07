@@ -332,7 +332,6 @@ async function beat(
   }
 }
 
-
 async function readBeatState(input: {
   home: string;
   /** Absent on a pass that pulled nothing, which reports the bundle already held. */

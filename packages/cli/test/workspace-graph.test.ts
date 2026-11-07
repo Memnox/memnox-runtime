@@ -32,7 +32,15 @@ const GRAPH = {
     { ref: 'source:slack', kind: 'source', label: 'slack', degree: 1 },
     { ref: 'item:ev1', kind: 'item', label: 'Beta on Monday', repeats: 21, degree: 1 },
   ],
-  edges: [{ fromRef: 'source:slack', toRef: 'item:ev1', kind: 'carries', origin: 'graph', evidenceIds: [] }],
+  edges: [
+    {
+      fromRef: 'source:slack',
+      toRef: 'item:ev1',
+      kind: 'carries',
+      origin: 'graph',
+      evidenceIds: [],
+    },
+  ],
   withheld: 2,
   truncated: false,
 };
@@ -67,7 +75,14 @@ async function home(joined: boolean): Promise<string> {
   }
   await writeWorkspaceMemory(at, {
     hash: 'h1',
-    facts: [{ id: 'f1', kind: 'decision', statement: 'Payments retry three times.', subject: 'payments' }],
+    facts: [
+      {
+        id: 'f1',
+        kind: 'decision',
+        statement: 'Payments retry three times.',
+        subject: 'payments',
+      },
+    ],
     withheld: 1,
     syncedAt: '2026-11-01T08:00:00.000Z',
   });
@@ -94,7 +109,9 @@ describe('the workspace graph on the daemon', () => {
   it('is a memory read a screen makes and a phone may see', () => {
     expect(isMemoryMethod(DAEMON_METHOD.WORKSPACE_GRAPH)).toBe(true);
     expect(isScreenMethod(DAEMON_METHOD.WORKSPACE_GRAPH)).toBe(true);
-    expect(remoteCapabilityFor(DAEMON_METHOD.WORKSPACE_GRAPH)).toBe(REMOTE_CAPABILITY.SEE);
+    expect(remoteCapabilityFor(DAEMON_METHOD.WORKSPACE_GRAPH)).toBe(
+      REMOTE_CAPABILITY.SEE,
+    );
   });
 
   it('reads the console graph on the machine credential and folds the saved facts in', async () => {
@@ -145,7 +162,9 @@ describe('the workspace graph on the daemon', () => {
       throw new CloudUnreachable('down');
     }) as unknown as Call;
     const unreachable = await ask(await home(true), away);
-    expect(unreachable.workspaceGraph?.fallback).toBe(WORKSPACE_GRAPH_FALLBACK.UNREACHABLE);
+    expect(unreachable.workspaceGraph?.fallback).toBe(
+      WORKSPACE_GRAPH_FALLBACK.UNREACHABLE,
+    );
     expect(unreachable.workspaceGraph?.syncedAt).toBe('2026-11-01T08:00:00.000Z');
   });
 });

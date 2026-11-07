@@ -44,7 +44,8 @@ export interface WorkspaceGraphDeps {
   call?: typeof callCloud;
 }
 
-type LiveRead = { graph: CloudGraph; readAt: string } | { fallback: WorkspaceGraphFallback };
+type LiveRead =
+  { graph: CloudGraph; readAt: string } | { fallback: WorkspaceGraphFallback };
 
 /** The picture: live where the cloud answered just now, the saved facts with the reason where it did not. */
 export async function readWorkspaceGraph(
@@ -110,7 +111,11 @@ async function askCloud(
   } catch (err) {
     // Unreachable or broken on the way, the saved facts stand; only a picture is lost, never a verdict.
     const unreachable = err instanceof CloudUnreachable;
-    return { fallback: unreachable ? WORKSPACE_GRAPH_FALLBACK.UNREACHABLE : WORKSPACE_GRAPH_FALLBACK.REFUSED };
+    return {
+      fallback: unreachable
+        ? WORKSPACE_GRAPH_FALLBACK.UNREACHABLE
+        : WORKSPACE_GRAPH_FALLBACK.REFUSED,
+    };
   }
   if (isCredentialRefused(answer.status) || answer.status !== HTTP.OK) {
     return { fallback: WORKSPACE_GRAPH_FALLBACK.REFUSED };

@@ -46,11 +46,42 @@ const CLOUD = {
     { ref: 'agent:hermes', kind: 'agent', label: 'hermes', degree: 1 },
   ],
   edges: [
-    { fromRef: 'source:slack', toRef: 'item:ev1', kind: 'carries', origin: 'graph', evidenceIds: [] },
-    { fromRef: 'item:ev1', toRef: 'passage:ev1#1', kind: 'contains', origin: 'graph', evidenceIds: [] },
-    { fromRef: 'person:p1', toRef: 'item:ev1', kind: 'said', origin: 'graph', basis: 'observed', evidenceIds: [] },
-    { fromRef: 'fact:f1', toRef: 'item:ev1', kind: 'read_from', origin: 'graph', evidenceIds: [] },
-    { fromRef: 'agent:hermes', toRef: 'item:ev1', kind: 'reaches', origin: 'reach', evidenceIds: [] },
+    {
+      fromRef: 'source:slack',
+      toRef: 'item:ev1',
+      kind: 'carries',
+      origin: 'graph',
+      evidenceIds: [],
+    },
+    {
+      fromRef: 'item:ev1',
+      toRef: 'passage:ev1#1',
+      kind: 'contains',
+      origin: 'graph',
+      evidenceIds: [],
+    },
+    {
+      fromRef: 'person:p1',
+      toRef: 'item:ev1',
+      kind: 'said',
+      origin: 'graph',
+      basis: 'observed',
+      evidenceIds: [],
+    },
+    {
+      fromRef: 'fact:f1',
+      toRef: 'item:ev1',
+      kind: 'read_from',
+      origin: 'graph',
+      evidenceIds: [],
+    },
+    {
+      fromRef: 'agent:hermes',
+      toRef: 'item:ev1',
+      kind: 'reaches',
+      origin: 'reach',
+      evidenceIds: [],
+    },
   ],
   withheld: 3,
   truncated: true,
@@ -98,15 +129,24 @@ describe('the workspace graph a screen draws', () => {
     const graph = parseCloudGraph(CLOUD);
     expect(graph?.withheld).toBe(3);
     expect(graph?.truncated).toBe(true);
-    expect(graph?.nodes.find((each) => each.ref === 'handle:github:dependabot')?.said[0]?.at).toBe(READ_AT);
+    expect(
+      graph?.nodes.find((each) => each.ref === 'handle:github:dependabot')?.said[0]?.at,
+    ).toBe(READ_AT);
   });
 
   it('draws what arrived with its tool, its count and who said it, and leaves agents off', () => {
-    const view = foldWorkspaceGraph({ live: parseCloudGraph(CLOUD), memory: null, readAt: READ_AT });
+    const view = foldWorkspaceGraph({
+      live: parseCloudGraph(CLOUD),
+      memory: null,
+      readAt: READ_AT,
+    });
 
     expect(view.source).toBe(WORKSPACE_GRAPH_SOURCE.LIVE);
     expect(view.readAt).toBe(READ_AT);
-    expect(node(view, 'source:slack')).toMatchObject({ kind: WORKSPACE_NODE_KIND.SOURCE, tool: 'slack' });
+    expect(node(view, 'source:slack')).toMatchObject({
+      kind: WORKSPACE_NODE_KIND.SOURCE,
+      tool: 'slack',
+    });
     expect(node(view, 'item:ev1')).toMatchObject({
       kind: WORKSPACE_NODE_KIND.DOCUMENT,
       tool: 'slack',
@@ -133,7 +173,11 @@ describe('the workspace graph a screen draws', () => {
   });
 
   it('folds a settled fact onto the node the cloud drew and joins it to whom it names', () => {
-    const view = foldWorkspaceGraph({ live: parseCloudGraph(CLOUD), memory: MEMORY, readAt: READ_AT });
+    const view = foldWorkspaceGraph({
+      live: parseCloudGraph(CLOUD),
+      memory: MEMORY,
+      readAt: READ_AT,
+    });
 
     const fact = node(view, 'fact:f1');
     expect(fact).toMatchObject({
@@ -146,13 +190,25 @@ describe('the workspace graph a screen draws', () => {
     });
     expect(view.nodes.filter((each) => each.id === 'fact:f1')).toHaveLength(1);
     // The principal is the person the cloud already drew, by the name the record writes.
-    expect(view.links).toContainEqual({ from: 'fact:f1', to: 'person:p1', kind: WORKSPACE_LINK_KIND.NAMES });
-    expect(view.links).toContainEqual({ from: 'name:ben', to: 'fact:f1', kind: WORKSPACE_LINK_KIND.APPROVED });
+    expect(view.links).toContainEqual({
+      from: 'fact:f1',
+      to: 'person:p1',
+      kind: WORKSPACE_LINK_KIND.NAMES,
+    });
+    expect(view.links).toContainEqual({
+      from: 'name:ben',
+      to: 'fact:f1',
+      kind: WORKSPACE_LINK_KIND.APPROVED,
+    });
     expect(view.withheld).toBe(3);
   });
 
   it('draws a candidate as waiting, read from its tool and said by its author', () => {
-    const view = foldWorkspaceGraph({ live: parseCloudGraph(CLOUD), memory: MEMORY, readAt: READ_AT });
+    const view = foldWorkspaceGraph({
+      live: parseCloudGraph(CLOUD),
+      memory: MEMORY,
+      readAt: READ_AT,
+    });
 
     expect(node(view, 'candidate:c1')).toMatchObject({
       kind: WORKSPACE_NODE_KIND.CANDIDATE,
@@ -161,8 +217,16 @@ describe('the workspace graph a screen draws', () => {
       saidBy: 'Cara',
       untrusted: true,
     });
-    expect(view.links).toContainEqual({ from: 'candidate:c1', to: 'source:slack', kind: WORKSPACE_LINK_KIND.READ_FROM });
-    expect(view.links).toContainEqual({ from: 'name:cara', to: 'candidate:c1', kind: WORKSPACE_LINK_KIND.SAID });
+    expect(view.links).toContainEqual({
+      from: 'candidate:c1',
+      to: 'source:slack',
+      kind: WORKSPACE_LINK_KIND.READ_FROM,
+    });
+    expect(view.links).toContainEqual({
+      from: 'name:cara',
+      to: 'candidate:c1',
+      kind: WORKSPACE_LINK_KIND.SAID,
+    });
   });
 
   it('answers the saved facts alone with why, when the cloud could not be asked', () => {
@@ -183,7 +247,11 @@ describe('the workspace graph a screen draws', () => {
   });
 
   it('weighs a node by the lines kept, so a screen names the heavy ones', () => {
-    const view = foldWorkspaceGraph({ live: parseCloudGraph(CLOUD), memory: MEMORY, readAt: READ_AT });
+    const view = foldWorkspaceGraph({
+      live: parseCloudGraph(CLOUD),
+      memory: MEMORY,
+      readAt: READ_AT,
+    });
     const weights = view.nodes.map((each) => each.weight);
     expect(Math.max(...weights)).toBe(node(view, 'item:ev1')?.weight);
   });
