@@ -70,9 +70,8 @@ export async function markExcluded(
   if (repository === null || repository === undefined) return;
   const inTop = join(await realpath(root), relative(root, path));
   const entry = `/${relative(repository.top, inTop).split(sep).join('/')}`;
-  const raw = existsSync(repository.exclude)
-    ? await readFile(repository.exclude, 'utf8')
-    : '';
+  // Read straight away rather than checked first, since the file can come or go between the two; absent reads empty.
+  const raw = await readFile(repository.exclude, 'utf8').catch(() => '');
   const { outside, entries } = splitBlock(raw);
   const next = excluded
     ? [...new Set([...entries, entry])]

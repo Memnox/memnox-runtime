@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { open, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, sep } from 'node:path';
 
 import { withoutNativeBlock } from '../distribute/native-files';
@@ -104,9 +104,7 @@ class FolderSource implements MemorySource {
 
   async read(ref: SourceDocumentRef): Promise<SourceDocument | null> {
     const path = join(await baseOf(this.root), ref.document);
-    const info = await stat(path).catch(() => null);
-    if (info === null || !info.isFile() || info.size > MOST_FILE_BYTES) return null;
-    const read = await readFile(path, 'utf8').catch(() => null);
+    const read = await boundedText(path);
     if (read === null) return null;
     const text = this.own(read);
     const title = this.titleOf === undefined ? undefined : this.titleOf(ref.document);
@@ -191,4 +189,22 @@ export function isInstructionFile(path: string): boolean {
 function notionTitle(document: string): string {
   const name = basename(document, extname(document));
   return name.replace(NOTION_ID_SUFFIX, '');
+}
+
+/**
+ * A file's text when it is a file no larger than a source reads, checked and read through one open handle, so the
+ * file that was measured is the file that is read even when the path is swapped between the two.
+ */
+async function boundedText(path: string): Promise<string | null> {
+  const handle = await open(path, 'r').catch(() => null);
+  if (handle === null) return null;
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > MOST_FILE_BYTES) return null;
+    return await handle.readFile('utf8');
+  } catch {
+    return null;
+  } finally {
+    await handle.close();
+  }
 }
