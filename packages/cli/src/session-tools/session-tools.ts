@@ -43,7 +43,8 @@ export interface ToolDefinition {
 
 /**
  * Words no tool name may carry. Asserted in a test, because the day one does, an agent
- * can grant itself what its person was asked for. A person does those at a terminal or the console.
+ * can grant itself what its person was asked for. A person does those at a terminal or the console,
+ * and that includes giving an agent work or a job, since a task is written by a person.
  */
 export const NEVER_OFFERED: readonly string[] = [
   'allow',
@@ -58,6 +59,9 @@ export const NEVER_OFFERED: readonly string[] = [
   'policy',
   'enroll',
   'enrol',
+  'assign',
+  'bind',
+  'execute',
 ];
 
 export function readTool(
