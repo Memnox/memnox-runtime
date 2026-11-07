@@ -93,6 +93,7 @@ export function registerRunCommand(
       'a workspace brief the voice gathered, handed to the agent before its first turn',
     )
     .option('--mission <id>', 'join this session to a mission, from memnox mission start')
+    .option('--work <id>', 'carry agent work a person started, from memnox work start')
     .option(
       '--hold-credentials',
       'keep tokens out of the agent environment and hand each only to the CLI that uses it',

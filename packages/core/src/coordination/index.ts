@@ -25,3 +25,6 @@ export * from './agents-first';
 export * from './person-messages';
 export * from './work-refs';
 export * from './work-together';
+export * from './agent-work';
+export * from './agent-work-store';
+export * from './external-task';

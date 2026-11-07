@@ -27,6 +27,7 @@ import { MEMORY_METHOD } from './memory';
 import { LAN_METHOD } from './lan';
 import { PERSONAL_SYNC_METHOD } from './personal-sync';
 import { PROFILES_METHOD } from './profiles';
+import { WORK_METHOD } from './work';
 import { INDEX_METHOD } from './community-index';
 import { REMOTE_METHOD } from './remote';
 import { SPEECH_METHOD } from './speech';
@@ -131,6 +132,7 @@ export const DAEMON_METHOD = {
   ...LAN_METHOD,
   ...PERSONAL_SYNC_METHOD,
   ...PROFILES_METHOD,
+  ...WORK_METHOD,
   ...INDEX_METHOD,
 } as const;
 
@@ -312,6 +314,8 @@ export const DAEMON_EVENT = {
   NOTICE: 'notice',
   /** Rows the ledger gained that a screen's activity view shows, names only, a burst at most once a second. */
   ACTIVITY: 'activity',
+  /** A piece of agent work changed: started, reported on, handed on, stopped or closed. */
+  WORK: 'work',
 } as const;
 
 export type DaemonEventKind = (typeof DAEMON_EVENT)[keyof typeof DAEMON_EVENT];

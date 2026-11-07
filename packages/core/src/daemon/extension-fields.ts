@@ -22,6 +22,11 @@ import type {
   PersonalSyncResponseFields,
 } from './personal-sync';
 import type { ProfilesRequestFields, ProfilesResponseFields } from './profiles';
+import type {
+  AgentWorkEventFields,
+  AgentWorkRequestFields,
+  AgentWorkResponseFields,
+} from './work';
 import type { IndexRequestFields, IndexResponseFields } from './community-index';
 import type {
   RemoteEventFields,
@@ -75,6 +80,8 @@ interface QuestionEventFields {
 interface SubscribeRequestFields {
   /** On SUBSCRIBE: send ACTIVITY too; asked for, since an app built before it would say every row aloud. */
   subscribeActivity?: boolean;
+  /** On SUBSCRIBE: send WORK too, asked for for the same reason. */
+  subscribeWork?: boolean;
 }
 
 interface AccountRequestFields {
@@ -120,6 +127,7 @@ export interface ExtensionRequestFields
     LanRequestFields,
     PersonalSyncRequestFields,
     ProfilesRequestFields,
+    AgentWorkRequestFields,
     IndexRequestFields {}
 
 export interface ExtensionResponseFields
@@ -142,6 +150,7 @@ export interface ExtensionResponseFields
     LanResponseFields,
     PersonalSyncResponseFields,
     ProfilesResponseFields,
+    AgentWorkResponseFields,
     IndexResponseFields {}
 
 export interface ExtensionEventFields
@@ -152,4 +161,5 @@ export interface ExtensionEventFields
     QuestionEventFields,
     HeldActionEventFields,
     ProposalEventFields,
-    ActivityEventFields {}
+    ActivityEventFields,
+    AgentWorkEventFields {}

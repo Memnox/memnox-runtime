@@ -14,6 +14,8 @@ import {
   pairMessage,
 } from './remote';
 import { PROPOSING_METHODS } from './proposing';
+import { HANDOFF_ANSWER_WORD } from './work';
+import { WORK_STATUS } from '../coordination/agent-work';
 
 /** One signed message: what went in, and the exact text a key must sign for it. */
 export interface MessageVector {
@@ -162,6 +164,8 @@ function valueVectors(): Record<string, string[]> {
     followUpOutcomes: Object.values(FOLLOW_UP_OUTCOME),
     capabilities: Object.values(REMOTE_CAPABILITY),
     deviceKinds: Object.values(DEVICE_KIND),
+    handoffAnswers: Object.values(HANDOFF_ANSWER_WORD),
+    workStatuses: Object.values(WORK_STATUS),
   };
 }
 
