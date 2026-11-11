@@ -11,7 +11,21 @@ import { SHORT_HELP_FOOTER } from '../src/help';
  * lists them, which is also what the client's command coverage check reads.
  */
 
-const SHORT = ['setup', 'status', 'rewind', 'doctor', 'stop', 'start', 'update', 'login'];
+const SHORT = [
+  'setup',
+  'status',
+  'sessions',
+  'approvals',
+  'next',
+  'mission',
+  'budget',
+  'rewind',
+  'doctor',
+  'stop',
+  'start',
+  'update',
+  'login',
+];
 
 async function helpFor(args: string[]): Promise<string> {
   const program = buildProgram(new CliContext(new RecordedOutput(), plainStyle));

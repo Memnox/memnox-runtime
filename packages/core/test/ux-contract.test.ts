@@ -7,6 +7,8 @@ import {
   HOLD_ANSWER_LABEL,
   HOLD_ANSWER_ORDER,
   HOLD_OUTCOME_WORD,
+  INSTALL_LINE,
+  TRY_PROMPT,
   SESSION_REASON_LABEL,
   SESSION_STATUS_LABEL,
   SESSION_STATUS_ORDER,
@@ -31,6 +33,8 @@ interface Contract {
     reasons: Record<string, string>;
   };
   pages: { id: string }[];
+  install: string;
+  tryPrompt: string;
 }
 
 function contract(): Contract {
@@ -63,5 +67,10 @@ describe('the words every surface shares', () => {
   it('gives every page one id', () => {
     const ids = contract().pages.map((page) => page.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('gives a newcomer the same install line and the same first prompt everywhere', () => {
+    expect(INSTALL_LINE).toBe(contract().install);
+    expect(TRY_PROMPT).toBe(contract().tryPrompt);
   });
 });

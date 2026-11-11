@@ -67,6 +67,12 @@ import { registerUpdateCommand } from './commands/update.command';
 const SPINE: readonly string[] = [
   'setup',
   'status',
+  // What a person checks between sessions: who needs them, what is held, what to hand over.
+  'sessions',
+  'approvals',
+  'next',
+  'mission',
+  'budget',
   'rewind',
   'doctor',
   'stop',

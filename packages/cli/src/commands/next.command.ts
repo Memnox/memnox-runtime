@@ -79,6 +79,7 @@ export function registerNextCommand(
       '--hand-over',
       'write the allow rules for everything below that is ready, rather than one at a time',
     )
+    .option('--detail', 'also week by week, and what interrupted you')
     .option('--json', 'machine-readable output')
     .action(async (options: NextOptions) => runNext(context, home, now, options));
 }
@@ -86,6 +87,7 @@ export function registerNextCommand(
 type NextOptions = {
   since: string;
   json?: boolean;
+  detail?: boolean;
   handOver?: boolean;
 } & BoundaryOptions;
 
@@ -119,7 +121,7 @@ async function runNext(
     context.out.json({ standing, promotable: ready, interruptions: asked, weeks });
     return;
   }
-  renderDelegable(context, delegable);
+  renderDelegable(context, delegable, options.detail === true);
 }
 
 /** Reads the ledger over the window and the rules in force into one answer. */
@@ -161,14 +163,19 @@ async function readStanding(
   });
 }
 
-function renderDelegable(context: CliContext, delegable: Delegable): void {
+/** One screen by default: where you are, what is ready, and one command; the history waits behind --detail. */
+function renderDelegable(
+  context: CliContext,
+  delegable: Delegable,
+  detail: boolean,
+): void {
   const { flow } = context;
   const { standing, ready, asked, found } = delegable;
 
   flow.rows('Where you are', [{ label: standing, value: describeLevel(standing) }]);
-  renderWeeks(context, delegable.weeks);
+  if (detail) renderWeeks(context, delegable.weeks);
   if (ready.length > 0) renderReady(context, ready);
-  if (asked.total > 0) {
+  if (detail && asked.total > 0) {
     flow.table(
       `What interrupted you, ${asked.total} times in ${DEFAULT_WINDOW_DAYS} days`,
       ['Times', 'Action'],
@@ -204,7 +211,7 @@ function renderReady(context: CliContext, ready: readonly Delegation[]): void {
       detail: [
         each.because,
         handable(each)
-          ? `memnox protect --allow ${each.action}  (or keep being asked)`
+          ? `memnox protect --allow ${each.action}`
           : `stays a question: ${heldBecause(each)}`,
       ],
     })),
@@ -237,11 +244,11 @@ function renderVerdict(
   }
   // A count, never hours: hours saved is a number nobody can check.
   flow.close(
-    style.ok(
-      `${ready.length} thing(s) you have already said yes to enough times that being asked again is the tool wasting your attention.`,
-    ),
+    style.ok(`${ready.length} thing(s) you have said yes to often enough to hand over.`),
   );
-  if (ready.some((each) => handable(each))) {
-    flow.hint('memnox next --hand-over   writes all of them at once');
-  }
+  flow.hint(
+    ready.some((each) => handable(each))
+      ? 'memnox next --hand-over   writes all of them at once'
+      : 'memnox next --detail   shows what is holding them back',
+  );
 }
