@@ -430,6 +430,8 @@ function describeHeld(each: PendingApproval): Record<string, unknown> {
     ...(each.request.class === undefined ? {} : { class: each.request.class }),
     id: each.id,
     agent: each.request.agent,
+    // Which session asked, so the workspace's board puts the call under it rather than guessing.
+    sessionId: each.request.sessionId,
     operation: each.request.operation,
     reason: redactSecrets(each.request.reason),
     askedAt: each.askedAt,
