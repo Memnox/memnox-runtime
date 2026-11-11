@@ -1,15 +1,21 @@
+import { spawnSync } from 'node:child_process';
 import { homedir, userInfo } from 'node:os';
 
 import type { Command } from 'commander';
 
 import {
   clearSessionTaint,
+  relaunchOf,
+  RunTerminals,
   SessionPauses,
+  type InterruptedRun,
   type SessionPause,
   type Taint,
 } from '@memnox/core';
 
 import type { CliContext } from '../cli-context';
+import { confirmOnTerminal, type Confirm } from '../confirm';
+import { readInterrupted } from '../session-tools/session-board-read';
 import { describeCount } from '../plural';
 import { TONE } from '../flow';
 
@@ -23,15 +29,25 @@ interface ResumeDeps {
   context: CliContext;
   home: () => string;
   now: () => Date;
+  /** Asked before a cut off run is started again, since starting an agent is the person's call. */
+  confirm: Confirm;
+  /** Starts `memnox` with these arguments in this terminal, and waits for it to end. */
+  relaunch: (argv: readonly string[], cwd: string) => number;
 }
 
 export function registerResumeCommand(
   program: Command,
   context: CliContext,
-  home: () => string = homedir,
-  now: () => Date = () => new Date(),
+  overrides: Partial<Omit<ResumeDeps, 'context'>> = {},
 ): void {
-  const deps: ResumeDeps = { context, home, now };
+  const deps: ResumeDeps = {
+    context,
+    home: homedir,
+    now: () => new Date(),
+    confirm: confirmOnTerminal,
+    relaunch: relaunchHere,
+    ...overrides,
+  };
   program
     .command('paused')
     .description('Sessions Memnox is holding, and why')
@@ -39,7 +55,7 @@ export function registerResumeCommand(
 
   program
     .command('resume <session>')
-    .description('Let a paused session carry on')
+    .description('Let a paused session carry on, or start one a crash cut off again')
     .option('--by <who>', 'who is lifting it', userInfo().username)
     .action(async (session: string, options: ResumeOptions) =>
       runResume(deps, session, options),
@@ -96,7 +112,11 @@ async function runResume(
   const clearing = { sessionId: session, by: options.by, now };
   const untainted = await clearSessionTaint(home(), clearing);
   if (resumed === null && untainted === null) {
-    throw new Error(`${session} is not paused, and nothing has it under suspicion.`);
+    const cut = (await readInterrupted(home())).find((run) => run.sessionId === session);
+    if (cut !== undefined) return startAgain(deps, cut);
+    throw new Error(
+      `${session} is not paused, was not cut off, and nothing has it under suspicion.`,
+    );
   }
 
   flow.rows('Resumed', [
@@ -123,4 +143,40 @@ function liftedRows(
     });
   }
   return rows;
+}
+
+/** A run a crash or reboot cut off, started again with what shaped it, once the person says so. */
+async function startAgain(deps: ResumeDeps, cut: InterruptedRun): Promise<void> {
+  const { context, home } = deps;
+  const { flow } = context;
+  const { argv, resumes } = relaunchOf(cut);
+  flow.rows('Cut off', [
+    { label: 'agent', value: cut.agent },
+    { label: 'in', value: cut.cwd },
+    { label: 'started', value: cut.startedAt },
+    {
+      label: 'picks up',
+      value: resumes ? 'its own conversation' : 'nothing; it starts fresh',
+    },
+  ]);
+  const yes = await deps.confirm(
+    `Start it again with "memnox ${argv.join(' ')}"?`,
+    false,
+  );
+  if (!yes) {
+    flow.close('Left as it was.');
+    return;
+  }
+  // Forgotten first, so the old record never lists beside the run that replaces it.
+  await new RunTerminals(home()).forget(cut.sessionId);
+  flow.close(`Starting ${cut.agent} again.`);
+  process.exitCode = deps.relaunch(argv, cut.cwd);
+}
+
+/** This same `memnox`, in this terminal, so the agent takes the tab exactly as before. */
+function relaunchHere(argv: readonly string[], cwd: string): number {
+  const entry = process.argv[1];
+  if (entry === undefined) throw new Error('Cannot find the memnox that is running.');
+  const result = spawnSync(process.execPath, [entry, ...argv], { cwd, stdio: 'inherit' });
+  return result.status ?? 1;
 }

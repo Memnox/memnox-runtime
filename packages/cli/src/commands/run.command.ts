@@ -128,7 +128,7 @@ async function runAgent(
   renderStart(context, run, deps, broker);
   await noteRunTerminal(
     run,
-    (deps.cwd ?? process.cwd)(),
+    { cwd: (deps.cwd ?? process.cwd)(), command, options },
     (deps.terminalOf ?? ownTerminal)(),
     nowOf(deps).toISOString(),
   );

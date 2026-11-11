@@ -1,13 +1,17 @@
 import { basename } from 'node:path';
 import {
+  interruptedRuns,
+  RunTerminals,
   SESSION_ACTIVITY,
+  SessionHosts,
   SessionPauses,
   sessionBoard,
+  type InterruptedRun,
   type BoardGroup,
   type SessionActivity,
   type SessionFacts,
 } from '@memnox/core';
-import { SESSION_STATE, sessionsTool } from './sessions-tool';
+import { processAlive, SESSION_STATE, sessionsTool } from './sessions-tool';
 import type { SessionToolDeps } from './read-tools';
 
 /**
@@ -44,17 +48,48 @@ export async function readSessionBoard(home: string, now: Date): Promise<BoardGr
   const rows = (await sessionsTool(boardDeps(home, now), {
     hours: BOARD_HOURS,
   })) as SessionToolRow[];
-  const pauses = await new SessionPauses(home).all();
+  const [pauses, cut] = await Promise.all([
+    new SessionPauses(home).all(),
+    readInterrupted(home),
+  ]);
   const pausedBy = new Map(
     pauses
       .filter((pause) => pause.resumedAt === undefined)
       .map((pause) => [pause.sessionId, pause.signal]),
   );
-  return sessionBoard(
-    rows
-      .filter((row) => row.notAnAgent === undefined)
-      .map((row) => factsOf(row, pausedBy.get(row.session))),
+  const facts = rows
+    .filter((row) => row.notAnAgent === undefined)
+    .map((row) => factsOf(row, pausedBy.get(row.session)))
+    .map((each) =>
+      cut.some((run) => run.sessionId === each.sessionId)
+        ? { ...each, activity: SESSION_ACTIVITY.INTERRUPTED }
+        : each,
+    );
+  // A run cut off before it recorded anything is still one somebody may want back.
+  const unseen = cut.filter(
+    (run) => !facts.some((each) => each.sessionId === run.sessionId),
   );
+  return sessionBoard([...facts, ...unseen.map(interruptedFacts)]);
+}
+
+/** Runs a crash or a reboot cut off, which `memnox resume` starts again. */
+export async function readInterrupted(home: string): Promise<InterruptedRun[]> {
+  const [runs, hosts] = await Promise.all([
+    new RunTerminals(home).all(),
+    new SessionHosts(home).all(),
+  ]);
+  return interruptedRuns(runs, hosts, processAlive);
+}
+
+function interruptedFacts(run: InterruptedRun): SessionFacts {
+  return {
+    sessionId: run.sessionId,
+    agent: run.agent,
+    activity: SESSION_ACTIVITY.INTERRUPTED,
+    lastActive: run.startedAt,
+    waiting: 0,
+    place: basename(run.cwd),
+  };
 }
 
 function factsOf(
