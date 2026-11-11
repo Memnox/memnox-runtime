@@ -28,3 +28,4 @@ export * from './work-together';
 export * from './agent-work';
 export * from './agent-work-store';
 export * from './external-task';
+export * from './shared-commit';
