@@ -424,6 +424,12 @@ does not go looking for something that is not there.
 | `18` black box, as one goal over many sessions | `core/session/mission.ts`, `memnox mission`. Sessions join by `--mission`, by inheritance, or by working in the mission's repository and worktrees; `mission show` is the screen for coming back. |
 | `21` the primary screen, reached by a person away | `cli/src/daemon/waiting-feed.ts`. Stopped, struggling and finished while nobody answered, beside every held call, waking a paired phone. |
 | `23` effective capability, as the desktop and the model that approves | `core/discovery/desktop.ts`: a server that both sees the screen and presses keys is a `desktop` surface, which `explain` reports as held by no seam. `APPROVAL_STATE.MODEL_REVIEWED` for Claude Code's `auto` mode. Both are risk rules in `docs/risk-bands.md`. |
+| `16` agent budgets, told before they stop | `warnAt` in `core/session/budget.ts`, `budgetCrossings`; `cli/src/daemon/budget-watch.ts` puts a `budget` notice on the waiting feed once on the way up. `memnox budget set --warn-at`. |
+| `13`, `14`, `20` every change to what an agent may do, undoable | `core/store/revisions.ts` keeps a copy before each rule file write and each autopilot grant or revoke; `memnox policy history`, `memnox policy revert <n>`, which an agent may read and never run. |
+| `18` black box, as a run picked back up | `core/session/interrupted.ts`: a run record left behind with its process gone; `memnox resume <session>` starts it again with its task, role and mission and the agent's own conversation. |
+| `9` two agents in one checkout, at commit time | `core/coordination/shared-commit.ts`, asked from `interceptors/src/shared-commit-seam.ts` when a commit would take files another agent's lease holds. |
+| `21` the primary screen, as one board | `core/session/session-board.ts` and `memnox sessions`: Needs you, Stopped, Working, Finished, Idle, in that order everywhere. |
+| one product on every surface | `docs/ux/contract.json` and `docs/ux/words.md`: answer words and order, session statuses, the sidebar, Home, onboarding. Every repository keeps a verbatim copy and tests itself against it; `core/test/ux-contract.test.ts` here. |
 
 **Three rules these all had to obey, and they are worth keeping.**
 
