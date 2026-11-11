@@ -4,7 +4,14 @@
  * Pure, so the same card is what a test reads and what a terminal draws.
  */
 import { riskLabelFor } from '../notice/action-shape';
-import { describeHeldCall, HOLD_ANSWER, type HoldAnswer, type HoldRequest } from './hold';
+import {
+  describeHeldCall,
+  HOLD_ANSWER,
+  HOLD_ANSWER_LABEL,
+  HOLD_ANSWER_ORDER,
+  type HoldAnswer,
+  type HoldRequest,
+} from './hold';
 
 interface CardChoice {
   answer: HoldAnswer;
@@ -28,24 +35,23 @@ interface CardView {
 const WIDEST = 92;
 const NARROWEST = 40;
 
+/** Letters that still pick an answer, for hands that learned the old prompt. */
+const ANSWER_KEYS: Readonly<Record<HoldAnswer, readonly string[]>> = {
+  [HOLD_ANSWER.ONCE]: ['a', 'y'],
+  [HOLD_ANSWER.SESSION]: ['s'],
+  [HOLD_ANSWER.EDIT]: ['e'],
+  [HOLD_ANSWER.DENY]: ['d', 'n'],
+};
+
 export function choicesFor(request: HoldRequest): CardChoice[] {
-  const choices: CardChoice[] = [
-    { answer: HOLD_ANSWER.ONCE, label: 'Yes, once', keys: ['a', 'y'] },
-    {
-      answer: HOLD_ANSWER.SESSION,
-      label: 'Yes, for the rest of this session',
-      keys: ['s'],
-    },
-  ];
-  if (request.command !== undefined) {
-    choices.push({
-      answer: HOLD_ANSWER.EDIT,
-      label: 'Edit the command first',
-      keys: ['e'],
-    });
-  }
-  choices.push({ answer: HOLD_ANSWER.DENY, label: 'No', keys: ['d', 'n'] });
-  return choices;
+  // A tool call has no line to fix, so the edit is offered only beside a command.
+  return HOLD_ANSWER_ORDER.filter(
+    (answer) => answer !== HOLD_ANSWER.EDIT || request.command !== undefined,
+  ).map((answer) => ({
+    answer,
+    label: HOLD_ANSWER_LABEL[answer],
+    keys: ANSWER_KEYS[answer],
+  }));
 }
 
 /** The answer a key picks: a number, or one of the letters beside a choice. */

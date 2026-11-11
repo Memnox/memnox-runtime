@@ -1,8 +1,24 @@
 import { minutesToMs } from '../domain/time';
 import { MemoryGrants, type GrantSubject, type SessionGrants } from './session-grants';
-import { HOLD_ANSWER, type HoldAnswer } from './answers';
+import {
+  ALWAYS_ALLOW_LABEL,
+  ALWAYS_DENY_LABEL,
+  HOLD_ANSWER,
+  HOLD_ANSWER_LABEL,
+  HOLD_ANSWER_ORDER,
+  HOLD_OUTCOME_WORD,
+  type HoldAnswer,
+} from './answers';
 
-export { HOLD_ANSWER, type HoldAnswer };
+export {
+  ALWAYS_ALLOW_LABEL,
+  ALWAYS_DENY_LABEL,
+  HOLD_ANSWER,
+  HOLD_ANSWER_LABEL,
+  HOLD_ANSWER_ORDER,
+  HOLD_OUTCOME_WORD,
+  type HoldAnswer,
+};
 
 /**
  * Holding a call for a person while the agent waits on the other end of a pipe, so every

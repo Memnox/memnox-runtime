@@ -1,6 +1,12 @@
 import { createInterface } from 'node:readline';
 
-import { HOLD_ANSWER, type HoldAsked, type HoldPrompt, type HoldRequest } from './hold';
+import {
+  HOLD_ANSWER,
+  HOLD_OUTCOME_WORD,
+  type HoldAsked,
+  type HoldPrompt,
+  type HoldRequest,
+} from './hold';
 import { answerForKey, choicesFor, renderCard } from './permission-card';
 import { openTerminal, type TerminalStreams } from './terminal';
 
@@ -236,13 +242,6 @@ class DrawnCard {
   }
 }
 
-const OUTCOME: Readonly<Record<string, string>> = {
-  [HOLD_ANSWER.ONCE]: 'allowed once',
-  [HOLD_ANSWER.SESSION]: 'allowed for this session',
-  [HOLD_ANSWER.DENY]: 'refused',
-  [HOLD_ANSWER.EDIT]: 'editing',
-};
-
 /** What stays on screen once the card is gone, so the scrollback says what was decided. */
 function outcomeLine(
   request: HoldRequest,
@@ -250,7 +249,7 @@ function outcomeLine(
   by?: string,
 ): string {
   const what = request.command ?? `${request.operation} ${request.target ?? ''}`.trim();
-  const said = answer === null ? 'nobody answered, so refused' : OUTCOME[answer];
+  const said = answer === null ? 'nobody answered, so denied' : HOLD_OUTCOME_WORD[answer];
   const where = by === undefined ? '' : `, by ${by}`;
-  return `  Memnox · ${what} · ${said ?? answer}${where}`;
+  return `  Memnox · ${what} · ${said}${where}`;
 }

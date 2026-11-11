@@ -157,9 +157,9 @@ describe('the terminal prompt', () => {
     expect(question).toContain('Claude-code wants to merge_pull_request');
     expect(question).toContain('merge_pull_request github');
     expect(question).toContain('production is frozen');
-    expect(question).toContain('1. Yes, once');
-    expect(question).toContain('2. Yes, for the rest of this session');
-    expect(question).toContain('3. No');
+    expect(question).toContain('1. Allow once');
+    expect(question).toContain('2. Allow for this session');
+    expect(question).toContain('3. Deny');
   });
 
   it('shows the command as typed, the reason once, and where else to answer', () => {
@@ -324,7 +324,7 @@ describe('the terminal prompt, one key at a time', () => {
     await asking;
 
     expect(drawn()).toContain('╭─ Memnox');
-    expect(drawn()).toContain('Memnox · git push --force · refused');
+    expect(drawn()).toContain('Memnox · git push --force · denied');
   });
 
   it('closes at once when another route answered, and says who did', async () => {

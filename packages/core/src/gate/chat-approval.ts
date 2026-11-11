@@ -5,7 +5,12 @@
  */
 import { desktopApp } from '../constants/machine-word.constants';
 import { digest } from '../domain/digest';
-import { HOLD_ANSWER, type HoldAnswer, type HoldRequest } from './hold';
+import {
+  HOLD_ANSWER,
+  HOLD_ANSWER_LABEL,
+  type HoldAnswer,
+  type HoldRequest,
+} from './hold';
 import { ANSWER_PLACE, PendingApprovals, type PendingApproval } from './pending';
 import { plainAsk, type PlainAsk } from './plain-ask';
 import {
@@ -238,9 +243,9 @@ function actionWord(held: PendingApproval): string {
 
 /** The three answers, labelled the same in the picker, the numbered list and the parser. */
 export const PICKER_LABEL = {
-  ONCE: 'Allow once',
-  SESSION: 'Allow for this session',
-  DENY: 'Deny',
+  ONCE: HOLD_ANSWER_LABEL[HOLD_ANSWER.ONCE],
+  SESSION: HOLD_ANSWER_LABEL[HOLD_ANSWER.SESSION],
+  DENY: HOLD_ANSWER_LABEL[HOLD_ANSWER.DENY],
 } as const;
 
 /** The header a held question's picker carries, so the hook knows it is ours. */
