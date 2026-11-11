@@ -70,13 +70,17 @@ export class RoutedHoldPrompt implements HoldPrompt {
         ...(this.deps.pollMs === undefined ? {} : { intervalMs: this.deps.pollMs }),
       }).then((answer) => (answer === null ? null : { answer })),
     ];
+    // Settled once any route wins, so a card still on the terminal closes rather than counting on.
+    let answeredElsewhere: (asked: HoldAsked) => void = () => undefined;
+    const elsewhere = new Promise<HoldAsked>((resolve) => {
+      answeredElsewhere = resolve;
+    });
     if (this.deps.tty !== undefined) {
       answers.push(
         this.askTty(
           this.deps.tty,
           { ...request, approvalId: pending.id },
-          timeoutMs,
-          pending.id,
+          { timeoutMs, id: pending.id, elsewhere },
         ),
       );
     }
@@ -89,12 +93,13 @@ export class RoutedHoldPrompt implements HoldPrompt {
     }
     // Read before it is cleared, so the row this hold leaves can say who answered it.
     const settled = await this.deps.approvals.read(pending.id);
+    // A terminal that answered itself has already closed its card, so only another route is said.
+    if (answer !== null) answeredElsewhere({ ...answer, ...byOf(settled?.answeredBy) });
     // Cleared either way, or somebody answers it later for a command long gone.
     await this.deps.approvals.clear(pending.id);
     // Somebody could have answered and nobody did, which is a timeout and not the rule's refusal.
     if (answer === null) return { unanswered: HOLD_OUTCOME.TIMED_OUT };
-    const by = settled?.answeredBy;
-    return by === undefined ? answer : { ...answer, by };
+    return { ...answer, ...byOf(settled?.answeredBy) };
   }
 
   /**
@@ -121,10 +126,10 @@ export class RoutedHoldPrompt implements HoldPrompt {
   private async askTty(
     tty: HoldPrompt,
     request: HoldRequest,
-    timeoutMs: number,
-    id: string,
+    hold: { timeoutMs: number; id: string; elsewhere: Promise<HoldAsked> },
   ): Promise<HoldAsked | null> {
-    const asked = await tty.ask(request, timeoutMs);
+    const { timeoutMs, id } = hold;
+    const asked = await tty.ask(request, timeoutMs, hold.elsewhere);
     // A terminal that ran out of time gives nothing, since the remote answer may still arrive.
     if (asked === null || isUnanswered(asked)) return null;
     await this.deps.approvals.answer(
@@ -145,6 +150,10 @@ export class RoutedHoldPrompt implements HoldPrompt {
       `held ${what} for a person (${seconds}s): memnox approve ${id}  |  memnox deny ${id}`,
     );
   }
+}
+
+function byOf(by: string | undefined): { by?: string } {
+  return by === undefined ? {} : { by };
 }
 
 /**

@@ -11,6 +11,8 @@ import { openTerminal, type TerminalStreams } from './terminal';
  */
 
 const DEFAULT_COLUMNS = 80;
+/** Who answered when the route that won did not say, which is still not this terminal. */
+const ELSEWHERE = 'someone elsewhere';
 const TICK_MS = 1000;
 
 const KEY = {
@@ -58,7 +60,11 @@ export interface TtyPromptDeps {
 export class TtyHoldPrompt implements HoldPrompt {
   constructor(private readonly deps: TtyPromptDeps = {}) {}
 
-  async ask(request: HoldRequest, timeoutMs: number): Promise<HoldAsked | null> {
+  async ask(
+    request: HoldRequest,
+    timeoutMs: number,
+    elsewhere?: Promise<HoldAsked>,
+  ): Promise<HoldAsked | null> {
     const open = this.deps.open ?? openTerminal;
     let streams: TerminalStreams;
     try {
@@ -69,11 +75,11 @@ export class TtyHoldPrompt implements HoldPrompt {
     }
     try {
       if (streams.setRawMode !== undefined) {
-        const picked = await this.pick(streams, request, timeoutMs);
+        const picked = await this.pick(streams, request, timeoutMs, elsewhere);
         if (picked !== HOLD_ANSWER.EDIT)
           return picked === null ? null : { answer: picked };
       }
-      return await this.byLine(streams, request, timeoutMs);
+      return await this.byLine(streams, request, timeoutMs, elsewhere);
     } finally {
       streams.close?.();
     }
@@ -84,6 +90,7 @@ export class TtyHoldPrompt implements HoldPrompt {
     streams: TerminalStreams,
     request: HoldRequest,
     timeoutMs: number,
+    elsewhere?: Promise<HoldAsked>,
   ): Promise<HoldAsked['answer'] | null> {
     const now = this.deps.now ?? Date.now;
     const deadline = now() + timeoutMs;
@@ -91,11 +98,15 @@ export class TtyHoldPrompt implements HoldPrompt {
     const card = new DrawnCard(streams, request);
     let selected = 0;
     return new Promise((resolve) => {
-      const finish = (answer: HoldAsked['answer'] | null): void => {
+      let done = false;
+      const finish = (answer: HoldAsked['answer'] | null, by?: string): void => {
+        if (done) return;
+        done = true;
         clearInterval(ticking);
         streams.input.removeListener('data', onKey);
-        card.close(answer);
-        resolve(answer);
+        card.close(answer, by);
+        // Answered elsewhere is not this terminal's answer, so the route that won keeps the record.
+        resolve(by === undefined ? answer : null);
       };
       const onKey = (chunk: Buffer | string): void => {
         const key = chunk.toString();
@@ -126,6 +137,7 @@ export class TtyHoldPrompt implements HoldPrompt {
       ticking.unref?.();
       card.open(deadline - now());
       streams.input.on('data', onKey);
+      void elsewhere?.then((asked) => finish(asked.answer, asked.by ?? ELSEWHERE));
     });
   }
 
@@ -134,6 +146,7 @@ export class TtyHoldPrompt implements HoldPrompt {
     streams: TerminalStreams,
     request: HoldRequest,
     timeoutMs: number,
+    elsewhere?: Promise<HoldAsked>,
   ): Promise<HoldAsked | null> {
     // A real terminal gets line editing, so the command it is handed can be changed in place.
     const editing = streams.setRawMode !== undefined;
@@ -142,9 +155,19 @@ export class TtyHoldPrompt implements HoldPrompt {
       output: streams.output,
       terminal: editing,
     });
+    let settled = false;
     return new Promise<HoldAsked | null>((resolve) => {
       const timer = setTimeout(() => resolve(null), timeoutMs);
       timer.unref?.();
+      void elsewhere?.then((asked) => {
+        // The terminal's own answer reaches the file too, and must not be said twice.
+        if (settled) return;
+        clearTimeout(timer);
+        streams.output.write(
+          `\n${outcomeLine(request, asked.answer, asked.by ?? ELSEWHERE)}\n`,
+        );
+        resolve(null);
+      });
       const edit = (): void => {
         // The same clock keeps running: editing must not become a way to wait for ever.
         const asked = editing ? EDIT_IN_PLACE : editPromptFor(request);
@@ -167,7 +190,10 @@ export class TtyHoldPrompt implements HoldPrompt {
         }
         edit();
       });
-    }).finally(() => rl.close());
+    }).finally(() => {
+      settled = true;
+      rl.close();
+    });
   }
 }
 
@@ -199,9 +225,9 @@ class DrawnCard {
   }
 
   /** Raw mode off and the cursor back whatever happened, or the person's shell is left broken. */
-  close(answer: HoldAsked['answer'] | null): void {
+  close(answer: HoldAsked['answer'] | null, by?: string): void {
     this.write(`${CURSOR.up(this.height)}${CURSOR.CLEAR_DOWN}${CURSOR.SHOW}`);
-    this.write(`${outcomeLine(this.request, answer)}\n`);
+    this.write(`${outcomeLine(this.request, answer, by)}\n`);
     this.streams.setRawMode?.(false);
   }
 
@@ -218,8 +244,13 @@ const OUTCOME: Readonly<Record<string, string>> = {
 };
 
 /** What stays on screen once the card is gone, so the scrollback says what was decided. */
-function outcomeLine(request: HoldRequest, answer: HoldAsked['answer'] | null): string {
+function outcomeLine(
+  request: HoldRequest,
+  answer: HoldAsked['answer'] | null,
+  by?: string,
+): string {
   const what = request.command ?? `${request.operation} ${request.target ?? ''}`.trim();
   const said = answer === null ? 'nobody answered, so refused' : OUTCOME[answer];
-  return `  Memnox · ${what} · ${said ?? answer}`;
+  const where = by === undefined ? '' : `, by ${by}`;
+  return `  Memnox · ${what} · ${said ?? answer}${where}`;
 }

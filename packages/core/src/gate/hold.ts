@@ -99,10 +99,12 @@ export interface HoldPrompt {
   /**
    * Null when there was nobody to ask, meaning no TTY or a non-interactive run. A
    * `HoldUnanswered` when somebody could have answered and nobody did in time.
+   * `elsewhere` settles when another route answered first, which ends this one at once.
    */
   ask(
     request: HoldRequest,
     timeoutMs: number,
+    elsewhere?: Promise<HoldAsked>,
   ): Promise<HoldAsked | HoldUnanswered | null>;
 }
 

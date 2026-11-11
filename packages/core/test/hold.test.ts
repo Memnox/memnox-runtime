@@ -327,6 +327,21 @@ describe('the terminal prompt, one key at a time', () => {
     expect(drawn()).toContain('Memnox · git push --force · refused');
   });
 
+  it('closes at once when another route answered, and says who did', async () => {
+    const { streams, raw, drawn } = terminal();
+    const asking = new TtyHoldPrompt({ open: () => streams }).ask(
+      { ...REQUEST, command: 'git push' },
+      60_000,
+      Promise.resolve({ answer: HOLD_ANSWER.ONCE, by: 'moise on the phone' }),
+    );
+
+    // Not this terminal's answer, so the route that won keeps the record.
+    expect(await asking).toBeNull();
+    expect(drawn()).toContain('Memnox · git push · allowed once, by moise on the phone');
+    expect(drawn()).not.toContain('nobody answered');
+    expect(raw).toEqual([true, false]);
+  });
+
   it('gives the edit a line with the command already in it', async () => {
     const { streams, input } = terminal();
     const asking = new TtyHoldPrompt({ open: () => streams }).ask(
