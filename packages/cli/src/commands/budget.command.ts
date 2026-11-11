@@ -4,8 +4,10 @@ import type { Command } from 'commander';
 
 import { LEDGER_SCAN_LIMIT } from '@memnox/core';
 import {
+  BUDGET_LEVEL,
   BUDGET_UNIT,
   BUDGET_WINDOW,
+  budgetLevel,
   describeSpend,
   readBudgets,
   spendReport,
@@ -60,6 +62,7 @@ export function registerBudgetCommand(
     .requiredOption('--limit <n>', 'how much')
     .option('--window <window>', 'day, hour or session', BUDGET_WINDOW.DAY)
     .option('--unit <unit>', 'calls or usd', BUDGET_UNIT.CALLS)
+    .option('--warn-at <n>', 'tell me when it reaches this much, before it stops')
     .action(async (name: string, options: SetOptions) => runSet(deps, name, options));
 
   budget
@@ -98,7 +101,7 @@ async function runList(deps: BudgetDeps, session: string | undefined): Promise<v
   flow.list(
     'In force',
     report.map((spend) => ({
-      tone: spend.remaining === 0 ? TONE.WARN : TONE.PLAIN,
+      tone: budgetLevel(spend) === BUDGET_LEVEL.CLEAR ? TONE.PLAIN : TONE.WARN,
       text: describeSpend(spend),
     })),
   );
@@ -116,6 +119,7 @@ interface SetOptions {
   limit: string;
   window: string;
   unit: string;
+  warnAt?: string;
 }
 
 /** Adds one budget, or replaces the one of that name. */
@@ -128,17 +132,7 @@ async function runSet(
   const { flow } = context;
   flow.open('memnox budget set');
 
-  const unit = asUnit(options.unit);
-  const entry: Budget = {
-    name,
-    actions: options.actions
-      .split(',')
-      .map((each) => each.trim())
-      .filter((each) => each.length > 0),
-    limit: limitOf(options.limit, unit),
-    window: asWindow(options.window),
-    unit,
-  };
+  const entry = budgetFrom(name, options);
   const problems = validateBudget(entry);
   if (problems.length > 0) throw new Error(problems.join('\n'));
 
@@ -148,6 +142,9 @@ async function runSet(
   flow.rows(name, [
     { label: 'covers', value: entry.actions.join(', ') },
     { label: 'limit', value: `${entry.limit} ${entry.unit} per ${entry.window}` },
+    ...(entry.warnAt === undefined
+      ? []
+      : [{ label: 'tells you at', value: `${entry.warnAt} ${entry.unit}` }]),
   ]);
   flow.close(`"${name}" is set.`);
   if (entry.unit === BUDGET_UNIT.USD) {
@@ -157,6 +154,24 @@ async function runSet(
     );
   }
   flow.hint('Drop it with "memnox budget remove".');
+}
+
+/** The budget a `set` names, before it is checked. */
+function budgetFrom(name: string, options: SetOptions): Budget {
+  const unit = asUnit(options.unit);
+  return {
+    name,
+    actions: options.actions
+      .split(',')
+      .map((each) => each.trim())
+      .filter((each) => each.length > 0),
+    limit: limitOf(options.limit, unit),
+    window: asWindow(options.window),
+    unit,
+    ...(options.warnAt === undefined
+      ? {}
+      : { warnAt: limitOf(options.warnAt, unit, '--warn-at') }),
+  };
 }
 
 /** Drops one budget by name. */
@@ -209,9 +224,9 @@ function asWindow(value: string): BudgetWindow {
   return value as BudgetWindow;
 }
 
-function limitOf(raw: string, unit: BudgetUnit): number {
+function limitOf(raw: string, unit: BudgetUnit, flag = '--limit'): number {
   // Calls are counted one at a time, while a reported cost can carry cents.
-  return unit === BUDGET_UNIT.CALLS ? positiveInteger(raw, '--limit') : Number(raw);
+  return unit === BUDGET_UNIT.CALLS ? positiveInteger(raw, flag) : Number(raw);
 }
 
 function asUnit(value: string): BudgetUnit {

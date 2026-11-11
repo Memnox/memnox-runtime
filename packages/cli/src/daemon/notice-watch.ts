@@ -49,6 +49,7 @@ import { SessionLives } from './session-lifecycle';
 import { WorkspaceStream } from './workspace-stream';
 import { SessionViews } from './session-view';
 import { SignInWatcher } from './sign-in-watch';
+import { BudgetWatch } from './budget-watch';
 import { personalAccounts } from '../sync/personal-work';
 import { readWorkspaceName } from '../sync/workspace-reads';
 
@@ -75,8 +76,11 @@ export class NoticeWatcher {
   private readonly told = new Map<string, DaemonEvent>();
   /** Background commands whose end was told, kept for the daemon's life so none is told twice. */
   private readonly ended = new Set<string>();
-  /** Every session as it begins and ends, so none comes or goes unnoticed. */
-  private readonly lives: SessionLives;
+  /**
+   * Watchers that each keep their own memory of what they told: every session as it begins and
+   * ends, sign ins the person was offered, and budgets passing their line or running out.
+   */
+  private readonly others: readonly { look(moment: string): Promise<DaemonEvent[]> }[];
   /** Pairs of sessions already told as colliding, so a pair working on for an hour is said once. */
   private readonly collided = new Set<string>();
   /** The newest clash told, so each held write is said once. */
@@ -90,8 +94,6 @@ export class NoticeWatcher {
   private workspace: WorkspaceStream | null = null;
   /** When the clash folder last changed, so a look that finds it unchanged reads nothing. */
   private clashFolderAt = 0;
-  /** Sign ins the person was offered, told once each finishes so the voice carries on. */
-  private readonly signIns: SignInWatcher;
 
   constructor(
     private readonly home: string,
@@ -99,8 +101,11 @@ export class NoticeWatcher {
   ) {
     this.watch = startWatch(started);
     this.clashSeen = started;
-    this.lives = new SessionLives(home, started);
-    this.signIns = new SignInWatcher(home, () => personalAccounts(home));
+    this.others = [
+      new SessionLives(home, started),
+      new SignInWatcher(home, () => personalAccounts(home)),
+      new BudgetWatch(home),
+    ];
   }
 
   /** New notices since the last look, as events ready to send. */
@@ -121,9 +126,8 @@ export class NoticeWatcher {
     const watched = await this.watched(moment);
     const finished = await this.commandsEnded(moment);
     const met = [...(await this.collisions(moment)), ...(await this.clashes(moment))];
-    const lived = await this.lives.look(moment);
-    const signedIn = await this.signIns.look(moment);
-    const all = [...fresh, ...watched, ...finished, ...met, ...lived, ...signedIn];
+    const others = await Promise.all(this.others.map((each) => each.look(moment)));
+    const all = [...fresh, ...watched, ...finished, ...met, ...others.flat()];
     for (const event of all) this.told.set(event.subject, event);
     return all;
   }

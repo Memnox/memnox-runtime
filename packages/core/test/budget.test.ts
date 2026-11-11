@@ -9,9 +9,13 @@ import {
   type MemnoxEvent,
 } from '../src/index';
 import {
+  BUDGET_LEVEL,
   BUDGET_UNIT,
   BUDGET_WINDOW,
+  budgetCrossings,
+  budgetLevel,
   coversAction,
+  describeCrossing,
   describeSpend,
   elsewhere,
   fleetBudgets,
@@ -238,5 +242,61 @@ describe('a budget counted across a fleet', () => {
     expect(
       elsewhere(fleetDeploys, [{ name: 'something else', spent: 99, at: NOW }]),
     ).toBe(0);
+  });
+});
+
+describe('a warning before the stop', () => {
+  const warned: Budget = { ...deploys, limit: 5, warnAt: 3 };
+  const spendOf = (spent: number): ReturnType<typeof spendReport>[number] => ({
+    budget: warned,
+    spent,
+    remaining: Math.max(0, warned.limit - spent),
+  });
+
+  it('stays clear below the line, warns at it, and is spent at the limit', () => {
+    expect(budgetLevel(spendOf(2))).toBe(BUDGET_LEVEL.CLEAR);
+    expect(budgetLevel(spendOf(3))).toBe(BUDGET_LEVEL.WARNED);
+    expect(budgetLevel(spendOf(5))).toBe(BUDGET_LEVEL.SPENT);
+  });
+
+  it('never warns a budget that set no line', () => {
+    expect(budgetLevel({ budget: deploys, spent: 2, remaining: 1 })).toBe(
+      BUDGET_LEVEL.CLEAR,
+    );
+  });
+
+  it('tells a crossing once, and again only after the window let it fall back', () => {
+    const first = budgetCrossings([spendOf(3)], new Map());
+    expect(first.crossings.map((each) => each.level)).toEqual([BUDGET_LEVEL.WARNED]);
+    const again = budgetCrossings([spendOf(4)], first.levels);
+    expect(again.crossings).toEqual([]);
+    const fell = budgetCrossings([spendOf(1)], again.levels);
+    const back = budgetCrossings([spendOf(3)], fell.levels);
+    expect(back.crossings).toHaveLength(1);
+  });
+
+  it('tells the stop even when the warning was already told', () => {
+    const warnedOnce = budgetCrossings([spendOf(3)], new Map());
+    const stopped = budgetCrossings([spendOf(5)], warnedOnce.levels);
+    expect(stopped.crossings.map((each) => each.level)).toEqual([BUDGET_LEVEL.SPENT]);
+  });
+
+  it('says the count and where it stops, and how to raise it once spent', () => {
+    expect(describeCrossing({ spend: spendOf(3), level: BUDGET_LEVEL.WARNED })).toBe(
+      '3 of 5 production deploys today, stops at 5.',
+    );
+    expect(describeCrossing({ spend: spendOf(5), level: BUDGET_LEVEL.SPENT })).toContain(
+      'memnox budget set',
+    );
+  });
+
+  it('prints the line beside the spend', () => {
+    expect(describeSpend(spendOf(3))).toContain('told at 3');
+  });
+
+  it('refuses a line at or above the limit, and one that is not a number', () => {
+    expect(validateBudget({ ...warned, warnAt: 5 })).toHaveLength(1);
+    expect(validateBudget({ ...warned, warnAt: Number.NaN })).toHaveLength(1);
+    expect(validateBudget(warned)).toEqual([]);
   });
 });

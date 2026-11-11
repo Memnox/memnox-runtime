@@ -35,6 +35,8 @@ export interface Budget {
   unit: BudgetUnit;
   /** Counted across the workspace, so three machines allowed twenty each is not sixty. */
   fleet?: boolean;
+  /** Where a person is told it is running low. It never stops anything; only `limit` does. */
+  warnAt?: number;
 }
 
 /**
@@ -150,10 +152,7 @@ export function exhaustedBy(
 }
 
 function describeBreach(budget: Budget, spent: number): string {
-  const amount =
-    budget.unit === BUDGET_UNIT.USD
-      ? `$${spent.toFixed(2)} of $${budget.limit.toFixed(2)}`
-      : `${spent} of ${budget.limit}`;
+  const amount = `${amountOf(budget, spent)} of ${amountOf(budget, budget.limit)}`;
   const per =
     budget.window === BUDGET_WINDOW.SESSION ? 'this session' : `per ${budget.window}`;
   // An allowance rather than a refusal, because "not allowed" sends somebody editing rules.
@@ -162,11 +161,81 @@ function describeBreach(budget: Budget, spent: number): string {
 
 export function describeSpend(spend: BudgetSpend): string {
   const { budget } = spend;
-  const amount =
-    budget.unit === BUDGET_UNIT.USD
-      ? `$${spend.spent.toFixed(2)} / $${budget.limit.toFixed(2)}`
-      : `${spend.spent} / ${budget.limit}`;
-  return `${budget.name.padEnd(24)}${amount} per ${budget.window}`;
+  const amount = `${amountOf(budget, spend.spent)} / ${amountOf(budget, budget.limit)}`;
+  const warned =
+    budget.warnAt === undefined ? '' : `, told at ${amountOf(budget, budget.warnAt)}`;
+  return `${budget.name.padEnd(24)}${amount} per ${budget.window}${warned}`;
+}
+
+function amountOf(budget: Budget, value: number): string {
+  return budget.unit === BUDGET_UNIT.USD ? `$${value.toFixed(2)}` : `${value}`;
+}
+
+export const BUDGET_LEVEL = {
+  /** Under the line a person asked to be told at, or no line at all. */
+  CLEAR: 'clear',
+  /** Past `warnAt` and still allowed: worth saying, never worth stopping. */
+  WARNED: 'warned',
+  /** Nothing left until the window moves, so the next covered call is refused. */
+  SPENT: 'spent',
+} as const;
+
+export type BudgetLevel = (typeof BUDGET_LEVEL)[keyof typeof BUDGET_LEVEL];
+
+/** Where one budget stands, from its spend alone, so every screen draws the same line. */
+export function budgetLevel(spend: BudgetSpend): BudgetLevel {
+  if (spend.remaining === 0) return BUDGET_LEVEL.SPENT;
+  const { warnAt } = spend.budget;
+  return warnAt !== undefined && spend.spent >= warnAt
+    ? BUDGET_LEVEL.WARNED
+    : BUDGET_LEVEL.CLEAR;
+}
+
+export interface BudgetCrossing {
+  spend: BudgetSpend;
+  level: BudgetLevel;
+}
+
+/**
+ * The budgets that moved up a level since the last look, and the levels to carry into the
+ * next. A budget is told once on the way up and again only after its window let it fall back.
+ */
+export function budgetCrossings(
+  spends: readonly BudgetSpend[],
+  before: ReadonlyMap<string, BudgetLevel>,
+): { crossings: BudgetCrossing[]; levels: Map<string, BudgetLevel> } {
+  const levels = new Map<string, BudgetLevel>();
+  const crossings: BudgetCrossing[] = [];
+  for (const spend of spends) {
+    const level = budgetLevel(spend);
+    levels.set(spend.budget.name, level);
+    const was = before.get(spend.budget.name) ?? BUDGET_LEVEL.CLEAR;
+    if (LEVEL_RANK[level] > LEVEL_RANK[was]) crossings.push({ spend, level });
+  }
+  return { crossings, levels };
+}
+
+const LEVEL_RANK: Record<BudgetLevel, number> = {
+  [BUDGET_LEVEL.CLEAR]: 0,
+  [BUDGET_LEVEL.WARNED]: 1,
+  [BUDGET_LEVEL.SPENT]: 2,
+};
+
+const CROSSING_PERIOD: Record<BudgetWindow, string> = {
+  [BUDGET_WINDOW.HOUR]: 'this hour',
+  [BUDGET_WINDOW.DAY]: 'today',
+  [BUDGET_WINDOW.SESSION]: 'this session',
+};
+
+/** What a person is told when a budget crosses a line; never the agent, which must not be shown how to raise its own. */
+export function describeCrossing(crossing: BudgetCrossing): string {
+  const { budget, spent } = crossing.spend;
+  const per = CROSSING_PERIOD[budget.window];
+  const counted = `${amountOf(budget, spent)} of ${amountOf(budget, budget.limit)} ${budget.name} ${per}`;
+  if (crossing.level === BUDGET_LEVEL.SPENT) {
+    return `${counted}. More of these are refused until the window moves; "memnox budget set" raises it.`;
+  }
+  return `${counted}, stops at ${amountOf(budget, budget.limit)}.`;
 }
 
 export function validateBudget(budget: Partial<Budget>): string[] {
@@ -182,7 +251,19 @@ export function validateBudget(budget: Partial<Budget>): string[] {
   } else if (budget.limit === undefined || budget.limit <= 0) {
     problems.push('a budget of zero is a deny rule; write it as one');
   }
+  if (budget.warnAt !== undefined)
+    problems.push(...warnProblems(budget.warnAt, budget.limit));
   return problems;
+}
+
+function warnProblems(warnAt: number, limit: number | undefined): string[] {
+  if (!Number.isFinite(warnAt) || warnAt <= 0) {
+    return ['a warning line must be a number above zero, like 40'];
+  }
+  if (limit !== undefined && warnAt >= limit) {
+    return ['a warning line must sit below the limit, or it is told only when it stops'];
+  }
+  return [];
 }
 
 /**
