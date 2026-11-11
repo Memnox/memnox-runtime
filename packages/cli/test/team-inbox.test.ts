@@ -8,7 +8,6 @@ import { confirmationMessage, PendingApprovals, type HoldRequest } from '@memnox
 import { CliContext } from '../src/cli-context';
 import { RecordedOutput } from '../src/cli-output';
 import { registerApprovalsCommand } from '../src/commands/approvals.command';
-import { registerInboxCommand } from '../src/commands/inbox.command';
 import { plainStyle } from '../src/style';
 import { enrolPerson, readPerson } from '../src/sync/person';
 
@@ -128,7 +127,7 @@ describe('a person signed in from a terminal', () => {
   });
 });
 
-describe('memnox inbox', () => {
+describe('memnox inbox, which is memnox approvals', () => {
   it('lists what this machine holds and what the team routed here, with counts', async () => {
     const { home } = await signedIn();
     const request: HoldRequest = {
@@ -158,7 +157,7 @@ describe('memnox inbox', () => {
     });
     const out = new RecordedOutput();
     const program = new Command();
-    registerInboxCommand(program, new CliContext(out, plainStyle), {
+    registerApprovalsCommand(program, new CliContext(out, plainStyle), {
       home: () => home,
       now: () => NOW,
     });

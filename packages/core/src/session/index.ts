@@ -33,3 +33,4 @@ export * from './mission';
 export * from './posts';
 export * from './away';
 export * from './progress';
+export * from './session-board';

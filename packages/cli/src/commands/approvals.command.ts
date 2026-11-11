@@ -20,6 +20,7 @@ import {
 import type { CliContext } from '../cli-context';
 import { TONE } from '../flow';
 import { answerTeamHeld, readPerson, type PersonCredential } from '../sync/person';
+import { countLine, readTeam, teamItem } from './approvals-team';
 
 /** What listing and answering both need. */
 interface ApprovalsDeps {
@@ -66,7 +67,8 @@ export function registerApprovalsCommand(
 
   program
     .command('approvals')
-    .description('Calls waiting for a person')
+    .alias('inbox')
+    .description('Everything waiting on you: this machine and your workspace')
     .option('--json', 'machine-readable output')
     .option('--flat', 'one row per call instead of one per kind of work')
     .action(async (options: { json?: boolean; flat?: boolean }) =>
@@ -114,27 +116,36 @@ function explainAlways(context: CliContext): void {
   process.exitCode = EXIT.MISUSED;
 }
 
-/** Everything waiting, grouped by kind of work unless asked for flat. */
+/** Everything waiting, here grouped by kind of work unless asked for flat, then what the team routed. */
 async function runApprovals(
   deps: ApprovalsDeps,
   options: { json?: boolean; flat?: boolean },
 ): Promise<void> {
   const { context, home, now } = deps;
   const moment = now().toISOString();
-  const pending = await new PendingApprovals(home()).list(moment);
+  const here = await new PendingApprovals(home()).list(moment);
+  const person = await readPerson(home());
+  const { team, failed } = await readTeam(person);
 
   if (options.json === true) {
-    context.out.json(pending);
+    context.out.json({ here, team });
     return;
   }
   const { flow } = context;
   flow.open('memnox approvals');
-  if (pending.length === 0) {
-    flow.close('Nothing is waiting.');
-    return;
+  if (failed !== null) flow.aside(failed);
+  if (team.length > 0) {
+    flow.aside(countLine(here.length, team.length));
+    flow.list('From your team', team.map(teamItem));
   }
-  if (options.flat === true) return renderFlat(context, pending, moment);
-  return renderGrouped(context, pending);
+  if (here.length > 0) {
+    if (options.flat === true) renderFlat(context, here, moment);
+    else renderGrouped(context, here);
+  } else {
+    flow.close(team.length === 0 ? 'Nothing is waiting on you.' : 'Nothing waits here.');
+  }
+  if (person === null)
+    flow.hint('memnox signin   also shows what your workspace routes to you');
 }
 
 /** One row per call, for somebody who wants to see each one. */

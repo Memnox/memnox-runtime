@@ -86,7 +86,7 @@ async function runSignIn(
         `${claimed.connections} app${claimed.connections === 1 ? '' : 's'} this ${MACHINE} had connected moved into your account`,
       );
     flow.hint(
-      'memnox inbox   lists what is waiting on you, here and from your workspace',
+      'memnox approvals   lists what is waiting on you, here and from your workspace',
     );
     flow.hint('memnox approve or memnox deny answers one');
     return EXIT.OK;
@@ -106,7 +106,7 @@ async function alreadySignedIn(
   if (already === null || already.baseUrl !== baseUrl) return false;
   context.flow.close(`Already signed in as ${already.name}.`);
   context.flow.hint(
-    'memnox signout   signs out, and memnox inbox lists what is waiting on you',
+    'memnox signout   signs out, and memnox approvals lists what is waiting on you',
   );
   return true;
 }
