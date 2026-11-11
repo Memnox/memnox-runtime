@@ -273,7 +273,11 @@
         },
         {
           "id": "layers",
-          "label": "Layers"
+          "label": "Layers",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
         },
         {
           "id": "skills",
