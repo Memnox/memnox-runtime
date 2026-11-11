@@ -20,3 +20,10 @@ export async function writeAtomic(path: string, contents: string): Promise<void>
 export async function writeJsonAtomic(path: string, record: unknown): Promise<void> {
   await writeAtomic(path, `${JSON.stringify(record, null, 2)}\n`);
 }
+
+/** Whether a read failed only because the file is not there yet, which callers treat as empty. */
+export function isMissingFile(err: unknown): boolean {
+  return (
+    typeof err === 'object' && err !== null && 'code' in err && err.code === 'ENOENT'
+  );
+}

@@ -31,3 +31,4 @@ export * from './voice-presence';
 export * from './work-prompt';
 export * from './workspace-asks';
 export * from './rule-pack';
+export * from './revision-change';

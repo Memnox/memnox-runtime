@@ -10,6 +10,7 @@ import { MEMNOX_HOME } from '../config/config';
 import type { ActionRequest } from '../domain/action-event';
 import { matchesAny } from '../policy/pattern-matcher';
 import { readJsonArray, writeJsonFile } from '../store/json-records';
+import { FileRevisions, REVISION_KIND } from '../store/revisions';
 
 const ALLOWANCES_FILE = 'allowances.json';
 
@@ -69,7 +70,14 @@ class AllowanceFile {
   constructor(
     private readonly home: string,
     private readonly file: string,
+    /** Kept for what the autopilot grants by itself, so a person can see each step and undo it. */
+    private readonly revisions?: FileRevisions,
   ) {}
+
+  private async write(records: readonly Allowance[], at: string): Promise<void> {
+    await this.revisions?.keep(this.path(), REVISION_KIND.ALLOWANCES, at);
+    await writeJsonFile(this.path(), records);
+  }
 
   all(): Promise<Allowance[]> {
     return readJsonArray<Allowance>(this.path());
@@ -81,7 +89,7 @@ class AllowanceFile {
       Date.parse(allowance.since) - 24 * 60 * 60 * 1_000,
     ).toISOString();
     const kept = (await this.all()).filter((each) => each.until > dayAgo);
-    await writeJsonFile(this.path(), [...kept, allowance]);
+    await this.write([...kept, allowance], allowance.since);
   }
 
   /** Null when there was no such allowance. */
@@ -90,9 +98,9 @@ class AllowanceFile {
     const found = all.find((each) => each.id === id);
     if (found === undefined) return null;
     const revoked = { ...found, revokedAt: found.revokedAt ?? now };
-    await writeJsonFile(
-      this.path(),
+    await this.write(
       all.map((each) => (each === found ? revoked : each)),
+      now,
     );
     return revoked;
   }
@@ -155,7 +163,7 @@ export class EarnedAllowances {
   private readonly file: AllowanceFile;
 
   constructor(home: string) {
-    this.file = new AllowanceFile(home, EARNED_ALLOWANCES_FILE);
+    this.file = new AllowanceFile(home, EARNED_ALLOWANCES_FILE, new FileRevisions(home));
   }
 
   all(): Promise<Allowance[]> {

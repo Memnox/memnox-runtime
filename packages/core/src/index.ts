@@ -60,6 +60,7 @@ export * from './store/atomic-file';
 export * from './store/json-dir';
 export * from './store/json-records';
 export * from './store/record-retention';
+export * from './store/revisions';
 export * from './domain/duration-text';
 export * from './domain/qr';
 export * from './notice/index';
