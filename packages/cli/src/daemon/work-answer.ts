@@ -3,6 +3,7 @@ import { isAbsolute } from 'node:path';
 import {
   AgentWorks,
   externalTaskOf,
+  isIssueKey,
   finishedWork,
   HANDOFF_ANSWER_WORD,
   startedWork,
@@ -10,6 +11,8 @@ import {
   WORK_STATUS,
   withHandoffAnswer,
   type DaemonRequest,
+  type ExternalTaskRef,
+  type Tracker,
   type DaemonResponse,
   type SessionCard,
   type WorkOutcome,
@@ -72,6 +75,16 @@ async function answerOf(
   }
 }
 
+/** The issue a person named, or the sentence saying how to name it. */
+function targetOf(typed: string, tracker: Tracker | undefined): ExternalTaskRef | string {
+  const target = externalTaskOf(typed, tracker);
+  if (target !== null) return target;
+  // A bare key names no tracker, so the person says which rather than Linear being assumed.
+  return isIssueKey(typed)
+    ? 'Say which tracker that key is in with --tracker linear, jira, github or asana, or paste the issue link.'
+    : 'Name the issue as a key such as LIN-123, or paste its link.';
+}
+
 async function start(
   home: string,
   request: DaemonRequest,
@@ -80,9 +93,8 @@ async function start(
   const { workProfile, workTarget, workProject } = request;
   if (workProfile === undefined || workTarget === undefined)
     return refused('Name the profile and the issue it is to carry.');
-  const target = externalTaskOf(workTarget, request.workTracker);
-  if (target === null)
-    return refused('Name the issue as a key such as LIN-123, or paste its link.');
+  const target = targetOf(workTarget, request.workTracker);
+  if (typeof target === 'string') return refused(target);
   const profiles = await readProfilesWithConnections(home, {
     now: deps.now,
     cards: deps.cards ?? (async (): Promise<SessionCard[]> => []),

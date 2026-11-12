@@ -43,7 +43,9 @@ function ok(outcome: WorkOutcome): AgentWork {
 
 describe('external task references', () => {
   it('read a key, a Linear, Jira, GitHub and Asana link, and nothing else', () => {
-    expect(externalTaskOf('lin-123')).toEqual({
+    // A bare key names no tracker until the person says which.
+    expect(externalTaskOf('lin-123')).toBeNull();
+    expect(externalTaskOf('lin-123', TRACKER.LINEAR)).toEqual({
       source: 'linear',
       externalId: 'LIN-123',
     });

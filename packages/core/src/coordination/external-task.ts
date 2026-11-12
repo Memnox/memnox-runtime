@@ -12,19 +12,22 @@ const GITHUB_PATH = /^\/([^/]+)\/([^/]+)\/(?:issues|pull)\/(\d+)/;
 const ASANA_TASK = /\/(\d{6,})(?:\/f)?\/?$/;
 const SOURCES: readonly string[] = Object.values(TRACKER);
 
-/** The tracker a bare key belongs to when the person did not say; Linear's keys read the same as Jira's. */
-const BARE_KEY_SOURCE = TRACKER.LINEAR;
+/** Whether a person typed a bare key, which names no tracker until they say which. */
+export function isIssueKey(typed: string): boolean {
+  return ISSUE_KEY.test(typed.trim());
+}
 
 export function isTracker(value: string): value is Tracker {
   return SOURCES.includes(value);
 }
 
-/** The issue a person named, or null when it reads as no tracker's issue. */
+/** The issue a person named, or null when it reads as no tracker's issue or a bare key names none. */
 export function externalTaskOf(typed: string, source?: Tracker): ExternalTaskRef | null {
   const text = typed.trim();
   const key = ISSUE_KEY.exec(text);
+  // A bare key names no tracker on its own, since Linear's keys read the same as Jira's.
   if (key !== null)
-    return { source: source ?? BARE_KEY_SOURCE, externalId: text.toUpperCase() };
+    return source === undefined ? null : { source, externalId: text.toUpperCase() };
   let url: URL;
   try {
     url = new URL(text);

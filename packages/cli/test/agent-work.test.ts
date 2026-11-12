@@ -62,6 +62,7 @@ describe('agent work on this machine', () => {
       method: DAEMON_METHOD.WORK_START,
       workProfile: 'coder',
       workTarget: 'LIN-123',
+      workTracker: 'linear',
       workTitle: 'Retry failed payments',
       workProject: repo,
     });
@@ -90,8 +91,16 @@ describe('agent work on this machine', () => {
       method: DAEMON_METHOD.WORK_START,
       workProfile: 'ghost',
       workTarget: 'LIN-1',
+      workTracker: 'linear',
     });
     expect(nobody.error).toBe('No profile is called ghost.');
+    // A bare key names no tracker, so the person is asked which rather than Linear being assumed.
+    const bare = await ask(home, {
+      method: DAEMON_METHOD.WORK_START,
+      workProfile: 'coder',
+      workTarget: 'LIN-1',
+    });
+    expect(bare.error).toContain('--tracker');
   });
 
   it('is joined by a session on a branch named for the issue, which takes it as its task', async () => {
@@ -101,12 +110,14 @@ describe('agent work on this machine', () => {
       method: DAEMON_METHOD.WORK_START,
       workProfile: 'default-claude-code',
       workTarget: 'LIN-123',
+      workTracker: 'linear',
     });
     expect(started.ok).toBe(false);
     await ask(home, {
       method: DAEMON_METHOD.WORK_START,
       workProfile: 'coder',
       workTarget: 'LIN-123',
+      workTracker: 'linear',
     });
     // The agent works under its default profile, which carries none of it, so nothing joins.
     const none = await joinWork({
@@ -138,6 +149,7 @@ describe('agent work on this machine', () => {
       method: DAEMON_METHOD.WORK_START,
       workProfile: 'coder',
       workTarget: 'LIN-7',
+      workTracker: 'linear',
     });
     const [work] = started.agentWork ?? [];
     if (work === undefined) throw new Error('no work');
