@@ -74,8 +74,24 @@ export interface GuardOptions {
    * whoever holds that chat account cannot release the call.
    */
   requireDeviceProof?: boolean;
+  /**
+   * The issues this agent's work is for, by key or link, such as an n8n flow
+   * passing the ticket it was started by. Matched exactly against what the
+   * workspace's trackers delivered; nothing is linked on a guess.
+   */
+  workRefs?: readonly GuardWorkRef[];
   /** Injected so a test runs on its own clock. */
   now?: () => Date;
+}
+
+/** One issue a run says it is for: a key such as `PAY-42`, `#12` in a repository, or the issue's link. */
+export interface GuardWorkRef {
+  value: string;
+  form: 'key' | 'number' | 'url';
+  /** `sdk` for the agent's own code, `automation` for a flow that started it. */
+  source?: 'sdk' | 'automation';
+  /** The tracker, where the caller knows it, which a key must then match exactly. */
+  provider?: 'linear' | 'jira' | 'github' | 'gitlab' | 'trello';
 }
 
 export interface CallContext extends CallPlace {
@@ -83,6 +99,8 @@ export interface CallContext extends CallPlace {
   sessionId: string;
   /** The profile this call works under, where it is not the guard's own. */
   profileId?: string;
+  /** The issues this session is for, where they differ from the guard's own. */
+  workRefs?: readonly GuardWorkRef[];
 }
 
 /** What a check came to, with everything a refusal needs to say why. */
@@ -176,7 +194,7 @@ export class Guard {
     context: CallContext,
   ): Promise<Decision> {
     await this.rulesReady();
-    this.noteSession(context.sessionId, context.profileId);
+    this.noteSession(context.sessionId, context.profileId, context.workRefs);
     const pause = await this.stillPaused(context.sessionId);
     if (pause !== null) {
       return this.settle(
@@ -593,7 +611,11 @@ export class Guard {
     );
   }
 
-  private noteSession(sessionId: string, profileId?: string): void {
+  private noteSession(
+    sessionId: string,
+    profileId?: string,
+    workRefs?: readonly GuardWorkRef[],
+  ): void {
     if (this.sessionsSeen.has(sessionId)) return;
     this.sessionsSeen.add(sessionId);
     this.queue(
@@ -604,7 +626,11 @@ export class Guard {
         actorType: 'agent',
         occurredAt: this.now().getTime(),
         agentSessionId: sessionId,
-        payload: { agentId: this.options.agent, agentKind: this.options.agent },
+        payload: {
+          agentId: this.options.agent,
+          agentKind: this.options.agent,
+          ...workRefsField(workRefs ?? this.options.workRefs),
+        },
       },
       profileId,
     );
@@ -786,5 +812,15 @@ function pausedDecision(breach: BreakerBreach): Decision {
     verdict: VERDICT.DENY,
     allowed: false,
     reason: `Memnox paused this session: ${breach.reason}. Nothing further will run until a person looks at it.`,
+  };
+}
+
+/** Only refs a person could read, each said once and sourced; none at all is no field. */
+function workRefsField(refs: readonly GuardWorkRef[] | undefined): {
+  workRefs?: GuardWorkRef[];
+} {
+  if (refs === undefined || refs.length === 0) return {};
+  return {
+    workRefs: refs.map((ref) => ({ ...ref, source: ref.source ?? 'sdk' })),
   };
 }

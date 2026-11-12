@@ -124,6 +124,33 @@ class Work(unittest.TestCase):
         self.assertEqual(body["params"]["name"], "memnox_my_work")
 
 
+class WorkRefs(unittest.TestCase):
+    def test_says_once_which_issues_a_session_is_for_and_drops_what_it_cannot_read(self) -> None:
+        guard = guard_on(
+            FakeCloud(),
+            work_refs=[{"value": "PAY-42", "form": "key", "provider": "jira"}, {"value": "x", "form": "guess"}],
+        )
+        guard.authorize("mcp__linear__list_issues", {}, "s1")
+        guard.authorize("mcp__linear__list_issues", {}, "s1")
+        guard.authorize(
+            "mcp__linear__list_issues", {}, "s2",
+            work_refs=[{"value": "https://linear.app/acme/issue/ENG-7", "form": "url", "source": "automation"}],
+        )
+        starts = [row for row in guard.pending if row["kind"] == "agent.session.started"]
+        self.assertEqual(
+            [row["payload"]["workRefs"] for row in starts],
+            [
+                [{"value": "PAY-42", "form": "key", "source": "sdk", "provider": "jira"}],
+                [{"value": "https://linear.app/acme/issue/ENG-7", "form": "url", "source": "automation"}],
+            ],
+        )
+
+    def test_sends_no_session_start_for_a_session_that_names_no_issue(self) -> None:
+        guard = guard_on(FakeCloud())
+        guard.authorize("mcp__linear__list_issues", {}, "s1")
+        self.assertFalse(any(row["kind"] == "agent.session.started" for row in guard.pending))
+
+
 class Refusing(unittest.TestCase):
     def test_a_bundle_with_an_effect_it_does_not_know_is_refused_whole(self) -> None:
         with self.assertRaises(BundleRefused):

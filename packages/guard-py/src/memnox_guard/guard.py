@@ -27,6 +27,10 @@ from .signing import bundle_signed, verifies
 from .steering import answer_has_instruction_shape, redact_secrets, steerable
 
 ACTION_RECORDED = "agent.action.recorded"
+SESSION_STARTED = "agent.session.started"
+# Who may say a session is for an issue: the agent's own code, or the flow that started it.
+WORK_REF_SOURCES = ("sdk", "automation")
+WORK_REF_FORMS = ("key", "number", "url")
 SESSION_PAUSED = "agent.session.paused"
 # How often a paused session asks whether a person lifted the pause, as the TypeScript guard does.
 RESUME_CHECK_SECONDS = 10
@@ -97,6 +101,9 @@ class Guard:
     # Sessions that read instruction-shaped text, and the tool it came through.
     _tainted: dict[str, str] = field(default_factory=dict)
     pending: list[dict[str, Any]] = field(default_factory=list)
+    # The issues this agent's work is for, by key or link, matched exactly in the workspace.
+    work_refs: list[dict[str, str]] = field(default_factory=list)
+    _sessions_declared: set[str] = field(default_factory=set)
 
     def refresh(self) -> bool:
         """Fetch the rules again; True when new signed rules are now in force, False otherwise."""
@@ -116,8 +123,10 @@ class Guard:
         return True
 
     def authorize(
-        self, tool: str, arguments: Mapping[str, Any], session_id: str, profile_id: Optional[str] = None
+        self, tool: str, arguments: Mapping[str, Any], session_id: str, profile_id: Optional[str] = None,
+        work_refs: Optional[Sequence[Mapping[str, str]]] = None,
     ) -> Decision:
+        self._declare_session(session_id, profile_id, work_refs)
         paused = self._still_paused(session_id)
         if paused is not None:
             verdict = Verdict(DENY, f"Memnox paused this session: {paused.reason}")
@@ -320,6 +329,19 @@ class Guard:
         }
         self.pending.append(self._row(session_id, payload, profile_id))
 
+    def _declare_session(
+        self, session_id: str, profile_id: Optional[str], work_refs: Optional[Sequence[Mapping[str, str]]],
+    ) -> None:
+        """Says once per session which issues it is for; a session that names none sends nothing."""
+        if session_id in self._sessions_declared:
+            return
+        refs = work_refs_of(work_refs if work_refs is not None else self.work_refs)
+        if not refs:
+            return
+        self._sessions_declared.add(session_id)
+        row = self._row(session_id, {"agentKind": self.agent, "workRefs": refs}, profile_id)
+        self.pending.append({**row, "kind": SESSION_STARTED, "dedupKey": f"session:{session_id}", "subjectId": session_id})
+
     def _row(self, session_id: str, payload: dict[str, Any], profile_id: Optional[str]) -> dict[str, Any]:
         profile = profile_id or self.profile_id
         identity = str(uuid.uuid4())
@@ -351,3 +373,16 @@ def create_guard(
     guard = Guard(cloud=cloud, agent=named, profile_id=profile_id or os.environ.get(ENV_PROFILE))
     guard.refresh()
     return guard
+
+
+def work_refs_of(refs: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+    """Each ref with a form and a source the workspace reads; anything else is dropped, not guessed."""
+    kept: list[dict[str, str]] = []
+    for ref in refs:
+        value, form = ref.get("value"), ref.get("form")
+        source = ref.get("source") or "sdk"
+        if not isinstance(value, str) or form not in WORK_REF_FORMS or source not in WORK_REF_SOURCES:
+            continue
+        provider = ref.get("provider")
+        kept.append({"value": value, "form": form, "source": source, **({"provider": provider} if provider else {})})
+    return kept

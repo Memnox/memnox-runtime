@@ -63,6 +63,43 @@ describe('a guard working under a profile', () => {
     ]);
   });
 
+  it('says on the session start which issues its work is for, sourced, and a call can name its own', async () => {
+    const cloud = new WorkCloud();
+    const guard = new Guard(cloud, {
+      agent: 'support-bot',
+      workRefs: [{ value: 'PAY-42', form: 'key', provider: 'jira' }],
+    }).start();
+    await guard.authorize('mcp__linear__list_issues', {}, { sessionId: 's1' });
+    await guard.authorize(
+      'mcp__linear__list_issues',
+      {},
+      {
+        sessionId: 's2',
+        workRefs: [
+          {
+            value: 'https://linear.app/acme/issue/ENG-7',
+            form: 'url',
+            source: 'automation',
+          },
+        ],
+      },
+    );
+    await guard.close();
+    const starts = cloud.recorded
+      .filter((row) => row.kind === 'agent.session.started')
+      .map((row) => row.payload['workRefs']);
+    expect(starts).toEqual([
+      [{ value: 'PAY-42', form: 'key', provider: 'jira', source: 'sdk' }],
+      [
+        {
+          value: 'https://linear.app/acme/issue/ENG-7',
+          form: 'url',
+          source: 'automation',
+        },
+      ],
+    ]);
+  });
+
   it('reads its work and reports on it through the port, with secrets taken out', async () => {
     const cloud = new WorkCloud();
     const guard = new Guard(cloud, { agent: 'support-bot' }).start();
