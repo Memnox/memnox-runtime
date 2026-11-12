@@ -158,19 +158,6 @@
       ]
     },
     {
-      "id": "work",
-      "label": "Work",
-      "group": null,
-      "sf": "checklist",
-      "lucide": "ListChecks",
-      "route": "/work",
-      "platforms": [
-        "web",
-        "mac",
-        "desktop"
-      ]
-    },
-    {
       "id": "rules",
       "label": "Rules",
       "group": "govern",
