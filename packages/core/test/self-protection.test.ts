@@ -85,6 +85,7 @@ describe('what governs an agent is never the agent’s to change', () => {
     'signout',
     'next --hand-over git.push',
     'autopilot --revoke ern_1',
+    'policy revert 3',
   ])('denies `memnox %s` typed by an agent', (line) => {
     const [binary, ...args] = ['memnox', ...line.split(' ')];
     const resolved = resolveAction(binary as string, args);
@@ -110,6 +111,8 @@ describe('what governs an agent is never the agent’s to change', () => {
     'next --agent claude-code',
     'autopilot',
     'autopilot --list',
+    'policy history',
+    'sessions',
   ])('lets `memnox %s` through, since it only reads', (line) => {
     expect(loosens(line)).toBe(false);
   });

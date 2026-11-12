@@ -40,7 +40,7 @@ export interface ProjectManifest {
   servers: string[];
   /** Skills Hub skills, by name, written into every agent opened here. */
   skills: string[];
-  /** The agents the project is opened with; empty is every agent seen working in it. */
+  /** The agents the project is opened with, by kind or profile id; empty is every agent seen working in it. */
   agents: string[];
   /** The rule file, relative to the repository. */
   policy?: string;

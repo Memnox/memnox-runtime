@@ -28,7 +28,12 @@ export function createGuard(options: CreateGuardOptions = {}): Guard {
     throw new Error(`Name the agent, as createGuard({ agent }) or ${GUARD_ENV.AGENT}.`);
   }
   const cloud = options.cloud ?? cloudFromSettings(options);
-  return new Guard(cloud, { ...options, agent }).start();
+  const profileId = options.profileId ?? process.env[GUARD_ENV.PROFILE];
+  return new Guard(cloud, {
+    ...options,
+    agent,
+    ...(profileId === undefined || profileId === '' ? {} : { profileId }),
+  }).start();
 }
 
 function cloudFromSettings(options: CreateGuardOptions): CloudPort {

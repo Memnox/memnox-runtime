@@ -33,7 +33,6 @@ import { registerAskCommand } from './commands/ask.command';
 import { registerVoiceCommand } from './commands/voice.command';
 import { registerPairCommand } from './commands/pair.command';
 import { registerSignInCommand } from './commands/signin.command';
-import { registerInboxCommand } from './commands/inbox.command';
 import { registerDevicesCommand } from './commands/devices.command';
 import { registerReportCommand } from './commands/report.command';
 import { registerSkillsCommand } from './commands/skills.command';
@@ -44,7 +43,10 @@ import { registerRunCommand } from './commands/run.command';
 import { registerMcpCommand } from './commands/mcp.command';
 import { registerRepoCommand } from './commands/repo.command';
 import { registerTaskCommand } from './commands/task.command';
+import { registerProfileCommand } from './commands/profile.command';
+import { registerWorkCommand } from './commands/work.command';
 import { registerMissionCommand } from './commands/mission.command';
+import { registerSessionsCommand } from './commands/sessions.command';
 import { registerModeCommand } from './commands/mode.command';
 import { registerAllowCommand } from './commands/allow.command';
 import { registerAutopilotCommand } from './commands/autopilot.command';
@@ -65,6 +67,12 @@ import { registerUpdateCommand } from './commands/update.command';
 const SPINE: readonly string[] = [
   'setup',
   'status',
+  // What a person checks between sessions: who needs them, what is held, what to hand over.
+  'sessions',
+  'approvals',
+  'next',
+  'mission',
+  'budget',
   'rewind',
   'doctor',
   'stop',
@@ -116,6 +124,9 @@ function registerTerminalCommands(program: Command, context: CliContext): void {
   registerAllowCommand(program, context);
   registerAutopilotCommand(program, context);
   registerTaskCommand(program, context);
+  registerProfileCommand(program, context);
+  registerWorkCommand(program, context);
+  registerSessionsCommand(program, context);
   registerMissionCommand(program, context);
   registerRepoCommand(program, context);
   registerSetupCommand(program, context);
@@ -132,7 +143,6 @@ function registerVoiceCommands(program: Command, context: CliContext): void {
   registerVoiceCommand(program, context);
   registerPairCommand(program, context);
   registerSignInCommand(program, context);
-  registerInboxCommand(program, context);
   registerDevicesCommand(program, context);
 }
 

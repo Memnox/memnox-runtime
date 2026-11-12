@@ -17,6 +17,9 @@ import {
   MINUTE_MS,
   minutesToMs,
   secondsToMs,
+  workClaimsAt,
+  promptedIn,
+  workRefsAt,
 } from '@memnox/core';
 import { remoteIdentityOf } from '@memnox/interceptors';
 
@@ -214,6 +217,9 @@ function leasesPerRepository(home: string): (root: string) => CloudLeases {
       globalThis.fetch,
       undefined,
       remoteIdentityOf(root),
+      // What this checkout's branch declares, as the seam's leases already send.
+      () => workRefsAt(root),
+      (sessionId) => workClaimsAt(root, () => promptedIn(home, sessionId)),
     );
     perRepository.set(root, made);
     return made;

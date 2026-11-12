@@ -30,7 +30,16 @@ import {
 } from '@memnox/core/engine';
 
 import { requestsFor, type CallPlace } from './actions';
-import type { CloudKey, CloudPort, GuardRecord, HeldState, SignedAnswer } from './cloud';
+import type {
+  CloudKey,
+  CloudPort,
+  GuardRecord,
+  GuardWork,
+  HandoffAsk,
+  HeldState,
+  ProgressReport,
+  SignedAnswer,
+} from './cloud';
 import {
   DEFAULT_WAIT_MS,
   FIRST_RULES_MS,
@@ -46,9 +55,14 @@ import {
   type Verdict,
 } from './guard.constants';
 
+/** Said where the port has no work door, as a fake or an older control plane may not. */
+const NO_WORK_DOOR = 'This control plane does not answer for agent work.';
+
 export interface GuardOptions {
   /** The agent's name in the workspace, as its rules and its owners know it. */
   agent: string;
+  /** The agent profile, the job, so every record names it as well as the agent. */
+  profileId?: string;
   /** The machine class its rules are read for, `server` for a box that keeps running. */
   machineClass?: string;
   /** How long an asked call waits on a person before it is refused. */
@@ -60,13 +74,33 @@ export interface GuardOptions {
    * whoever holds that chat account cannot release the call.
    */
   requireDeviceProof?: boolean;
+  /**
+   * The issues this agent's work is for, by key or link, such as an n8n flow
+   * passing the ticket it was started by. Matched exactly against what the
+   * workspace's trackers delivered; nothing is linked on a guess.
+   */
+  workRefs?: readonly GuardWorkRef[];
   /** Injected so a test runs on its own clock. */
   now?: () => Date;
+}
+
+/** One issue a run says it is for: a key such as `PAY-42`, `#12` in a repository, or the issue's link. */
+export interface GuardWorkRef {
+  value: string;
+  form: 'key' | 'number' | 'url';
+  /** `sdk` for the agent's own code, `automation` for a flow that started it. */
+  source?: 'sdk' | 'automation';
+  /** The tracker, where the caller knows it, which a key must then match exactly. */
+  provider?: 'linear' | 'jira' | 'github' | 'gitlab' | 'trello';
 }
 
 export interface CallContext extends CallPlace {
   /** The agent's session, so a "for this session" answer and the breaker stay inside it. */
   sessionId: string;
+  /** The profile this call works under, where it is not the guard's own. */
+  profileId?: string;
+  /** The issues this session is for, where they differ from the guard's own. */
+  workRefs?: readonly GuardWorkRef[];
 }
 
 /** What a check came to, with everything a refusal needs to say why. */
@@ -160,7 +194,7 @@ export class Guard {
     context: CallContext,
   ): Promise<Decision> {
     await this.rulesReady();
-    this.noteSession(context.sessionId);
+    this.noteSession(context.sessionId, context.profileId, context.workRefs);
     const pause = await this.stillPaused(context.sessionId);
     if (pause !== null) {
       return this.settle(
@@ -221,6 +255,24 @@ export class Guard {
     return this.settle(tool, input, context, asked.decision, effect, strictest.request);
   }
 
+  /** The work a person pointed this agent at, read from the control plane. */
+  async myWork(): Promise<GuardWork[]> {
+    if (this.cloud.myWork === undefined) throw new Error(NO_WORK_DOOR);
+    return this.cloud.myWork();
+  }
+
+  /** A line for the person on how the work is going; an agent can claim done and never close it. */
+  async reportProgress(report: ProgressReport): Promise<void> {
+    if (this.cloud.reportProgress === undefined) throw new Error(NO_WORK_DOOR);
+    await this.cloud.reportProgress({ ...report, note: redactSecrets(report.note) });
+  }
+
+  /** Asks the person to hand the work on; nothing moves until they accept. */
+  async requestHandoff(ask: HandoffAsk): Promise<void> {
+    if (this.cloud.requestHandoff === undefined) throw new Error(NO_WORK_DOOR);
+    await this.cloud.requestHandoff({ ...ask, reason: redactSecrets(ask.reason) });
+  }
+
   /**
    * What a call came to once it ran, for the circuit breaker: the same command failing the
    * same way five times pauses the session until a person resumes it.
@@ -250,15 +302,18 @@ export class Guard {
     if (breach === null) return;
     const at = this.now().getTime();
     this.paused.set(context.sessionId, { breach, at, checkedAt: at });
-    this.pending.push({
-      kind: RECORD_KIND.SESSION_PAUSED,
-      dedupKey: `pause:${context.sessionId}:${at}`,
-      subjectId: context.sessionId,
-      actorType: 'agent',
-      occurredAt: at,
-      agentSessionId: context.sessionId,
-      payload: { agentId: this.options.agent, reason: redactSecrets(breach.reason) },
-    });
+    this.queue(
+      {
+        kind: RECORD_KIND.SESSION_PAUSED,
+        dedupKey: `pause:${context.sessionId}:${at}`,
+        subjectId: context.sessionId,
+        actorType: 'agent',
+        occurredAt: at,
+        agentSessionId: context.sessionId,
+        payload: { agentId: this.options.agent, reason: redactSecrets(breach.reason) },
+      },
+      context.profileId,
+    );
   }
 
   /**
@@ -546,18 +601,39 @@ export class Guard {
     ]);
   }
 
-  private noteSession(sessionId: string): void {
+  /** Every record names the profile the call worked under, so the job is on it beside the agent. */
+  private queue(row: GuardRecord, profileId?: string): void {
+    const profile = profileId ?? this.options.profileId;
+    this.pending.push(
+      profile === undefined
+        ? row
+        : { ...row, payload: { ...row.payload, profileId: profile } },
+    );
+  }
+
+  private noteSession(
+    sessionId: string,
+    profileId?: string,
+    workRefs?: readonly GuardWorkRef[],
+  ): void {
     if (this.sessionsSeen.has(sessionId)) return;
     this.sessionsSeen.add(sessionId);
-    this.pending.push({
-      kind: RECORD_KIND.SESSION_STARTED,
-      dedupKey: `session:${sessionId}`,
-      subjectId: sessionId,
-      actorType: 'agent',
-      occurredAt: this.now().getTime(),
-      agentSessionId: sessionId,
-      payload: { agentId: this.options.agent, agentKind: this.options.agent },
-    });
+    this.queue(
+      {
+        kind: RECORD_KIND.SESSION_STARTED,
+        dedupKey: `session:${sessionId}`,
+        subjectId: sessionId,
+        actorType: 'agent',
+        occurredAt: this.now().getTime(),
+        agentSessionId: sessionId,
+        payload: {
+          agentId: this.options.agent,
+          agentKind: this.options.agent,
+          ...workRefsField(workRefs ?? this.options.workRefs),
+        },
+      },
+      profileId,
+    );
   }
 
   /** Records the decision off the call's path and hands it back. */
@@ -570,32 +646,35 @@ export class Guard {
     request?: ActionRequest,
   ): Decision {
     const id = randomUUID();
-    this.pending.push({
-      kind: RECORD_KIND.ACTION_RECORDED,
-      dedupKey: id,
-      subjectId: id,
-      actorType: 'agent',
-      occurredAt: this.now().getTime(),
-      agentSessionId: context.sessionId,
-      payload: {
-        agentId: this.options.agent,
-        surface: 'cloud',
-        operation: request?.action ?? tool,
-        classes: [request?.toolClass ?? 'unknown'],
-        ...(request?.target === undefined
-          ? {}
-          : { resourceRef: redactSecrets(request.target) }),
-        argsDigest: argsDigestOf(input),
-        effect,
-        finalEffect: decision.verdict,
-        reason: redactSecrets(decision.reason),
-        ...(decision.rule === undefined ? {} : { ruleId: decision.rule }),
-        ...(this.bundleHash === null ? {} : { bundleHash: this.bundleHash }),
-        ...(decision.alternative === undefined
-          ? {}
-          : { alternative: decision.alternative }),
+    this.queue(
+      {
+        kind: RECORD_KIND.ACTION_RECORDED,
+        dedupKey: id,
+        subjectId: id,
+        actorType: 'agent',
+        occurredAt: this.now().getTime(),
+        agentSessionId: context.sessionId,
+        payload: {
+          agentId: this.options.agent,
+          surface: 'cloud',
+          operation: request?.action ?? tool,
+          classes: [request?.toolClass ?? 'unknown'],
+          ...(request?.target === undefined
+            ? {}
+            : { resourceRef: redactSecrets(request.target) }),
+          argsDigest: argsDigestOf(input),
+          effect,
+          finalEffect: decision.verdict,
+          reason: redactSecrets(decision.reason),
+          ...(decision.rule === undefined ? {} : { ruleId: decision.rule }),
+          ...(this.bundleHash === null ? {} : { bundleHash: this.bundleHash }),
+          ...(decision.alternative === undefined
+            ? {}
+            : { alternative: decision.alternative }),
+        },
       },
-    });
+      context.profileId,
+    );
     return decision;
   }
 
@@ -733,5 +812,15 @@ function pausedDecision(breach: BreakerBreach): Decision {
     verdict: VERDICT.DENY,
     allowed: false,
     reason: `Memnox paused this session: ${breach.reason}. Nothing further will run until a person looks at it.`,
+  };
+}
+
+/** Only refs a person could read, each said once and sourced; none at all is no field. */
+function workRefsField(refs: readonly GuardWorkRef[] | undefined): {
+  workRefs?: GuardWorkRef[];
+} {
+  if (refs === undefined || refs.length === 0) return {};
+  return {
+    workRefs: refs.map((ref) => ({ ...ref, source: ref.source ?? 'sdk' })),
   };
 }

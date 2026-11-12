@@ -1,3 +1,7 @@
+import type { AgentConnection } from '../agents/agent-connection';
+import type { ProfileTemplate } from '../agents/templates';
+import type { CapabilityLevels } from '../discovery/capability-levels';
+
 /**
  * Profiles as every screen reads and applies them: one named bundle of Skills Hub skills, MCP Hub
  * servers and a rule pack, such as Backend Engineering, kept under the Memnox home. Applying one
@@ -13,6 +17,14 @@ export const PROFILES_METHOD = {
   PROFILE_REMOVE: 'profile-remove',
   /** Proposes giving an agent the profile's servers and skills, in a project, and its rule pack's rules. */
   PROFILE_APPLY: 'profile-apply',
+  /** Binds a kept profile to one agent found here; its ledger key stays `agt_<kind>`. */
+  PROFILE_BIND: 'profile-bind',
+  /** Takes a binding off, which puts the agent back on its default profile. */
+  PROFILE_UNBIND: 'profile-unbind',
+  /** The catalog of job descriptions, none with an agent behind it. */
+  TEMPLATES: 'templates',
+  /** Copies a template's job into a new profile, with only the suggested skills a person took. */
+  PROFILE_FROM_TEMPLATE: 'profile-from-template',
 } as const;
 
 /** A rule pack as a profile carries it: its name and its TOML, imported as any pack is. */
@@ -30,9 +42,29 @@ export interface ProfileDraft {
   /** MCP Hub servers, by name. */
   mcpServers?: string[];
   rulePack?: ProfileRulePack;
+  /** The job, each field optional so a version 1 form still fills a profile in. */
+  purpose?: string;
+  role?: string;
+  responsibilities?: string[];
+  instructions?: string;
+  responsiblePerson?: string;
+  projects?: string[];
+  templateOf?: string;
 }
 
-export interface ProfileView {
+/** The job fields a profile shows beside what it bundles. */
+export interface ProfileJob {
+  purpose?: string;
+  role?: string;
+  responsibilities: string[];
+  instructions?: string;
+  /** Who answers for it; on a view, the person at this machine when none was named. */
+  responsiblePerson?: string;
+  projects: string[];
+  templateOf?: string;
+}
+
+export interface ProfileView extends ProfileJob {
   /** The name made safe for a file, which every method names the profile by too. */
   id: string;
   name: string;
@@ -44,6 +76,12 @@ export interface ProfileView {
   updatedAt: string;
   /** Names the hubs no longer hold, or a pack that no longer loads, each in a sentence. */
   missing: string[];
+  /** The agent's own default, computed for an agent nobody bound and never stored. */
+  isDefault?: true;
+  /** How it reaches the agents it works through; empty is a profile with no agent behind it. */
+  connections: AgentConnection[];
+  /** The weakest level of its connections that are not gone, so one unguarded agent is never hidden. */
+  levels: CapabilityLevels;
 }
 
 /** What applying a profile raised, so a screen says it in a line and opens the cards. */
@@ -62,10 +100,16 @@ export interface ProfileApplied {
 export interface ProfilesRequestFields {
   /** On PROFILE_PUT. */
   profileDraft?: ProfileDraft;
-  /** On PROFILE_REMOVE, PROFILE_APPLY and AGENT_LAUNCH: the profile, by id or by name. */
+  /** On PROFILE_REMOVE, PROFILE_APPLY, PROFILE_BIND and AGENT_LAUNCH: the profile, by id or by name. */
   profileName?: string;
   /** On PROFILE_APPLY: the agent, by kind. */
   profileAgent?: string;
+  /** On PROFILE_FROM_TEMPLATE: the template, by id or name; `profileName` names the copy. */
+  templateId?: string;
+  /** On PROFILE_FROM_TEMPLATE: the suggested skills the person took; the rest stay off. */
+  templateSkills?: string[];
+  /** On PROFILE_BIND and PROFILE_UNBIND: the agent, by id, kind or the name it goes by. */
+  agentId?: string;
   /** On PROFILE_APPLY: the repository its skills are written into and its rules hold in, as an absolute path; absent is the home folder and the whole machine. */
   profileProject?: string;
 }
@@ -73,6 +117,8 @@ export interface ProfilesRequestFields {
 export interface ProfilesResponseFields {
   /** On every profile method, so a screen redraws from one answer. */
   profiles?: ProfileView[];
+  /** On TEMPLATES. */
+  templates?: ProfileTemplate[];
   /** On PROFILE_APPLY, and on AGENT_LAUNCH with a profile. */
   profileApplied?: ProfileApplied;
 }

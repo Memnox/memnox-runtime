@@ -13,6 +13,7 @@ import {
   readSkillsHub,
   type Hub,
   type Mission,
+  type ProfileBindings,
   type ProjectInstructionView,
   type ProjectMissionView,
   type ProjectRulesView,
@@ -22,6 +23,7 @@ import {
   type AgentQuestion,
   PROJECT_SCOPE,
 } from '@memnox/core';
+import { readBindings } from '../agents/connections';
 import { readRegisteredFiles } from '../policy-path';
 import { serverGrantViews, skillGrantViews } from './project-grants';
 import {
@@ -51,10 +53,11 @@ interface Shared {
   missions: Mission[];
   questions: AgentQuestion[];
   overlay: OrgOverlay;
+  bindings: ProfileBindings;
 }
 
 export async function readProjectsView(home: string, now: Date): Promise<ProjectsView> {
-  const [places, hub, skillsHub, registered, missions, questions, overlay] =
+  const [places, hub, skillsHub, registered, missions, questions, overlay, bindings] =
     await Promise.all([
       projectPlaces(home),
       readHub(home),
@@ -63,8 +66,9 @@ export async function readProjectsView(home: string, now: Date): Promise<Project
       new Missions(home).all(),
       new AgentQuestions(home).open(now.toISOString()),
       readOrgOverlay(home),
+      readBindings(home),
     ]);
-  const shared = { hub, skillsHub, registered, missions, questions, overlay };
+  const shared = { hub, skillsHub, registered, missions, questions, overlay, bindings };
   const projects = await Promise.all(places.map((place) => projectView(place, shared)));
   return {
     projects: projects.sort((a, b) =>
@@ -76,7 +80,7 @@ export async function readProjectsView(home: string, now: Date): Promise<Project
 async function projectView(place: ProjectPlace, shared: Shared): Promise<ProjectView> {
   const { root, hosts, state } = place;
   const read = await readProject(root);
-  const agents = projectAgents(read.manifest, hosts);
+  const agents = projectAgents(read.manifest, hosts, shared.bindings);
   const input = { manifest: read.manifest, root, agents };
   const sessions = new Set(hosts.map((host) => host.sessionId));
   const lastActive = lastActiveOf(place);

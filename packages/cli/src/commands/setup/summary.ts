@@ -1,5 +1,5 @@
 /** Every agent that was offered, and what became of it. */
-import type { Account } from '@memnox/core';
+import { TRY_PROMPT, type Account } from '@memnox/core';
 import type { CliContext } from '../../cli-context';
 import { describeCount } from '../../plural';
 import { WIRED, type Wiring } from '../../setup-wiring';
@@ -89,32 +89,32 @@ function renderLeftBehind(context: CliContext, results: readonly Result[]): void
   }
 }
 
-/** What now stands between these agents and the machine, counted rather than claimed. */
+/**
+ * One next step rather than a list of them: the first gap that would leave the agents ungoverned,
+ * and when there is none, the prompt that makes the first thing held for the person happen now.
+ */
 function renderWhatIsInPlace(context: CliContext, outcome: SetupOutcome): void {
-  const { flow } = context;
   const { wired } = outcome;
   // The console learns of an onboarded agent through the scan, so a run that sent none says so.
   if (!outcome.reported) {
-    flow.hint(
-      'This scan did not reach the control plane, so the Agents page will fill on the next sync.',
-    );
+    context.flow.aside('The Agents page in the console fills on the next sync.');
   }
-  flow.hint('Authority is unchanged: what each may do is still decided on this machine.');
-  // With no wrapper in the path of anything, every rule is a rule about nothing.
-  if (wired.interceptors === 0) {
-    flow.hint(
-      'No interceptors are installed, so nothing is gated yet. "memnox protect --interceptors" fixes it.',
-    );
-  } else {
-    flow.hint(
-      `${wired.interceptors} interceptors and ${wired.rules} rules are in place. They bite when you start an agent with "memnox run -- <agent>".`,
-    );
-  }
-  if (wired.daemon !== WIRED.DONE) flow.hint(describeDaemonGap(wired));
-  flow.hint(
-    'This machine is watching, not stopping. "memnox doctor --wiring" shows what is in the path, and "memnox config set mode enforce" turns it on when you have read a week of it.',
+  context.flow.aside(
+    'Authority is unchanged: what each may do is still decided on this machine.',
   );
-  flow.hint('Take all of it back out with "memnox uninstall".');
+  if (wired.interceptors === 0) {
+    context.flow.hint(
+      'Next: nothing is gated yet, because no interceptors are installed. "memnox protect --interceptors" fixes it.',
+    );
+    return;
+  }
+  if (wired.daemon !== WIRED.DONE) {
+    context.flow.hint(`Next: ${describeDaemonGap(wired)}`);
+    return;
+  }
+  context.flow.hint(
+    `Next: start an agent with "memnox run -- claude" and ask it: "${TRY_PROMPT}" Then "memnox sessions" shows what Memnox made of it.`,
+  );
 }
 
 /** Without the daemon the workspace's rules never arrive and a held question reaches nobody. */

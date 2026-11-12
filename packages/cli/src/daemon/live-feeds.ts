@@ -1,5 +1,6 @@
 import type { DaemonEvent } from '@memnox/core';
 import { ActivityFeed } from './activity-feed';
+import { WorkFeed } from './work-feed';
 import type { NoticeWatcher } from './notice-watch';
 import { ACTIVITY_INTERVAL_MS, NOTICE_INTERVAL_MS } from './voice.constants';
 
@@ -24,6 +25,7 @@ export class LiveFeeds {
   private activityTimer: ReturnType<typeof setInterval> | null = null;
   /** Null while nobody listens, so the next listener hears what happens from then, not a backlog. */
   private activity: ActivityFeed | null = null;
+  private work: WorkFeed | null = null;
 
   /** Both timers, once, from the first subscriber; one is no reason to keep a daemon alive that was asked to stop. */
   start(deps: LiveFeedsDeps): void {
@@ -51,8 +53,12 @@ export class LiveFeeds {
   private lookForActivity(deps: LiveFeedsDeps): void {
     if (!deps.listening()) {
       this.activity = null;
+      this.work = null;
       return;
     }
+    const work = this.work ?? new WorkFeed(deps.home);
+    this.work = work;
+    read(deps, () => work.look(), 'agent work');
     const feed = this.activity ?? new ActivityFeed(deps.home, deps.now());
     this.activity = feed;
     read(

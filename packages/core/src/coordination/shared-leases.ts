@@ -1,3 +1,4 @@
+import type { WorkClaims } from './work-claims';
 import { readAccount, type Account } from '../sync/account';
 import { HTTP } from '../sync/http-status';
 import {
@@ -96,6 +97,8 @@ export class CloudLeases implements SharedLeases {
     private readonly repository?: string,
     // The ticket and branch this work declares, so the workspace can join it to a teammate's feature.
     private readonly workRefs?: () => Promise<string[]>,
+    // The branch and what it and the head commit claim, which the workspace matches exactly against its trackers.
+    private readonly workClaims?: (sessionId: string) => Promise<WorkClaims>,
   ) {}
 
   async take(
@@ -110,6 +113,10 @@ export class CloudLeases implements SharedLeases {
     }
     // Refs that cannot be read are refs not sent; the write's lease is what matters here.
     const refs = this.workRefs === undefined ? [] : await this.workRefs().catch(() => []);
+    const declared: WorkClaims =
+      this.workClaims === undefined
+        ? { claims: [] }
+        : await this.workClaims(holder.sessionId).catch(() => ({ claims: [] }));
     const response = await this.send(account, {
       path: `/v1/workspaces/${account.workspaceId}/leases`,
       body: {
@@ -118,6 +125,8 @@ export class CloudLeases implements SharedLeases {
           account.machineId,
         ),
         ...(refs.length === 0 ? {} : { refs }),
+        ...(declared.branch === undefined ? {} : { branch: declared.branch }),
+        ...(declared.claims.length === 0 ? {} : { claims: declared.claims }),
       },
     });
     if (response === null) {

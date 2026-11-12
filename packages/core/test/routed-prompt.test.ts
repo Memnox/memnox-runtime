@@ -199,6 +199,28 @@ describe('a held call is written down before anybody is asked', () => {
   }, 30_000);
 });
 
+describe('a terminal card when somebody else answered', () => {
+  it('is told who answered, so it closes rather than counting down to a refusal', async () => {
+    const where = await home();
+    const approvals = new PendingApprovals(where);
+    let told: HoldAsked | null = null;
+    const watching: HoldPrompt = {
+      ask: async (_request, _timeoutMs, elsewhere) => {
+        told = (await elsewhere) ?? null;
+        return null;
+      },
+    };
+    const prompt = new RoutedHoldPrompt({ approvals, tty: watching, pollMs: POLL_MS });
+
+    const asking = prompt.ask(request, PATIENT_MS);
+    const waiting = await held(approvals);
+    await approvals.answer(waiting, HOLD_ANSWER.ONCE, 'maya', new Date().toISOString());
+    await asking;
+
+    expect(told).toEqual({ answer: HOLD_ANSWER.ONCE, by: 'maya' });
+  }, 30_000);
+});
+
 describe('what the seams now get', () => {
   /* This is the whole point: every seam took an optional hold, none built one, so an
      `ask` rule reached "nobody could be asked" and `ask` meant `deny` everywhere. */

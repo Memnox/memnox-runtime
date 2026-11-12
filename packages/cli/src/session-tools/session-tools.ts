@@ -17,6 +17,7 @@ import { fingerprintTool } from './fingerprint-tool';
 import { workTool } from './work-tools';
 import { suggestTool } from './suggest-tool';
 import { appRunTool, appsTool } from './app-calls';
+import { AGENT_WORK_CALLS, AGENT_WORK_TOOLS } from './agent-work-tools';
 
 /** One argument a tool takes: a string, or a list of small objects, such as a walk through's pages. */
 export type ToolProperty =
@@ -43,7 +44,8 @@ export interface ToolDefinition {
 
 /**
  * Words no tool name may carry. Asserted in a test, because the day one does, an agent
- * can grant itself what its person was asked for. A person does those at a terminal or the console.
+ * can grant itself what its person was asked for. A person does those at a terminal or the console,
+ * and that includes giving an agent work or a job, since a task is written by a person.
  */
 export const NEVER_OFFERED: readonly string[] = [
   'allow',
@@ -58,6 +60,9 @@ export const NEVER_OFFERED: readonly string[] = [
   'policy',
   'enroll',
   'enrol',
+  'assign',
+  'bind',
+  'execute',
 ];
 
 export function readTool(
@@ -264,6 +269,7 @@ export const SESSION_TOOLS: readonly ToolDefinition[] = [
     },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   },
+  ...AGENT_WORK_TOOLS,
 ];
 
 /** Answers one call by name, or null for a name this server never offered. */
@@ -299,6 +305,8 @@ export async function callTool(
     case 'rewind':
       return rewindTool(deps, seams, args);
     default:
-      return null;
+      return Object.hasOwn(AGENT_WORK_CALLS, name)
+        ? (AGENT_WORK_CALLS[name]?.(deps, args) ?? null)
+        : null;
   }
 }

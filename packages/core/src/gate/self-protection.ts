@@ -71,6 +71,7 @@ const IDENTITY_VARIABLES: readonly string[] = [
 const READING: readonly string[] = [
   'policy test',
   'policy check',
+  'policy history',
   'mode',
   'allow --list',
   'task show',

@@ -55,6 +55,14 @@ The result:
 
 > **Agents don't just have access to your systems. They understand the environment they're operating in.**
 
+So Memnox is the workspace where the agents people already use are given a job, the context to do it and the authority to do it safely, and where they can be given more because what they do can be seen and governed. It is agent agnostic: an agent on a laptop, one hosted on a server, one inside a SaaS product, one built in a no code tool and one written from scratch all arrive at the same place.
+
+Three things hold it together, and each depends on the one before:
+
+* **Context** tells an agent what it needs to know, and no more than it may know.
+* **Coordination** gives it a job, a project, a task a person wrote, and a way to hand that task on.
+* **Authority** decides what it may do, deterministically wherever Memnox sits in the path of the action, and says plainly where it does not.
+
 ---
 
 # 2. The Memnox Thesis
@@ -388,6 +396,17 @@ Memnox knows:
 
 Memnox becomes the shared coordination layer.
 
+**Memnox coordinates agent work; it does not replace project management.** Where a team already runs its work in Linear, Jira, Asana or anything like them, that system stays the source of truth for its issues, assignees, priorities and deadlines, and Memnox joins the issue where it already lives rather than asking anybody to write it again. A product manager files *Implement payment retry* and gives it to Alice; Alice connects Claude Code to it in Memnox; Claude Code receives the architecture notes and the standards, starts, asks before it touches a protected resource, and its completion reaches Linear only through an integration somebody authorised. The developer and the manager keep working in Linear.
+
+So four things are kept apart, because an issue can have many sessions, many attempts and many handoffs:
+
+* **An external task** is a reference to the issue in the system that owns it, never a copy.
+* **Agent work** is the relationship between one agent and one piece of work: who answers for it, which sessions it ran, what it reported, where it stands.
+* **A handoff** asks to move work or responsibility to another agent or another person, and a person accepts it.
+* **An internal task** is a light work item for somebody with no task manager at all: *ask my research agent to compare five payment providers, then have my writing agent prepare a comparison.*
+
+Memnox never plans the work, splits it, schedules it, picks an assignee or runs anything. The orchestration an agent already has keeps executing it. Agent work grants nothing: being joined to an issue changes no rule, and a handoff carries references rather than copies, so whoever receives it reads each one through its own clearance and learns nothing it could not already see.
+
 ---
 
 # 10. The Agent Workforce
@@ -433,6 +452,12 @@ Cannot:
 The important difference is that Memnox doesn't just define what an agent **can technically access**.
 
 It understands what the agent is **supposed to accomplish**.
+
+**Every agent has a person who answers for it.** An agent is represented by the person responsible for it, the way a colleague is in Linear or Jira: Alice answers for her Claude Code, decides what work it is given, what it is told and what it may reach, and watches what it does. A manager can give an issue to Alice and Alice can give part of it to her agent, so the person who assigned the work and the person who answers for the agent need not be the same. The agent does not inherit Alice's authority, and when Alice leaves, the organization hands her agents to somebody else rather than leaving them answering to nobody.
+
+**A profile is the job; a connection is how it reaches us.** The identity, role, mission and responsibilities belong to an agent profile, which no harness and no machine owns. The same profile can be reached through a hook on a laptop, a gateway in front of a hosted agent and an MCP door inside a SaaS product, and two agents of the same harness can hold two different jobs. A profile can exist before anything is connected to it, which is what a template is: a job description waiting for a real agent, never an agent pretending to run.
+
+What Memnox can do for an agent is read off its connections and never declared by them. Each capability is enforced, checked, reported by the agent, only seen, or outside Memnox, and a profile is shown at the weakest level its live connections reach.
 
 ---
 
@@ -1008,7 +1033,7 @@ This is much closer to understanding **real agent authority**.
 
 ---
 
-# 24. One Unified Agent Layer
+# 24. One Unified Agent Layer: Profiles over Connections
 
 Memnox should eventually make the underlying agent irrelevant.
 
@@ -1042,6 +1067,8 @@ Trust
 ```
 
 That is the platform.
+
+The primitives hang off the profile, so they follow the job rather than the harness. Local coding agents, local agents that do other work, hosted agents, agents inside SaaS products, agents built in no code tools and custom agents each connect in the way their platform allows, and the screens say which way that is. Wherever the connection sits in the path of an action, the decision is deterministic; wherever it does not, Memnox says it only sees.
 
 ---
 

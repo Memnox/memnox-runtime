@@ -1,6 +1,6 @@
 import { hostOf, RunTerminals, type SessionHost } from '@memnox/core';
 import { processChain } from '@memnox/interceptors';
-import type { PreparedRun } from './prepare';
+import type { PreparedRun, RunOptions } from './prepare';
 
 /** Where a run is on screen: its terminal device and the app that tab is in. */
 type RunPlace = Pick<SessionHost, 'app' | 'appPath' | 'tty'>;
@@ -18,7 +18,7 @@ export function ownTerminal(): RunPlace {
 /** Noted before the agent starts, because what it asks before its first hook is asked in this tab. */
 export async function noteRunTerminal(
   run: PreparedRun,
-  cwd: string,
+  launch: { cwd: string; command: readonly string[]; options: RunOptions },
   place: RunPlace,
   at: string,
 ): Promise<void> {
@@ -28,10 +28,32 @@ export async function noteRunTerminal(
       agent: run.agent,
       pid: process.pid,
       ...place,
-      cwd,
+      cwd: launch.cwd,
       startedAt: at,
+      command: [...launch.command],
+      relaunch: relaunchOptions(launch.options),
     })
     .catch(() => undefined);
+}
+
+/** The options that decide what the agent may do and what it was asked, so a restart keeps them. */
+const RELAUNCH_FLAGS: readonly (readonly [keyof RunOptions, string])[] = [
+  ['task', '--task'],
+  ['paths', '--paths'],
+  ['repos', '--repos'],
+  ['services', '--services'],
+  ['envs', '--envs'],
+  ['expect', '--expect'],
+  ['role', '--role'],
+  ['for', '--for'],
+  ['mission', '--mission'],
+];
+
+function relaunchOptions(options: RunOptions): string[] {
+  return RELAUNCH_FLAGS.flatMap(([key, flag]) => {
+    const value = options[key];
+    return typeof value === 'string' ? [flag, value] : [];
+  });
 }
 
 /** Gone with the run, so a closed tab is never pressed into. */

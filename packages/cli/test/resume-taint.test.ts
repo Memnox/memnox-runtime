@@ -23,12 +23,10 @@ async function resume(dir: string, session: string): Promise<RecordedOutput> {
   const out = new RecordedOutput();
   const program = new Command();
   program.exitOverride();
-  registerResumeCommand(
-    program,
-    new CliContext(out, plainStyle),
-    () => dir,
-    () => NOW,
-  );
+  registerResumeCommand(program, new CliContext(out, plainStyle), {
+    home: () => dir,
+    now: () => NOW,
+  });
   await program.parseAsync(['resume', session, '--by', 'dana'], { from: 'user' });
   return out;
 }

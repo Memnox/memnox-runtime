@@ -19,6 +19,7 @@ import { wrapProjectServers } from '../mcp/wrap-servers';
 import { readRegisteredFiles } from '../policy-path';
 import { grantsWanted } from './project-grants';
 import { handInstructions, readInstructionSources } from './project-instructions';
+import { readBindings } from '../agents/connections';
 import { projectAgents, projectPlaces, readProject, rootOf } from './project-places';
 
 /**
@@ -70,7 +71,11 @@ export async function applyProject(
   const read = await readProject(root);
   if (read.problems !== undefined) return { refused: read.problems.join(' ') };
   const place = (await projectPlaces(home)).find((each) => each.root === root);
-  const agents = projectAgents(read.manifest, place === undefined ? [] : place.hosts);
+  const agents = projectAgents(
+    read.manifest,
+    place === undefined ? [] : place.hosts,
+    await readBindings(home),
+  );
   const handed = await handOut(home, { id, root, manifest: read.manifest, agents }, now);
   const grants = grantsWanted(await readHub(home), await readSkillsHub(home), {
     manifest: read.manifest,

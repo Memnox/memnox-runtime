@@ -153,11 +153,11 @@ async function stamp(path: string, moment: string): Promise<void> {
 }
 
 describe('what the operator is offered', () => {
-  it("reads, and writes nothing but a proposal, a pause, a watch, the person's answer to their agent's question in its picker or its terminal, their words typed into an agent's app, an app they named stopped or closed, a word they were misheard saying, what they told it about themselves, its own screenshots forgotten, a folder to open or make, a draft it put up withdrawn, a page opened, a list put on screen, an ask to another owner for their agent's lines or the answer to one, an incident taken, an exception refused, or a request to show or start what the person said yes to", () => {
+  it("reads, and writes nothing but a proposal, a pause, a watch, the person's answer to their agent's question in its picker or its terminal, their words typed into an agent's app, an app they named stopped or closed, a word they were misheard saying, what they told it about themselves, its own screenshots forgotten, a folder to open or make, a draft it put up withdrawn, a page opened, a list put on screen, an ask to another owner for their agent's lines or the answer to one, an incident taken, an exception refused, agent work started or a handoff answered, or a request to show or start what the person said yes to", () => {
     for (const tool of OPERATOR_TOOLS) {
       if (tool.annotations.readOnlyHint) continue;
       expect(tool.name).toMatch(
-        /^(propose_|show$|pause_session$|pause_agent$|send_instruction$|type_in_app$|control_app$|answer_question$|answer_agent$|watch_for$|walk_through$|start_session$|show_agents$|memnox_command$|traces$|remember_word$|forget_word$|remember_about_me$|forget_about_me$|forget_screen$|open_folder$|create_folder$|withdraw$|open_link$|search_web$|show_list$|ask_for_lines$|answer_ask_for_lines$|message_person$|answer_person$|acknowledge_incident$|reject_exception$)/,
+        /^(propose_|show$|pause_session$|pause_agent$|send_instruction$|type_in_app$|control_app$|answer_question$|answer_agent$|watch_for$|walk_through$|start_session$|show_agents$|memnox_command$|traces$|remember_word$|forget_word$|remember_about_me$|forget_about_me$|forget_screen$|open_folder$|create_folder$|withdraw$|open_link$|search_web$|show_list$|ask_for_lines$|answer_ask_for_lines$|message_person$|answer_person$|acknowledge_incident$|reject_exception$|start_agent_work$|answer_handoff$)/,
       );
     }
   });

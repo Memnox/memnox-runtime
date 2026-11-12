@@ -6,13 +6,16 @@ session, and hands that type into the agent's own terminal or editor while the p
 This document walks every surface the app draws, from the first launch to the cards the voice
 puts on screen, in the shape `docs/ux/TEMPLATE.md` asks for.
 
-Every label in quotes is taken from the working tree of `memnox-macos` on 2026-10-07, including
-the files not yet committed (`Presentation/Settings/`, `Presentation/Home/`,
-`Presentation/Components/`, `Cards/CardHeader.swift`, `Side/SideFilter.swift`, `QRImage.swift`,
-and the new `Platform/AXTree.swift`, `Readback.swift`, `RuntimeInstaller.swift`,
-`ScreenSight.swift`). Paths are relative to `memnox-macos/Sources/MemnoxVoice/` unless they name
-`MemnoxVoiceCore`, where most of the words the screens show are built and tested. A label built
-at run time is shown with the fields it is built from.
+Labels in quotes were read from the Mac app on 2026-10-07, in what was then the `memnox-macos`
+repository and is now `memnox-desktop/macos`. Paths are relative to
+`memnox-desktop/macos/Sources/MemnoxVoice/` unless they name `MemnoxVoiceCore`, where most of the
+words the screens show are built and tested. A label built at run time is shown with the fields
+it is built from.
+
+**Since 2026-11-11 the words, the sidebar, Home and onboarding come from `docs/ux/contract.json`.**
+`docs/ux/words.md` explains it. Where a label below differs from the contract, the contract is
+what the app shows: Needs you, Sessions and Rules, for example, where this document says Needs
+your attention, Today and Protection settings.
 
 The people are the ones in `docs/user-flows.md`. Maya is solo with a Mac and an iPhone, runs
 Claude Code and Cursor, and answers from the island, the phone and her voice. Ana is a team
@@ -26,9 +29,9 @@ Anything under **Improved** is a proposal, built on what the code already has. N
 
 ## Surfaces map
 
-The app has no Dock icon and no main window. It draws ten surfaces, each a borderless panel or
-one ordinary window, all painted the same flat black with the island's grey cards
-(`IslandPalette.card`, `#141518`).
+The app has a main window with the same sidebar as the console (see `docs/ux/contract.json`).
+Around it the app draws ten surfaces, each a borderless panel or one ordinary window, all
+painted the same flat black with the island's grey cards (`IslandPalette.card`, `#141518`).
 
 | Surface                 | File                                               | What it is                                                                                                 | How it appears                                                                                        |
 | ----------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |

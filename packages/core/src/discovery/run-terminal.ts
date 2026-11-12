@@ -22,6 +22,10 @@ export interface RunTerminal {
   appPath?: string;
   cwd: string;
   startedAt: string;
+  /** The agent's own command line, so a run a reboot cut off can be started again as it was. */
+  command?: string[];
+  /** The `memnox run` options it was started with that shape what it may do: task, role, person, mission. */
+  relaunch?: string[];
 }
 
 export class RunTerminals {

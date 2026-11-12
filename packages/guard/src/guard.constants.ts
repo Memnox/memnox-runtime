@@ -30,6 +30,8 @@ export const GUARD_ENV = {
   WORKSPACE: 'MEMNOX_WORKSPACE',
   URL: 'MEMNOX_URL',
   AGENT: 'MEMNOX_AGENT',
+  /** The agent profile, the job, named on every record. */
+  PROFILE: 'MEMNOX_PROFILE',
 } as const;
 
 export const DEFAULT_CLOUD_URL = 'https://api.memnox.com';

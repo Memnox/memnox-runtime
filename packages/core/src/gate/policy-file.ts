@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { extname } from 'node:path';
+import { extname, resolve } from 'node:path';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { parse, stringify } from 'yaml';
 import type { Policy, PolicyDocument } from '../policy/index';
@@ -8,7 +8,8 @@ import {
   PolicyValidationError,
   validatePolicyDocument,
 } from '../policy/index';
-import { writeAtomic } from '../store/atomic-file';
+import { isMissingFile, writeAtomic } from '../store/atomic-file';
+import { FileRevisions, REVISION_KIND } from '../store/revisions';
 import { setDataPatterns } from '../domain/sensitive-data';
 
 /**
@@ -131,14 +132,6 @@ export async function readPolicyRegistry(filePath: string): Promise<string[]> {
   return Array.isArray(files) ? files.filter((file) => typeof file === 'string') : [];
 }
 
-function isMissingFile(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    (err as { code?: unknown }).code === 'ENOENT'
-  );
-}
-
 /** The whole document: an editor needs `project` as declared, not folded into each rule. */
 export async function readPolicyDocumentFile(
   filePath: string,
@@ -158,6 +151,7 @@ export async function readPolicyDocumentFile(
 export async function writePolicyDocumentFile(
   filePath: string,
   document: PolicyDocument,
+  revisions: FileRevisions = new FileRevisions(),
 ): Promise<void> {
   const shape = {
     version: POLICY_DOCUMENT_VERSION,
@@ -173,6 +167,8 @@ export async function writePolicyDocumentFile(
     extname(filePath).toLowerCase() === POLICY_FILE_EXTENSION
       ? stringifyToml(shape)
       : stringify(shape);
+  // The copy comes first, so every change a person or a card made can be walked back.
+  await revisions.keep(resolve(filePath), REVISION_KIND.RULES, new Date().toISOString());
   await writeAtomic(filePath, serialized);
 }
 

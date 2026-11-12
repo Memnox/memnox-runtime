@@ -254,6 +254,15 @@
       "profile-put",
       "profile-remove",
       "profile-apply",
+      "profile-bind",
+      "profile-unbind",
+      "templates",
+      "profile-from-template",
+      "agent-work",
+      "work-start",
+      "work-stop",
+      "work-close",
+      "handoff-answer",
       "index-list",
       "index-install",
       "index-source-set"
@@ -265,7 +274,8 @@
       "settled",
       "show",
       "notice",
-      "activity"
+      "activity",
+      "work"
     ],
     "askEnds": [
       "done",
@@ -347,6 +357,18 @@
       "mac",
       "phone",
       "desktop"
+    ],
+    "handoffAnswers": [
+      "accept",
+      "decline"
+    ],
+    "workStatuses": [
+      "active",
+      "blocked",
+      "handoff_requested",
+      "done_claimed",
+      "done",
+      "stopped"
     ]
   },
   "frames": [

@@ -1,5 +1,6 @@
 import type { DecisionEffect } from '../constants/decision.constants';
 import type { CapabilityTally } from '../discovery/capabilities';
+import type { CapabilityLevels } from '../discovery/capability-levels';
 import type { AgentNode } from './protocol';
 
 /**
@@ -94,6 +95,10 @@ export interface AgentView {
   recent: AgentAction[];
   /** Whether AGENT_LAUNCH can open it, which only an agent with a known launch command can. */
   launchable: boolean;
+  /** The profile it works under: the one a person bound, or its own default. */
+  profileId?: string;
+  /** How sure Memnox is of each capability for it, from what holds it and what was proved. */
+  levels?: CapabilityLevels;
 }
 
 /** What AGENT_LAUNCH asked the Mac to type, in the folder it opens on. */

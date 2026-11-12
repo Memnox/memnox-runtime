@@ -50,6 +50,7 @@ import {
   listenerHears,
   markNeedsMac,
   noteTold,
+  OFF_THE_FEED,
   OriginRouter,
   sendWaiting,
   type Listener,
@@ -208,8 +209,7 @@ export class VoiceSurface {
       const listener = this.listeners.get(socket);
       if (listener === undefined || !listenerHears(event, listener)) continue;
       write(socket, { id: 0, ok: true, event: stamped });
-      // A row of activity is never on the waiting feed, so it would only push news out of the window.
-      if (event.kind !== DAEMON_EVENT.ACTIVITY) this.heard.note(socket, event.subject);
+      if (!OFF_THE_FEED.includes(event.kind)) this.heard.note(socket, event.subject);
     }
   }
 
@@ -440,6 +440,7 @@ export class VoiceSurface {
     this.subscribers.set(socket, told);
     this.listeners.set(socket, {
       activity: request.subscribeActivity === true,
+      ...(request.subscribeWork === true ? { work: true } : {}),
       ...(principal === undefined ? {} : { holds: principal.device.capabilities }),
     });
     // A live stream means its app is open, so the phone holds the voice until the stream ends.

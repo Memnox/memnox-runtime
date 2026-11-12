@@ -140,6 +140,18 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   [DAEMON_METHOD.PROFILE_PUT]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.PROFILE_REMOVE]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.PROFILE_APPLY]: REMOTE_CAPABILITY.ASK,
+  // Choosing which job an agent works under steers it; a profile carrying a role binds only at the Mac.
+  [DAEMON_METHOD.PROFILE_BIND]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.PROFILE_UNBIND]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.TEMPLATES]: REMOTE_CAPABILITY.SEE,
+  // Only writes a new profile, which grants nothing until it is applied or bound.
+  [DAEMON_METHOD.PROFILE_FROM_TEMPLATE]: REMOTE_CAPABILITY.ASK,
+  [DAEMON_METHOD.WORK]: REMOTE_CAPABILITY.SEE,
+  // Pointing an agent at work, stopping, closing or answering a handoff steers it and grants nothing.
+  [DAEMON_METHOD.WORK_START]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.WORK_STOP]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.WORK_CLOSE]: REMOTE_CAPABILITY.STEER,
+  [DAEMON_METHOD.HANDOFF_ANSWER]: REMOTE_CAPABILITY.STEER,
   [DAEMON_METHOD.INDEX_LIST]: REMOTE_CAPABILITY.SEE,
   // Checked against its digest, and only ever a skill held for acceptance or a pack's rules proposed.
   [DAEMON_METHOD.INDEX_INSTALL]: REMOTE_CAPABILITY.ASK,

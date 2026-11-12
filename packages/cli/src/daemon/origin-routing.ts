@@ -94,9 +94,14 @@ export function heardRemotely(event: DaemonEvent): boolean {
   );
 }
 
+/** Kinds never on the waiting feed, so noting them as heard would only push news out of the window. */
+export const OFF_THE_FEED: readonly string[] = [DAEMON_EVENT.ACTIVITY, DAEMON_EVENT.WORK];
+
 /** What one subscriber asked for and, on a phone, what it holds. */
 export interface Listener {
   activity: boolean;
+  /** Asked for WORK events, which an app built before them would speak as it does ACTIVITY. */
+  work?: true;
   /** Undefined on the Mac's own socket, which hears everything it asked for. */
   holds?: readonly RemoteCapability[];
 }
@@ -105,6 +110,7 @@ export interface Listener {
 export function listenerHears(event: DaemonEvent, listener: Listener): boolean {
   // Asked for, because an app built before ACTIVITY speaks a kind it does not know, every second.
   if (event.kind === DAEMON_EVENT.ACTIVITY && !listener.activity) return false;
+  if (event.kind === DAEMON_EVENT.WORK && listener.work !== true) return false;
   if (listener.holds === undefined) return true;
   return heardRemotely(event) && phoneHears(event.kind, listener.holds);
 }

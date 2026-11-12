@@ -13,7 +13,7 @@ import { callCloud } from './client';
 
 /**
  * A person signed in from this terminal with `memnox signin`, apart from the machine's own
- * credential: what lets `memnox inbox` show the questions a workspace routed to them and answer
+ * credential: what lets `memnox approvals` show the questions a workspace routed to them and answer
  * one, signed by a key that never leaves this machine, as the phone signs with Face ID.
  */
 

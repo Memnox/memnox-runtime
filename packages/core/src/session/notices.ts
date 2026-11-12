@@ -42,6 +42,8 @@ export const NOTICE_KIND = {
   SIGN_IN_STALLED: 'sign-in-stalled',
   /** An agent stopped in its own terminal to ask its person something, which the voice reads and answers there. */
   ASKING: 'asking',
+  /** A budget passed the line its person asked to be told at, or ran out. */
+  BUDGET: 'budget',
 } as const;
 
 export type NoticeKind = (typeof NOTICE_KIND)[keyof typeof NOTICE_KIND];

@@ -1,0 +1,207 @@
+{
+  "version": 1,
+  "bundle": {
+    "hash": "vectors-1",
+    "rules": [
+      {
+        "id": "no-refunds",
+        "effect": "deny",
+        "match": "mcp.stripe.create_refund",
+        "reason": "refunds go through finance"
+      },
+      {
+        "id": "ask-linear",
+        "effect": "ask",
+        "match": "mcp.linear.*",
+        "reason": "a person checks tracker changes"
+      },
+      {
+        "id": "reads-run",
+        "effect": "allow",
+        "match": "mcp.*.list_*"
+      },
+      {
+        "id": "support-no-mail",
+        "effect": "deny",
+        "match": "tool.send_email",
+        "agents": [
+          "support-bot"
+        ]
+      },
+      {
+        "id": "ask-exports",
+        "effect": "ask",
+        "match": "tool.export_*",
+        "targets": [
+          "!internal"
+        ]
+      },
+      {
+        "id": "no-deploys",
+        "effect": "deny",
+        "match": "tool.deploy",
+        "unless": [
+          {
+            "agents": [
+              "release-bot"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "watch-cleanup",
+        "effect": "deny",
+        "match": "tool.cleanup",
+        "decision": {
+          "effect": "deny",
+          "mode": "observe"
+        }
+      },
+      {
+        "id": "admins-wipe",
+        "effect": "allow",
+        "match": "tool.wipe",
+        "conditions": {
+          "roles": [
+            "admin"
+          ]
+        }
+      },
+      {
+        "id": "no-wipe",
+        "effect": "ask",
+        "match": "tool.wipe"
+      }
+    ]
+  },
+  "signature": {
+    "keyId": "k-vectors",
+    "publicKey": "MCowBQYDK2VwAyEAebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
+    "body": "{\"hash\":\"vectors-1\",\"rules\":[{\"id\":\"no-refunds\",\"effect\":\"deny\",\"match\":\"mcp.stripe.create_refund\",\"reason\":\"refunds go through finance\"},{\"id\":\"ask-linear\",\"effect\":\"ask\",\"match\":\"mcp.linear.*\",\"reason\":\"a person checks tracker changes\"},{\"id\":\"reads-run\",\"effect\":\"allow\",\"match\":\"mcp.*.list_*\"},{\"id\":\"support-no-mail\",\"effect\":\"deny\",\"match\":\"tool.send_email\",\"agents\":[\"support-bot\"]},{\"id\":\"ask-exports\",\"effect\":\"ask\",\"match\":\"tool.export_*\",\"targets\":[\"!internal\"]},{\"id\":\"no-deploys\",\"effect\":\"deny\",\"match\":\"tool.deploy\",\"unless\":[{\"agents\":[\"release-bot\"]}]},{\"id\":\"watch-cleanup\",\"effect\":\"deny\",\"match\":\"tool.cleanup\",\"decision\":{\"effect\":\"deny\",\"mode\":\"observe\"}},{\"id\":\"admins-wipe\",\"effect\":\"allow\",\"match\":\"tool.wipe\",\"conditions\":{\"roles\":[\"admin\"]}},{\"id\":\"no-wipe\",\"effect\":\"ask\",\"match\":\"tool.wipe\"}]}",
+    "signature": "k-vectors:3VqhArggL0Xn6cgCSrzUMOHG0YHtmD3DVUh6U8zdaWEaTKfowBeKOLvTplVSrimXZwRBz4sERw+dVQnlVKkqAQ=="
+  },
+  "decisions": [
+    {
+      "name": "a denied refund",
+      "agent": "support-bot",
+      "tool": "mcp__stripe__create_refund",
+      "input": {
+        "amount": 4200
+      },
+      "effect": "deny",
+      "rule": "no-refunds"
+    },
+    {
+      "name": "case does not slip a rule",
+      "agent": "support-bot",
+      "tool": "mcp__Stripe__Create_Refund",
+      "input": {},
+      "effect": "deny",
+      "rule": "no-refunds"
+    },
+    {
+      "name": "a tracker write asks",
+      "agent": "support-bot",
+      "tool": "mcp__linear__create_issue",
+      "input": {
+        "title": "x"
+      },
+      "effect": "ask",
+      "rule": "ask-linear"
+    },
+    {
+      "name": "the stricter of two rules wins",
+      "agent": "support-bot",
+      "tool": "mcp__linear__list_issues",
+      "input": {},
+      "effect": "ask",
+      "rule": "ask-linear"
+    },
+    {
+      "name": "a read elsewhere runs",
+      "agent": "support-bot",
+      "tool": "mcp__github__list_repos",
+      "input": {},
+      "effect": "allow",
+      "rule": "reads-run"
+    },
+    {
+      "name": "a rule for one agent",
+      "agent": "support-bot",
+      "tool": "send_email",
+      "input": {
+        "to": "a"
+      },
+      "effect": "deny",
+      "rule": "support-no-mail"
+    },
+    {
+      "name": "and not for another",
+      "agent": "sales-bot",
+      "tool": "send_email",
+      "input": {
+        "to": "a"
+      },
+      "effect": "allow",
+      "rule": null
+    },
+    {
+      "name": "an invisible character is not a bypass",
+      "agent": "support-bot",
+      "tool": "send_email​",
+      "input": {},
+      "effect": "deny",
+      "rule": "support-no-mail"
+    },
+    {
+      "name": "an exclusion only list still holds",
+      "agent": "sales-bot",
+      "tool": "export_report",
+      "input": {},
+      "effect": "ask",
+      "rule": "ask-exports"
+    },
+    {
+      "name": "a carve out lets its agent through",
+      "agent": "release-bot",
+      "tool": "deploy",
+      "input": {},
+      "effect": "allow",
+      "rule": null
+    },
+    {
+      "name": "and nobody else",
+      "agent": "ci-bot",
+      "tool": "deploy",
+      "input": {},
+      "effect": "deny",
+      "rule": "no-deploys"
+    },
+    {
+      "name": "an observed rule never decides",
+      "agent": "ci-bot",
+      "tool": "cleanup",
+      "input": {},
+      "effect": "allow",
+      "rule": null
+    },
+    {
+      "name": "a role nobody reported matches nothing",
+      "agent": "ci-bot",
+      "tool": "wipe",
+      "input": {},
+      "effect": "ask",
+      "rule": "no-wipe"
+    },
+    {
+      "name": "nothing matched runs",
+      "agent": "ci-bot",
+      "tool": "lookup_order",
+      "input": {
+        "order": "4417"
+      },
+      "effect": "allow",
+      "rule": null
+    }
+  ]
+}

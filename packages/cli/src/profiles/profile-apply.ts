@@ -11,6 +11,7 @@ import {
   skillNamed,
   type DiscoveredAgentKind,
   type ProfileApplied,
+  type ProfileJob,
   type ProfileView,
 } from '@memnox/core';
 import { assignSkill } from '../skills/skills-changes';
@@ -136,6 +137,20 @@ async function proposePack(
   else applied.proposed.push(...imported.proposed);
 }
 
+/** The job fields as a screen shows them, absent ones left out rather than sent empty. */
+function jobOf(profile: StoredProfile): ProfileJob {
+  const { purpose, role, instructions, responsiblePerson, templateOf } = profile;
+  return {
+    ...(purpose === undefined ? {} : { purpose }),
+    ...(role === undefined ? {} : { role }),
+    responsibilities: profile.responsibilities,
+    ...(instructions === undefined ? {} : { instructions }),
+    ...(responsiblePerson === undefined ? {} : { responsiblePerson }),
+    projects: profile.projects,
+    ...(templateOf === undefined ? {} : { templateOf }),
+  };
+}
+
 async function isFolder(path: string): Promise<boolean> {
   if (!isAbsolute(path)) return false;
   try {
@@ -146,8 +161,10 @@ async function isFolder(path: string): Promise<boolean> {
   }
 }
 
-/** Every profile as a screen draws it, each with what the hubs no longer hold said. */
-export async function readProfileViews(home: string): Promise<ProfileView[]> {
+/** Every kept profile as a screen draws it, each with what the hubs no longer hold said. */
+export async function readProfileViews(
+  home: string,
+): Promise<Omit<ProfileView, 'connections' | 'levels'>[]> {
   const [profiles, hub, skills] = await Promise.all([
     readProfiles(home),
     readHub(home),
@@ -156,21 +173,12 @@ export async function readProfileViews(home: string): Promise<ProfileView[]> {
   return profiles.map((profile) => {
     const pack = profile.rulePack;
     const read = pack === undefined ? undefined : rulesOfPack(pack.toml);
-    const missing = [
-      ...profile.mcpServers
-        .filter((name) => !hub.servers.some((each) => each.name === name))
-        .map((name) => `${name} is not in the MCP Hub.`),
-      ...profile.skills
-        .filter((name) => skillNamed(skills, name) === undefined)
-        .map((name) => `${name} is not in the Skills Hub.`),
-      ...(pack !== undefined && read !== undefined && 'problems' in read
-        ? [`${pack.name} would not load: ${read.problems.join('; ')}`]
-        : []),
-    ];
+    const missing = missingOf(profile, { hub, skills, read });
     return {
       id: profile.id,
       name: profile.name,
       ...(profile.description === undefined ? {} : { description: profile.description }),
+      ...jobOf(profile),
       skills: profile.skills,
       mcpServers: profile.mcpServers,
       ...(pack === undefined
@@ -185,4 +193,28 @@ export async function readProfileViews(home: string): Promise<ProfileView[]> {
       missing,
     };
   });
+}
+
+/** What a profile names that the hubs no longer hold, or a pack that no longer loads, said. */
+function missingOf(
+  profile: StoredProfile,
+  held: {
+    hub: Awaited<ReturnType<typeof readHub>>;
+    skills: Awaited<ReturnType<typeof readSkillsHub>>;
+    read: ReturnType<typeof rulesOfPack> | undefined;
+  },
+): string[] {
+  const { hub, skills, read } = held;
+  const pack = profile.rulePack;
+  return [
+    ...profile.mcpServers
+      .filter((name) => !hub.servers.some((each) => each.name === name))
+      .map((name) => `${name} is not in the MCP Hub.`),
+    ...profile.skills
+      .filter((name) => skillNamed(skills, name) === undefined)
+      .map((name) => `${name} is not in the Skills Hub.`),
+    ...(pack !== undefined && read !== undefined && 'problems' in read
+      ? [`${pack.name} would not load: ${read.problems.join('; ')}`]
+      : []),
+  ];
 }

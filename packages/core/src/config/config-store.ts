@@ -9,7 +9,7 @@ import {
   renderConfig,
   type MemnoxConfig,
 } from './config';
-import { writeAtomic } from '../store/atomic-file';
+import { isMissingFile, writeAtomic } from '../store/atomic-file';
 import {
   APPROVAL_ROUTE,
   type ApprovalRoute,
@@ -29,7 +29,7 @@ export async function loadOrCreateConfig(home: string): Promise<MemnoxConfig> {
   try {
     return parseConfig(await readFile(path, 'utf8'));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    if (!isMissingFile(err)) throw err;
     // First run: the file does not exist yet, which is the one silent case here.
     await saveConfig(home, DEFAULT_CONFIG);
     return { ...DEFAULT_CONFIG };

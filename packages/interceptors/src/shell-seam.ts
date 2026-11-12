@@ -37,6 +37,7 @@ import {
   type HookVerdict,
 } from './hook-authorizer';
 import type { SeamLeases } from './seam-runtime';
+import { othersInThisCommit, type SharedCommitDeps } from './shared-commit-seam';
 
 /**
  * One shell line, ruled on before anything runs, through the resolver every surface uses.
@@ -104,6 +105,7 @@ export interface ShellSeamDeps {
   /** Where a repository an agent clones is put on probation. Absent, nothing is noted. */
   home?: string;
   now?: () => Date;
+  stagedFiles?: SharedCommitDeps['stagedFiles'];
 }
 
 const NO_COMMAND = 'no command to run';
@@ -147,7 +149,7 @@ export class ShellSeam {
     if (command.length === 0) return nothingToRun();
 
     const line = shellLineOf(command);
-    const ruling = await this.rule(line);
+    const ruling = await this.sharedCommit(line, await this.rule(line));
     if (ruling.verdict.effect === DECISION_EFFECT.ASK) {
       const answered = await this.askAbout(line, ruling);
       if (answered !== null) return answered;
@@ -329,6 +331,18 @@ export class ShellSeam {
       }
     }
     return null;
+  }
+
+  /** A commit that would take another agent's unfinished files asks first, whatever the rules allowed. */
+  private async sharedCommit(line: string, ruling: Ruling): Promise<Ruling> {
+    if (ruling.verdict.effect === DECISION_EFFECT.DENY) return ruling;
+    const reason = await othersInThisCommit(line, this.deps);
+    if (reason === null) return ruling;
+    return {
+      verdict: { ...ruling.verdict, effect: DECISION_EFFECT.ASK, reason },
+      action: ACTION.GIT_COMMIT,
+      class: TOOL_CLASS.WRITE,
+    };
   }
 
   /** Kept for the voice to tell the person; never in the way of the refusal itself. */

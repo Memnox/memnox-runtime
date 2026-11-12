@@ -1,0 +1,410 @@
+{
+  "version": 1,
+  "answers": {
+    "order": [
+      "once",
+      "session",
+      "edit",
+      "deny"
+    ],
+    "labels": {
+      "once": "Allow once",
+      "session": "Allow for this session",
+      "edit": "Edit the command first",
+      "deny": "Deny"
+    },
+    "outcomes": {
+      "once": "allowed once",
+      "session": "allowed for this session",
+      "edit": "editing",
+      "deny": "denied"
+    },
+    "always": "Always allow",
+    "never": "Always deny"
+  },
+  "sessionStatus": {
+    "order": [
+      "needs-you",
+      "stopped",
+      "working",
+      "finished",
+      "idle"
+    ],
+    "labels": {
+      "needs-you": "Needs you",
+      "stopped": "Stopped",
+      "working": "Working",
+      "finished": "Finished",
+      "idle": "Idle"
+    },
+    "reasons": {
+      "approval": "Needs approval",
+      "question": "Has a question",
+      "plan": "Plan to review",
+      "paused": "Paused",
+      "breaker": "Paused by the breaker",
+      "budget": "Stopped by a budget",
+      "interrupted": "Interrupted, resumable"
+    }
+  },
+  "pages": [
+    {
+      "id": "home",
+      "label": "Home",
+      "group": null,
+      "sf": "house",
+      "lucide": "House",
+      "route": "/dashboard",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ]
+    },
+    {
+      "id": "needs-you",
+      "label": "Needs you",
+      "group": null,
+      "sf": "tray",
+      "lucide": "Inbox",
+      "route": "/inbox",
+      "badge": true,
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ],
+      "tabs": [
+        {
+          "id": "decide-now",
+          "label": "Decide now"
+        },
+        {
+          "id": "kept",
+          "label": "Kept for later"
+        },
+        {
+          "id": "decided",
+          "label": "Decided"
+        },
+        {
+          "id": "rule-changes",
+          "label": "Rule changes"
+        }
+      ]
+    },
+    {
+      "id": "sessions",
+      "label": "Sessions",
+      "group": null,
+      "sf": "rectangle.stack",
+      "lucide": "Layers",
+      "route": "/sessions",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ]
+    },
+    {
+      "id": "agents",
+      "label": "Agents",
+      "group": null,
+      "sf": "cpu",
+      "lucide": "Bot",
+      "route": "/agents",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ],
+      "tabs": [
+        {
+          "id": "agents",
+          "label": "Agents"
+        },
+        {
+          "id": "jobs",
+          "label": "Jobs"
+        },
+        {
+          "id": "cloud",
+          "label": "Cloud agents",
+          "platforms": [
+            "web"
+          ]
+        },
+        {
+          "id": "this-computer",
+          "label": "On this computer",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "projects",
+      "label": "Projects",
+      "group": null,
+      "sf": "folder",
+      "lucide": "FolderGit2",
+      "route": "/shared-projects",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ]
+    },
+    {
+      "id": "rules",
+      "label": "Rules",
+      "group": "govern",
+      "sf": "checkmark.shield",
+      "lucide": "ScrollText",
+      "route": "/rules",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ],
+      "tabs": [
+        {
+          "id": "rules",
+          "label": "Rules"
+        },
+        {
+          "id": "reached",
+          "label": "Where they reached",
+          "platforms": [
+            "web"
+          ]
+        },
+        {
+          "id": "history",
+          "label": "History"
+        }
+      ]
+    },
+    {
+      "id": "hand-over",
+      "label": "Hand over",
+      "group": "govern",
+      "sf": "gauge.with.dots.needle.67percent",
+      "lucide": "Gauge",
+      "route": "/autonomy",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ],
+      "tabs": [
+        {
+          "id": "ready",
+          "label": "Ready to hand over"
+        },
+        {
+          "id": "budgets",
+          "label": "Budgets"
+        },
+        {
+          "id": "autopilot",
+          "label": "Autopilot"
+        }
+      ]
+    },
+    {
+      "id": "activity",
+      "label": "Activity",
+      "group": "govern",
+      "sf": "clock.arrow.circlepath",
+      "lucide": "History",
+      "route": "/findings",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ],
+      "tabs": [
+        {
+          "id": "timeline",
+          "label": "Timeline"
+        },
+        {
+          "id": "caught",
+          "label": "What was caught"
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "label": "Memory",
+      "group": "knowledge",
+      "sf": "brain",
+      "lucide": "Brain",
+      "route": "/memory",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ],
+      "tabs": [
+        {
+          "id": "map",
+          "label": "Map"
+        },
+        {
+          "id": "list",
+          "label": "List"
+        },
+        {
+          "id": "layers",
+          "label": "Layers",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        },
+        {
+          "id": "skills",
+          "label": "Skills"
+        }
+      ]
+    },
+    {
+      "id": "connectors",
+      "label": "Connectors",
+      "group": "knowledge",
+      "sf": "square.grid.2x2",
+      "lucide": "Plug",
+      "route": "/connectors",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ],
+      "tabs": [
+        {
+          "id": "systems",
+          "label": "Systems"
+        },
+        {
+          "id": "files",
+          "label": "Files"
+        },
+        {
+          "id": "meetings",
+          "label": "Meetings",
+          "platforms": [
+            "web"
+          ]
+        },
+        {
+          "id": "mcp",
+          "label": "MCP servers"
+        }
+      ]
+    },
+    {
+      "id": "machines",
+      "label": "Machines",
+      "group": "foot",
+      "sf": "desktopcomputer",
+      "lucide": "HardDrive",
+      "route": "/machines",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "id": "people",
+      "label": "People",
+      "group": "foot",
+      "sf": "person.2",
+      "lucide": "Users",
+      "route": "/members",
+      "platforms": [
+        "web"
+      ]
+    },
+    {
+      "id": "settings",
+      "label": "Settings",
+      "group": "foot",
+      "sf": "gearshape",
+      "lucide": "Settings",
+      "route": "/settings",
+      "platforms": [
+        "web",
+        "mac",
+        "desktop"
+      ]
+    }
+  ],
+  "groups": {
+    "govern": "Govern",
+    "knowledge": "Knowledge"
+  },
+  "home": [
+    {
+      "id": "header",
+      "title": null
+    },
+    {
+      "id": "next-step",
+      "title": "Do this next"
+    },
+    {
+      "id": "needs-you",
+      "title": "Needs you",
+      "empty": "Nothing needs you. Agents keep working inside their rules."
+    },
+    {
+      "id": "working-now",
+      "title": "Working now",
+      "empty": "No agent is working right now."
+    },
+    {
+      "id": "hand-over",
+      "title": "Ready to hand over"
+    },
+    {
+      "id": "budgets",
+      "title": "Budgets and missions"
+    },
+    {
+      "id": "today",
+      "title": "Today"
+    }
+  ],
+  "homeLine": "What your agents can do on their own, and what still needs you.",
+  "onboarding": [
+    {
+      "id": "who",
+      "title": "Who is Memnox for?"
+    },
+    {
+      "id": "agents",
+      "title": "Which agents do you run?"
+    },
+    {
+      "id": "connect",
+      "title": "Connect this machine"
+    },
+    {
+      "id": "ask-where",
+      "title": "Where should Memnox ask you?"
+    },
+    {
+      "id": "rules",
+      "title": "Your starting rules"
+    },
+    {
+      "id": "done",
+      "title": "You're set"
+    }
+  ],
+  "install": "npm install -g memnox && memnox setup",
+  "tryPrompt": "Make a folder called memnox-try, then delete it with rm -rf memnox-try."
+}

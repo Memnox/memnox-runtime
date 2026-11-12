@@ -16,6 +16,7 @@ import {
 import { agentNamed, pauseAgent } from '../agents/agent-pause';
 import { launchAgent, launchable } from '../agents/agent-launch';
 import { applyProfile } from '../profiles/profile-apply';
+import { withProfiles } from '../profiles/profile-connections';
 import { readAgentsView } from '../studio/agents-read';
 import { readAgentsScan } from '../session-tools/agents-tool';
 import type { SessionToolDeps } from '../session-tools/read-tools';
@@ -60,7 +61,12 @@ export async function agentsAnswer(
     refused(err instanceof Error ? err.message : String(err)),
   );
   if (!answered.ok) return { id: request.id, ...answered };
-  return { id: request.id, ...answered, agentsView: await readAgentsView(home, deps) };
+  const views = await readAgentsView(home, deps);
+  return {
+    id: request.id,
+    ...answered,
+    agentsView: await withProfiles(home, views, deps),
+  };
 }
 
 async function answerOf(

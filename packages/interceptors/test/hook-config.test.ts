@@ -164,3 +164,76 @@ describe('readHookConfig', () => {
     expect(gate?.evaluate({ action: 'shell.deploy' }).effect).not.toBe('deny');
   });
 });
+
+const ROLE_POLICY = `version: 1
+policies:
+  - name: deployers-ask-before-pushing
+    match:
+      actions: ["git.push"]
+      roles: ["deployer"]
+    decision:
+      effect: deny
+      reason: "a deployer pushes through the release"
+`;
+
+/** A home where a person bound the profile `release` (role deployer) to Claude Code. */
+function boundHome(role = 'deployer'): string {
+  const dir = mkdtempSync(join(tmpdir(), 'memnox-hook-role-'));
+  const policyFile = join(dir, 'memnox.policies.yaml');
+  writeFileSync(policyFile, ROLE_POLICY);
+  mkdirSync(join(dir, '.memnox', 'agents'), { recursive: true });
+  mkdirSync(join(dir, '.memnox', 'profiles'), { recursive: true });
+  writeFileSync(
+    join(dir, '.memnox', 'policies.json'),
+    JSON.stringify({ files: [policyFile] }),
+  );
+  writeFileSync(
+    join(dir, '.memnox', 'agents', 'connections.json'),
+    JSON.stringify({
+      'agt_claude-code': { profileId: 'release', boundAt: '2026-11-07' },
+    }),
+  );
+  writeFileSync(
+    join(dir, '.memnox', 'profiles', 'release.json'),
+    JSON.stringify({
+      version: 2,
+      id: 'release',
+      name: 'Release',
+      role,
+      updatedAt: '2026-11-07',
+    }),
+  );
+  return dir;
+}
+
+describe('the role a hook session is matched under', () => {
+  it('is the bound profile role when no run and no environment named one', async () => {
+    const dir = boundHome();
+    const gate = await loadHookGate(
+      { ...(await readHookConfig({}, dir)), agentName: 'claude-code' },
+      dir,
+    );
+    expect(gate?.evaluate({ action: 'git.push' }).effect).toBe('deny');
+  });
+
+  it('is what MEMNOX_AGENT_ROLE says, which wins over the profile', async () => {
+    const dir = boundHome();
+    const gate = await loadHookGate(
+      {
+        ...(await readHookConfig({ MEMNOX_AGENT_ROLE: 'coder' }, dir)),
+        agentName: 'claude-code',
+      },
+      dir,
+    );
+    expect(gate?.evaluate({ action: 'git.push' }).effect).not.toBe('deny');
+  });
+
+  it('is nothing for an agent with no profile bound', async () => {
+    const dir = boundHome();
+    const gate = await loadHookGate(
+      { ...(await readHookConfig({}, dir)), agentName: 'cursor' },
+      dir,
+    );
+    expect(gate?.evaluate({ action: 'git.push' }).effect).not.toBe('deny');
+  });
+});

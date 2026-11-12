@@ -157,9 +157,9 @@ describe('the terminal prompt', () => {
     expect(question).toContain('Claude-code wants to merge_pull_request');
     expect(question).toContain('merge_pull_request github');
     expect(question).toContain('production is frozen');
-    expect(question).toContain('1. Yes, once');
-    expect(question).toContain('2. Yes, for the rest of this session');
-    expect(question).toContain('3. No');
+    expect(question).toContain('1. Allow once');
+    expect(question).toContain('2. Allow for this session');
+    expect(question).toContain('3. Deny');
   });
 
   it('shows the command as typed, the reason once, and where else to answer', () => {
@@ -324,7 +324,22 @@ describe('the terminal prompt, one key at a time', () => {
     await asking;
 
     expect(drawn()).toContain('╭─ Memnox');
-    expect(drawn()).toContain('Memnox · git push --force · refused');
+    expect(drawn()).toContain('Memnox · git push --force · denied');
+  });
+
+  it('closes at once when another route answered, and says who did', async () => {
+    const { streams, raw, drawn } = terminal();
+    const asking = new TtyHoldPrompt({ open: () => streams }).ask(
+      { ...REQUEST, command: 'git push' },
+      60_000,
+      Promise.resolve({ answer: HOLD_ANSWER.ONCE, by: 'moise on the phone' }),
+    );
+
+    // Not this terminal's answer, so the route that won keeps the record.
+    expect(await asking).toBeNull();
+    expect(drawn()).toContain('Memnox · git push · allowed once, by moise on the phone');
+    expect(drawn()).not.toContain('nobody answered');
+    expect(raw).toEqual([true, false]);
   });
 
   it('gives the edit a line with the command already in it', async () => {

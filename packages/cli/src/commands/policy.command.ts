@@ -35,6 +35,7 @@ import {
   renderWhatDidNotLoad,
 } from '../policy-path';
 import { forgetPolicyFiles, registerPolicyFile } from '../policy-registry';
+import { registerPolicyHistory } from './policy-history';
 import { dryRun, insteadOf } from '../policy-requests';
 
 interface TestOptions {
@@ -91,6 +92,8 @@ export function registerPolicyCommand(
     .action(async (action: string, options: TestOptions) =>
       runTest(context, deps, action, options),
     );
+
+  registerPolicyHistory(policy, context, { home: deps.home, now: () => new Date() });
 }
 
 /** Reads every rule file and says what will not load, optionally fixing and pruning. */

@@ -12,6 +12,7 @@ import { isMemoryMethod, memoryAnswer } from './memory-answer';
 import { isLanMethod, lanAnswer } from './lan-answer';
 import { isProfilesMethod, profilesAnswer } from './profiles-answer';
 import { communityIndexAnswer, isIndexMethod } from './community-index-answer';
+import { isWorkMethod, workAnswer } from './work-answer';
 import {
   changesSyncedItems,
   isPersonalSyncMethod,
@@ -38,6 +39,7 @@ export function isScreenMethod(method: string): boolean {
     isLanMethod(method) ||
     isPersonalSyncMethod(method) ||
     isProfilesMethod(method) ||
+    isWorkMethod(method) ||
     isIndexMethod(method) ||
     isStudioMethod(method)
   );
@@ -77,7 +79,13 @@ function answerScreen(
   if (isLanMethod(request.method)) return lanAnswer(home, request, new Date());
   if (isPersonalSyncMethod(request.method))
     return personalSyncAnswer(request, syncDepsFor(home));
-  if (isProfilesMethod(request.method)) return profilesAnswer(home, request, new Date());
+  if (isProfilesMethod(request.method))
+    return profilesAnswer(home, request, new Date(), {
+      cards: () => views.list(),
+      remote,
+    });
+  if (isWorkMethod(request.method))
+    return workAnswer(home, request, { now: new Date(), cards: () => views.list() });
   if (isIndexMethod(request.method))
     return communityIndexAnswer(home, request, { now: new Date(), remote });
   if (isStudioMethod(request.method)) return studioAnswer(home, request, views);

@@ -22,6 +22,8 @@ import {
   type LeaseHolder,
   type WrittenRegion,
   workRefsAt,
+  workClaimsAt,
+  promptedIn,
 } from '@memnox/core';
 import { projectIdentityOf, remoteIdentityOf } from './git-branch';
 import { HookAuthorizer } from './hook-authorizer';
@@ -131,6 +133,7 @@ function checkoutLeases(
         // Named by its remote, so two clones of one project meet and two projects named alike do not.
         remote,
         () => workRefsAt(root),
+        (sessionId) => workClaimsAt(root, () => promptedIn(homedir(), sessionId)),
       ),
       // This machine's register serves every checkout on it, so each lease says which.
       repository: root,
