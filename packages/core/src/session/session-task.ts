@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { WorkClaim } from '../coordination/work-claims';
 import { MEMNOX_HOME } from '../config/config';
 import {
   compareDeclaredScope,
@@ -34,6 +35,8 @@ export interface SessionTask {
   declaredBy?: string;
   /** The person's latest follow up in the session, kept beside the mission rather than over it. */
   latestAsk?: string;
+  /** Issues the person's own words named as the task: kept here, and only the claim is ever sent. */
+  promptClaims?: WorkClaim[];
 }
 
 export const TASK_INTENT = { INVESTIGATE: 'investigate' } as const;

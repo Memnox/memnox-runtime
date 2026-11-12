@@ -18,6 +18,9 @@ import {
   taskFromPrompt,
   waitingOnDm,
   SessionTurns,
+  promptClaims,
+  promptClaimsEnabled,
+  withPromptClaims,
 } from '@memnox/core';
 
 import { EDIT_HOST } from './agent-edits';
@@ -239,12 +242,19 @@ async function taskOfPrompt(
 ): Promise<string | null> {
   if (sessionId === '') return null;
   const tasks = new SessionTasks(home);
-  const task = taskFromPrompt(prompt, await tasks.read(sessionId), {
+  const existing = await tasks.read(sessionId);
+  const task = taskFromPrompt(prompt, existing, {
     sessionId,
     now: now.toISOString(),
   });
   if (task === null) return null;
-  await tasks.declare(task);
+  // Read here and kept here: a prompt's reference becomes a claim only once the switch is on.
+  const found = promptClaimsEnabled() ? promptClaims(prompt) : [];
+  await tasks.declare(
+    found.length === 0
+      ? task
+      : { ...task, promptClaims: withPromptClaims(existing?.promptClaims, found) },
+  );
   return task.intent === TASK_INTENT.INVESTIGATE ? INVESTIGATION_NOTE : null;
 }
 

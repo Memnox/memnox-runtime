@@ -20,6 +20,7 @@ export * from './authority';
 export * from './agent-lineage';
 export * from './injected-prompt';
 export * from './prompt-task';
+export * from './prompt-claims';
 export * from './notices';
 export * from './watches';
 export * from './turn-tests';
