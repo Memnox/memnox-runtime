@@ -1,4 +1,5 @@
 import type { HubServer, HubTransport } from '../mcp/registry';
+import type { ServerTroubleKind } from '../mcp/server-trouble';
 
 /**
  * The MCP Hub as every screen reads and changes it: servers declared once and handed to agents.
@@ -20,6 +21,10 @@ export const MCP_HUB_METHOD = {
   SYNC: 'mcp-sync',
   /** Asks one server for its tools, on request and never on a timer. */
   TEST: 'mcp-test',
+  /** Signs in to a remote server through Memnox, in the browser on this computer, so it connects and stays ruled on. */
+  SIGN_IN: 'mcp-sign-in',
+  /** Hands a remote server back to its agents to sign in to; it stops being ruled on, so the person signs it. */
+  HAND_BACK: 'mcp-hand-back',
   /** Keeps a credential in the OS store, typed on this machine and never sent from afar. */
   SECRET_SET: 'mcp-secret-set',
   SECRET_REMOVE: 'mcp-secret-remove',
@@ -69,6 +74,8 @@ export interface McpHubServerView {
   headerNames?: string[];
   /** Behind the proxy, so every call is ruled on and recorded. */
   governed: boolean;
+  /** Why an agent shows it disconnected, where a proxy could not connect it and it has not connected since. */
+  trouble?: ServerTroubleKind;
   toolCount: number;
   tools?: McpToolSummary[];
   health: McpServerHealth;
@@ -122,7 +129,7 @@ export interface McpSyncSummary {
 export interface McpHubRequestFields {
   /** On SERVER_PUT: the server as the form filled it, secrets as names only, a header's as `memnox-secret:<name>`. */
   mcpServer?: HubServer;
-  /** On SERVER_REMOVE, ASSIGN, IMPORT and TEST: the server, by name. */
+  /** On SERVER_REMOVE, ASSIGN, IMPORT, TEST, SIGN_IN and HAND_BACK: the server, by name. */
   mcpServerName?: string;
   /** On ASSIGN and IMPORT: the agent, by its kind. */
   mcpAgent?: string;

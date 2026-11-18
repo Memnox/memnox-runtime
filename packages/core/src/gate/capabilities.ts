@@ -65,6 +65,8 @@ const REMOTE_METHODS: Readonly<Record<string, RemoteCapability>> = {
   // Only proposes a server or an assignment; it holds once the person signs it with the rules capability.
   [DAEMON_METHOD.SERVER_PUT]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.ASSIGN]: REMOTE_CAPABILITY.ASK,
+  // Only proposes: a server stops being ruled on once the person signs it. A sign in opens the Mac's browser, so it has no entry.
+  [DAEMON_METHOD.HAND_BACK]: REMOTE_CAPABILITY.ASK,
   // Narrowing, or writing only what the hub already holds signed, so asking is enough.
   [DAEMON_METHOD.SERVER_REMOVE]: REMOTE_CAPABILITY.ASK,
   [DAEMON_METHOD.IMPORT]: REMOTE_CAPABILITY.ASK,
