@@ -1,8 +1,15 @@
 /** `memnox mcp`: routing this machine's MCP servers through the proxy, and putting them back. */
 import { homedir } from 'node:os';
 import type { Command } from 'commander';
-import { planWrap, PROBATION_KIND, PROXY_BINARY, type WrapPlan } from '@memnox/core';
+import {
+  planWrap,
+  PROBATION_KIND,
+  PROXY_BINARY,
+  type SecretStore,
+  type WrapPlan,
+} from '@memnox/core';
 import type { CliContext } from '../cli-context';
+import { confirmOnTerminal, type Confirm } from '../confirm';
 import { TONE } from '../flow';
 import { onPath } from '../on-path';
 import {
@@ -12,7 +19,13 @@ import {
   type BinaryResolver,
   type ConfigFile,
 } from '../mcp/server-configs';
+import { runRepair, type RepairOptions } from '../mcp/repair-command';
+import { listenOnLoopback, type ListenForCallback } from '../mcp/callback-listener';
+import { runSignIn } from '../mcp/sign-in-command';
 import { unwrapEveryServer } from '../mcp/wrap-servers';
+import type { SkipKey } from '../mcp/sign-in-flow';
+import { atTerminal, enterSkips } from '../mcp/skip-key';
+import { openBrowser } from '../sync/browser';
 import { markMcp } from '../keeper/kept';
 import { runTrust } from '../probation-view';
 import { runSessionToggle } from '../session-tools/session-toggle';
@@ -22,6 +35,24 @@ interface McpDeps {
   home: () => string;
   resolveBinary: BinaryResolver;
   project: () => string;
+  confirm: Confirm;
+  /** Whether somebody is at the terminal to be asked. */
+  interactive: () => boolean;
+  /** How a remote server is reached; injected so a test needs no network. */
+  fetch?: typeof fetch;
+  /** Where a sign in comes back to, and how its page is opened. */
+  listen: ListenForCallback;
+  open: (url: string) => Promise<boolean>;
+  secrets?: SecretStore;
+  /** How long a person has to approve a sign in. */
+  waitMs?: number;
+  /** Starts listening for Enter, which skips the server a sign in waits on. */
+  skip?: () => SkipKey;
+}
+
+interface SignInOptions {
+  clientId?: string;
+  port?: string;
 }
 
 interface WrapOptions {
@@ -37,6 +68,12 @@ export function registerMcpCommand(
     home: homedir,
     resolveBinary: onPath,
     project: () => process.cwd(),
+    confirm: confirmOnTerminal,
+    interactive: () => process.stdin.isTTY === true && process.stdout.isTTY === true,
+    listen: listenOnLoopback,
+    open: openBrowser,
+    // Enter skips a server only where somebody is at the terminal to press it.
+    ...(atTerminal() ? { skip: enterSkips } : {}),
     ...overrides,
   };
   const mcp = program
@@ -53,6 +90,35 @@ export function registerMcpCommand(
     .command('unwrap')
     .description('Put every MCP server back the way it was')
     .action(async () => runUnwrap(context, deps));
+
+  mcp
+    .command('repair')
+    .description(
+      'Find remote servers that cannot connect behind Memnox, and mend them by a sign in or by handing them back',
+    )
+    .option(
+      '--yes',
+      'hand them back to your agents without asking, with no sign in through Memnox',
+    )
+    .option('--dry-run', 'say what it found and change nothing')
+    .action(async (options: RepairOptions) => runRepair(context, deps, options));
+
+  mcp
+    .command('signin <server>')
+    .description(
+      'Sign in to a remote server through Memnox, so it connects and its calls stay ruled on',
+    )
+    .option(
+      '--client-id <id>',
+      'a client id the server already knows, where it registers nobody new',
+    )
+    .option(
+      '--port <port>',
+      'the port the sign in comes back to, where that client was registered with one',
+    )
+    .action(async (server: string, options: SignInOptions) =>
+      runSignIn(context, { ...deps, ...knownClient(options) }, server),
+    );
 
   mcp
     .command('session <state>')
@@ -165,4 +231,16 @@ async function runUnwrap(context: CliContext, deps: McpDeps): Promise<void> {
       : style.ok(`${restored} server(s) restored.`),
   );
   if (restored > 0) flow.hint('Restart your agent.');
+}
+
+/** The client and port a person named for a server that takes only apps it already knows. */
+function knownClient(options: SignInOptions): {
+  client?: { clientId: string };
+  port?: number;
+} {
+  const port = options.port === undefined ? Number.NaN : Number(options.port);
+  return {
+    ...(options.clientId === undefined ? {} : { client: { clientId: options.clientId } }),
+    ...(Number.isInteger(port) && port > 0 ? { port } : {}),
+  };
 }
