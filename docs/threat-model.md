@@ -72,7 +72,7 @@ statement naming the repository, the workflow and the tag through Sigstore. `mem
 update` installs exactly the new version into a scratch directory with scripts off,
 has `npm audit signatures --include-attestations` verify every signature and
 attestation, and then requires each of our packages to carry provenance whose
-statement and signing certificate both name `github.com/Memnox/memnox`,
+statement and signing certificate both name `github.com/Memnox/memnox-runtime`,
 `.github/workflows/release.yml` and a `refs/tags/v` ref. A package published with a
 stolen token carries no such provenance, so the update refuses and names it. npm does
 the cryptography and the network, so no new module here reaches the network.
