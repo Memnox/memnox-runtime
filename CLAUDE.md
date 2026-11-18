@@ -127,13 +127,16 @@ sits uncommitted in the same tree, so commit your own files and nothing else.
 change: `.changeset/<name>.md`, with all four packages at `patch`, since they release
 together.
 
-**A release is `pnpm ship "<summary>"` on `main`, and nothing else.** It versions,
-commits `chore(release): X.Y.Z, <summary>`, tags `vX.Y.Z` and pushes, and `release.yml`
-tests the tag and publishes with the repository's npm token. Never run `pnpm release` or
+**A release is merging the `chore(release): version packages` pull request.** Every
+merge to `main` with changesets pending opens or updates it, and merging it makes
+`release.yml` tag `vX.Y.Z` and publish at that tag through npm trusted publishing, with
+no npm token anywhere. It must publish at a tag, because `memnox update` refuses
+provenance that names any other ref. `pnpm ship "<summary>"` on `main` still releases
+by pushing the tag itself. Never run `pnpm release` or
 `changeset publish` from a laptop: the `@memnox/*` packages require two factor
 authentication, a passkey cannot answer from a script, and 0.13.8 went out as a CLI
 whose own dependencies did not exist yet until they were published by hand. Pushing and
-publishing leave this machine, so an agent prepares and commits a release and runs
+publishing leave this machine, so an agent merges the release pull request or runs
 `pnpm ship` only when the person asked for the release.
 
 **`memnox.policies.toml` is the person's to commit.** It is Memnox's own rules, and
