@@ -5,12 +5,14 @@ import {
   type HoldService,
   type LocalGate,
   type SessionNote,
+  type ServerTroubleKind,
   type SessionNotes,
   type SharedActions,
   type ToolPins,
   type UnusualNotice,
 } from '@memnox/core';
 
+import type { UpstreamSignIn } from './http-upstream';
 import type { GateSource } from './live-gate';
 import type { ProbationLookup } from './probation-authorizer';
 import type { SessionLimits } from './session-limits';
@@ -25,6 +27,8 @@ import type { ToolCall } from './tool-call';
 export interface RemoteServer {
   url: string;
   headers: Record<string, string>;
+  /** The sign in Memnox keeps for it, where a person signed in through Memnox. */
+  signIn?: UpstreamSignIn;
 }
 
 export interface FirewallOptions {
@@ -84,6 +88,14 @@ export interface FirewallOptions {
   pins?: ToolPins;
   /** The machine's mode, for the row a new tool is recorded under. */
   mode?: EnforcementMode;
+  /** Where a server that will not start or answer is written down for the person. Absent, nowhere. */
+  trouble?: ServerTroubleSink;
+}
+
+/** What the firewall tells about its server: that it would not start or answer, or that it now does. */
+export interface ServerTroubleSink {
+  note(kind: ServerTroubleKind): void;
+  clear(): void;
 }
 
 /**
