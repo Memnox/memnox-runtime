@@ -18,16 +18,17 @@ interface RemoteToolsInput extends RemoteServer {
   fetch?: typeof fetch;
 }
 
+/** What a remote server answered: its tools, or why none, with the status where it refused with one. */
+type RemoteListing = { tools: McpToolSummary[] } | { error: string; status?: number };
+
 /** The tools it listed, or the reason it listed none, by the server's name and never its headers. */
-export async function remoteToolsOf(
-  input: RemoteToolsInput,
-): Promise<{ tools: McpToolSummary[] } | { error: string }> {
+export async function remoteToolsOf(input: RemoteToolsInput): Promise<RemoteListing> {
   return new Promise((resolve) => {
     const timer = setTimeout(
       () => resolve({ error: `${input.name} did not list its tools in time.` }),
       REMOTE_TEST_TIMEOUT_MS,
     );
-    function settle(outcome: { tools: McpToolSummary[] } | { error: string }): void {
+    function settle(outcome: RemoteListing): void {
       clearTimeout(timer);
       void upstream.close().finally(() => resolve(outcome));
     }
@@ -41,7 +42,7 @@ export async function remoteToolsOf(
       ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
       onLine: (line) => {
         const reply = replyOf(line);
-        if (reply.error !== undefined) return settle({ error: reply.error });
+        if (reply.error !== undefined) return settle(refusalOf(reply));
         if (reply.id === INITIALIZE_ID) return listTools(upstream);
         if (reply.id === TOOLS_LIST_ID) settle({ tools: reply.tools });
       },
@@ -60,6 +61,14 @@ export async function remoteToolsOf(
   });
 }
 
+/** Why it listed nothing, with the status behind it where the server gave one. */
+function refusalOf(reply: Reply): RemoteListing {
+  return {
+    error: reply.error ?? '',
+    ...(reply.status === undefined ? {} : { status: reply.status }),
+  };
+}
+
 function listTools(upstream: HttpUpstream): void {
   upstream.send(message({ method: 'notifications/initialized' }));
   upstream.send(message({ id: TOOLS_LIST_ID, method: 'tools/list' }));
@@ -72,6 +81,8 @@ function message(fields: Record<string, unknown>): string {
 interface Reply {
   id?: unknown;
   error?: string;
+  /** The HTTP status behind an error, which the upstream names where the server gave one. */
+  status?: number;
   tools: McpToolSummary[];
 }
 
@@ -88,13 +99,15 @@ function replyOf(line: string): Reply {
   // Cast is safe: each field read below is checked for its type first.
   const reply = parsed as {
     id?: unknown;
-    error?: { message?: unknown };
+    error?: { message?: unknown; data?: { status?: unknown } };
     result?: unknown;
   };
   const error = reply.error === undefined ? undefined : String(reply.error.message);
+  const status = reply.error?.data?.status;
   return {
     id: reply.id,
     ...(error === undefined ? {} : { error }),
+    ...(typeof status === 'number' ? { status } : {}),
     tools: toolsOf(reply.result),
   };
 }

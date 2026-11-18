@@ -1,24 +1,35 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
+  carriesCredential,
   HUB_TRANSPORT,
+  isDirect,
   MCP_HEALTH,
   NodeMcpLister,
   readHubHealth,
-  resolveHeaderRefs,
+  REPAIR_COMMAND,
   resolveSecretRefs,
   secretRef,
+  SERVER_TROUBLE,
+  signInCommand,
+  troubleOfStatus,
   writeHubHealth,
   type HubServer,
   type McpLister,
   type McpServerHealth,
   type SecretStore,
 } from '@memnox/core';
+import { headersToSend } from './remote-headers';
 import { remoteToolsOf } from './remote-tools';
 
 /**
  * Asking one hub server for its tools, run when the person asks and never on a timer. Secrets
  * are resolved into the server's own environment only, the way the proxy starts it.
  */
+
+/** Said where the test met the sign in, with the way out, since the same wall stops every agent behind the proxy. */
+function needsSignIn(server: string): string {
+  return `It asks for a sign in. Run "${signInCommand(server)}" to sign in through Memnox and keep its calls ruled on, or "${REPAIR_COMMAND}" to hand it back to the agent.`;
+}
 
 /** Builds the lister for an environment; injected so a test starts no process. */
 export type ListerFor = (env: Record<string, string>) => McpLister;
@@ -48,19 +59,30 @@ export async function testHubServer(
   server: HubServer,
   input: HubTestInput,
 ): Promise<McpServerHealth> {
-  const health = await healthOf(server, input);
+  const health = await healthOf(home, server, input);
   const all = await readHubHealth(home);
   await writeHubHealth(home, { ...all, [server.name]: health });
   return health;
 }
 
 async function healthOf(
+  home: string,
+  server: HubServer,
+  input: HubTestInput,
+): Promise<McpServerHealth> {
+  // Only the agents hold its sign in, so nothing here can ask it, and claiming a test would be a guess.
+  if (isDirect(server)) return { state: MCP_HEALTH.UNKNOWN };
+  if (server.transport === HUB_TRANSPORT.HTTP) return remoteHealth(home, server, input);
+  return localHealth(server, input);
+}
+
+/** A local server started the way the proxy starts it, with its secrets in its own environment only. */
+async function localHealth(
   server: HubServer,
   input: HubTestInput,
 ): Promise<McpServerHealth> {
   const { secrets, now, listerFor = nodeListerFor } = input;
   const checkedAt = now.toISOString();
-  if (server.transport === HUB_TRANSPORT.HTTP) return remoteHealth(server, input);
   if (server.command === undefined)
     return { state: MCP_HEALTH.ERROR, checkedAt, error: 'No command starts it.' };
   const refs: Record<string, string> = { ...server.env };
@@ -95,13 +117,16 @@ async function healthOf(
 
 /** A remote server asked the way the proxy reaches it, with each header's secret read here and dropped after. */
 async function remoteHealth(
+  home: string,
   server: HubServer,
   { secrets, now, fetch }: HubTestInput,
 ): Promise<McpServerHealth> {
   const checkedAt = now.toISOString();
-  const { headers, missing } = await resolveHeaderRefs(server.headers ?? {}, (name) =>
-    secrets.get(name),
-  );
+  const { headers, missing } = await headersToSend(server, {
+    home,
+    secrets,
+    ...(fetch === undefined ? {} : { fetch }),
+  });
   if (missing.length > 0) {
     const names = missing.map((each) => each.secret).join(', ');
     return { state: MCP_HEALTH.ERROR, checkedAt, error: `Not held yet: ${names}.` };
@@ -113,7 +138,15 @@ async function remoteHealth(
     ...(fetch === undefined ? {} : { fetch }),
   });
   if ('error' in listed)
-    return { state: MCP_HEALTH.ERROR, checkedAt, error: listed.error };
+    return {
+      state: MCP_HEALTH.ERROR,
+      checkedAt,
+      error:
+        troubleOfStatus(listed.status, carriesCredential(server.headers ?? {})) ===
+        SERVER_TROUBLE.SIGN_IN
+          ? needsSignIn(server.name)
+          : listed.error,
+    };
   if (listed.tools.length === 0)
     return { state: MCP_HEALTH.ERROR, checkedAt, error: 'It listed no tools.' };
   return { state: MCP_HEALTH.HEALTHY, checkedAt, tools: listed.tools };

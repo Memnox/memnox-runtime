@@ -1,4 +1,5 @@
 import {
+  agentShown,
   agentsOf,
   HUB_TRANSPORT,
   hubServerProblems,
@@ -9,6 +10,7 @@ import {
   proxiedRemoteOf,
   readHub,
   readOrgServers,
+  signInCommand,
   unwrapLaunch,
   withAssignment,
   withChange,
@@ -21,6 +23,7 @@ import {
   type ServerLaunch,
 } from '@memnox/core';
 import { applyFilePlan } from './hub-files';
+import { handBack, REMOTE_VERDICT, remoteVerdict, type RepairDeps } from './hub-repair';
 import { readHubConfigs, syncHub, type HubSynced } from './hub-writer';
 
 /**
@@ -35,16 +38,33 @@ export async function applyHubChange(
   home: string,
   change: HubChange,
 ): Promise<HubChanged> {
+  if ('handBack' in change) return handedBack(home, change.handBack);
   const hub = await readHub(home);
   if ('put' in change) {
     const problems = hubServerProblems(change.put);
     if (problems.length > 0) return { refused: problems.join(' ') };
     if (isOrgServer(await readOrgServers(home), change.put.name))
       return { refused: orgOwned(change.put.name) };
-  } else if (!hub.servers.some((each) => each.name === change.assign.server)) {
+  } else if (
+    'assign' in change &&
+    !hub.servers.some((each) => each.name === change.assign.server)
+  ) {
     return { refused: `The hub has no server named ${change.assign.server}.` };
   }
   return { synced: await syncHub(home, withChange(hub, change)) };
+}
+
+/** A signed hand back carried out, refused in words where nothing could be given back. */
+async function handedBack(home: string, name: string): Promise<HubChanged> {
+  if (isOrgServer(await readOrgServers(home), name)) return { refused: orgOwned(name) };
+  const done = await handBack(home, [name]);
+  if (done.handed.length === 0)
+    return {
+      refused:
+        done.left.map((each) => each.reason).join(' ') ||
+        `${name} is not a remote server behind Memnox, so there is nothing to hand back.`,
+    };
+  return { synced: await syncHub(home, await readHub(home)) };
 }
 
 /** What a screen is told when it reaches for a server only the organization changes. */
@@ -59,6 +79,7 @@ export function orgOwned(name: string): string {
 export async function importServer(
   home: string,
   wanted: { name: string; agent: DiscoveredAgentKind },
+  deps: RepairDeps = {},
 ): Promise<HubChanged> {
   const hub = await readHub(home);
   if (isOrgServer(await readOrgServers(home), wanted.name))
@@ -80,11 +101,25 @@ export async function importServer(
     };
   const held = hub.servers.find((each) => each.name === wanted.name);
   if (held !== undefined) return adopted(home, hub, { held, line, config, wanted });
-  const server = serverOf(wanted.name, line);
-  if (server === null)
+  const read = serverOf(wanted.name, line);
+  if (read === null)
     return { refused: `${wanted.name} is not a server line Memnox can read.` };
-  const problems = hubServerProblems(server);
+  const problems = hubServerProblems(read);
   if (problems.length > 0) return { refused: problems.join(' ') };
+  const verdict =
+    read.transport === HUB_TRANSPORT.HTTP
+      ? await remoteVerdict(home, read, deps)
+      : REMOTE_VERDICT.WORKING;
+  const signsIn = verdict === REMOTE_VERDICT.SIGN_IN;
+  // A line behind the proxy already is taken in as it stands, and one that wants a sign in is mended by it.
+  if (!isProxiedLine(line)) {
+    // The person's own line works and may hold what the agent signed in with, so it is never rewritten.
+    if (signsIn) return { refused: signInStays(wanted.name, wanted.agent) };
+    // Nothing is moved behind the proxy until it has answered there, so a working server is never traded for a dead one.
+    if (verdict !== REMOTE_VERDICT.WORKING)
+      return { refused: unprovenStays(wanted.name) };
+  }
+  const server: HubServer = signsIn ? { ...read, direct: true } : read;
   await applyFilePlan(home, config, removal(config.path, config.format, wanted.name));
   const taken = withAssignment(
     withServer(hub, server),
@@ -130,6 +165,24 @@ function removal(path: string, format: FilePlan['format'], name: string): FilePl
     drifted: [],
     skipped: [],
   };
+}
+
+/** Said when a server is left out of the hub because the proxy could never sign in to it. */
+function signInStays(name: string, agent: DiscoveredAgentKind): string {
+  const shown = agentShown(agent);
+  return `${name} signs you in through ${shown}, so it stays as you set it up and keeps working. Its calls are not ruled on. To rule on them, run "${signInCommand(name)}" and take it in again.`;
+}
+
+/** Said when a server did not answer through the proxy's own route, so moving it there is not risked. */
+function unprovenStays(name: string): string {
+  return `${name} did not answer Memnox just now, so it stays as you set it up and nothing was changed. Try again once it is reachable.`;
+}
+
+function isProxiedLine(entry: unknown): boolean {
+  if (typeof entry !== 'object' || entry === null) return false;
+  const { command, args } = entry as { command?: unknown; args?: unknown };
+  if (typeof command !== 'string' || !Array.isArray(args)) return false;
+  return proxiedRemoteOf({ command, args: args.map(String) }) !== null;
 }
 
 /** A config's line as a hub server: a URL, or a launch line with any earlier wrap taken off. */
