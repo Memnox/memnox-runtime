@@ -213,7 +213,8 @@ describe('memnox run --untrusted', () => {
   });
 });
 
-describe('the untrusted preset', () => {
+// The preset is the Seatbelt or Landlock wall, which Windows has neither of, and its '/' paths join with backslashes there.
+describe.skipIf(process.platform === 'win32')('the untrusted preset', () => {
   const preset = untrustedPreset({
     home: '/home/dev',
     workspace: REPO,
@@ -246,20 +247,16 @@ describe('the untrusted preset', () => {
     );
   });
 
-  // The untrusted wall is Seatbelt or Landlock, and on Windows these '/' paths are joined with backslashes.
-  it.skipIf(process.platform === 'win32')(
-    'leaves the runtimes an agent starts from readable, but not the credentials beside them',
-    () => {
-      expect(preset.guard.readable).toEqual(
-        expect.arrayContaining([
-          '/home/dev/.nvm',
-          '/home/dev/.cargo/bin',
-          '/home/dev/.local/bin',
-        ]),
-      );
-      expect(preset.guard.readable).not.toContain('/home/dev/.cargo');
-    },
-  );
+  it('leaves the runtimes an agent starts from readable, but not the credentials beside them', () => {
+    expect(preset.guard.readable).toEqual(
+      expect.arrayContaining([
+        '/home/dev/.nvm',
+        '/home/dev/.cargo/bin',
+        '/home/dev/.local/bin',
+      ]),
+    );
+    expect(preset.guard.readable).not.toContain('/home/dev/.cargo');
+  });
 
   // The untrusted wall is Seatbelt or Landlock, and on Windows these '/' paths are joined with backslashes.
   it.skipIf(process.platform === 'win32')(

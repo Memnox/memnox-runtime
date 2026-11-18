@@ -18,22 +18,27 @@ import { readLocalDecisions } from '../src/sync/local-decisions';
  */
 describe('memnox protect --ask and --deny', () => {
   let previous: string;
-  let realHome: string | undefined;
+  // Both, since homedir() reads HOME elsewhere and USERPROFILE on Windows.
+  const HOME_KEYS = ['HOME', 'USERPROFILE'] as const;
+  let realHome: Partial<Record<(typeof HOME_KEYS)[number], string>>;
   let home: string;
 
   beforeEach(async () => {
     previous = process.cwd();
     process.chdir(await mkdtemp(join(tmpdir(), 'memnox-decide-')));
     // The registry and the decisions both live in the home directory, never the real one.
-    realHome = process.env['HOME'];
+    realHome = Object.fromEntries(HOME_KEYS.map((key) => [key, process.env[key]]));
     home = await mkdtemp(join(tmpdir(), 'memnox-home-'));
-    process.env['HOME'] = home;
+    for (const key of HOME_KEYS) process.env[key] = home;
   });
 
   afterEach(() => {
     process.chdir(previous);
-    if (realHome === undefined) delete process.env['HOME'];
-    else process.env['HOME'] = realHome;
+    for (const key of HOME_KEYS) {
+      const value = realHome[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 
   async function protect(...args: string[]): Promise<void> {

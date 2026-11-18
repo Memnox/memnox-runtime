@@ -4,6 +4,7 @@ import * as proxy from '@memnox/proxy';
 import { describe, expect, it } from 'vitest';
 import { ollamaEmbedder } from '../src/memory/ollama-embedding';
 import { insecureRelayUrl } from '../src/remote/relay-link';
+import { slashed } from '@memnox/core';
 
 /**
  * The promise on the front page, as a test.
@@ -94,7 +95,8 @@ describe('nothing reaches the network but the sync client', () => {
   it('keeps every outbound call in one module', () => {
     const offenders = sources(ROOT)
       .filter((path) => OUTBOUND.test(readFileSync(path, 'utf8')))
-      .map((path) => path.slice(ROOT.length + 1))
+      // Named with `/`, as the list below names them, whichever separator found them.
+      .map((path) => slashed(path.slice(ROOT.length + 1)))
       .filter((path) => ALLOWED[path] === undefined);
 
     expect(

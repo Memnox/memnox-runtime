@@ -5,8 +5,10 @@ import { discover } from '../src/discovery/discover';
 import { ConfigDetector } from '../src/discovery/detectors/config-detector';
 import { LineBuffer, NodeMcpLister } from '../src/discovery/node-mcp-lister';
 import { TOOL_EFFECT, EFFECT_INFERENCE } from '../src/discovery/discovery.constants';
-import type { MachineReader, McpLister } from '../src/discovery/ports';
+import type { McpLister } from '../src/discovery/ports';
 import type { McpToolDeclaration } from '../src/discovery/surface';
+import { slashed } from '../src/domain/separators';
+import { FakeMachine } from './fake-machine';
 
 const NOW = '2026-01-01T00:00:00.000Z';
 
@@ -119,26 +121,6 @@ describe('LineBuffer', () => {
   });
 });
 
-/** Two clients, one of which declares MCP servers. */
-class FakeMachine implements MachineReader {
-  constructor(private readonly files: Record<string, string>) {}
-  async exists(path: string): Promise<boolean> {
-    return this.files[path] !== undefined;
-  }
-  async read(path: string): Promise<string | null> {
-    return this.files[path] ?? null;
-  }
-  async list(): Promise<string[]> {
-    return [];
-  }
-  homeDir(): string {
-    return '/home/dev';
-  }
-  userName(): string {
-    return 'dev';
-  }
-}
-
 class StubLister implements McpLister {
   readonly asked: string[] = [];
   constructor(private readonly tools: Record<string, McpToolDeclaration[]>) {}
@@ -165,7 +147,7 @@ const CONFIG = JSON.stringify({
 });
 
 describe('discover, enumerating tools', () => {
-  const machine = new FakeMachine({ '/home/dev/.claude.json': CONFIG });
+  const machine = FakeMachine.from({ '/home/dev/.claude.json': CONFIG });
 
   it('reports the servers with no tools when nobody asked them', async () => {
     const report = await discover(machine, { now: NOW, detectors: [detector] });
@@ -225,7 +207,7 @@ describe('discover, enumerating tools', () => {
 
 describe('discover, beyond the home directory', () => {
   const AWS = ['[default]\naws_access_key_id = AKIA', 'EXAMPLE'].join('');
-  const machine = new FakeMachine({
+  const machine = FakeMachine.from({
     '/home/dev/.claude.json': CONFIG,
     '/home/dev/.aws/credentials': AWS,
     '/srv/checkout/.env': 'DATABASE_URL=postgres://localhost/app',
@@ -240,7 +222,7 @@ describe('discover, beyond the home directory', () => {
       projectDirs: ['/srv/checkout'],
     });
 
-    const paths = report.resources.map((resource) => resource.path);
+    const paths = report.resources.map((resource) => slashed(resource.path ?? ''));
     expect(paths).toContain('/home/dev/.aws/credentials');
     expect(paths).toContain('/srv/checkout/.env');
     expect(paths).toContain('/srv/checkout/.env.production');
@@ -253,11 +235,13 @@ describe('discover, beyond the home directory', () => {
       projectDirs: ['/srv/checkout'],
     });
 
-    const repo = report.resources.find((each) => each.path === '/srv/checkout/.git');
+    const repo = report.resources.find(
+      (each) => slashed(each.path ?? '') === '/srv/checkout/.git',
+    );
     expect(repo?.kind).toBe('repo');
     // Not opened, so nothing was fingerprinted and nothing was read.
     expect(repo?.fingerprint).toBeUndefined();
-    expect(report.read).not.toContain('/srv/checkout/.git');
+    expect(report.read.map(slashed)).not.toContain('/srv/checkout/.git');
   });
 
   /** The value stays in the process that read it: only a hash ever leaves. */
@@ -268,7 +252,9 @@ describe('discover, beyond the home directory', () => {
       projectDirs: ['/srv/checkout'],
     });
 
-    const env = report.resources.find((each) => each.path === '/srv/checkout/.env');
+    const env = report.resources.find(
+      (each) => slashed(each.path ?? '') === '/srv/checkout/.env',
+    );
     expect(env?.fingerprint).toBeDefined();
     expect(JSON.stringify(report)).not.toContain('postgres://localhost/app');
   });
@@ -279,7 +265,7 @@ describe('discover, beyond the home directory', () => {
       detectors: [detector],
       projectDirs: ['/srv/checkout'],
     });
-    expect(report.read).toContain('/srv/checkout/.env');
+    expect(report.read.map(slashed)).toContain('/srv/checkout/.env');
   });
 
   it('counts a directory named twice only once', async () => {
@@ -288,7 +274,9 @@ describe('discover, beyond the home directory', () => {
       detectors: [detector],
       projectDirs: ['/srv/checkout', '/srv/checkout'],
     });
-    const envs = report.resources.filter((each) => each.path === '/srv/checkout/.env');
+    const envs = report.resources.filter(
+      (each) => slashed(each.path ?? '') === '/srv/checkout/.env',
+    );
     expect(envs).toHaveLength(1);
   });
 

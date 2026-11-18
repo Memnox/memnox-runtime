@@ -1,6 +1,6 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -152,11 +152,12 @@ describe('an answer given for the rest of the session', () => {
     );
 
     const answered = outcome !== null && 'answered' in outcome ? outcome.answered : held;
+    // Resolved as the grant resolves it, which on Windows puts it on the current drive.
     expect(answeredText(answered)).toContain(
-      'That covers /work/cloud/src/notifications only',
+      `That covers ${resolve('/work/cloud/src/notifications')} only`,
     );
     expect(heldNotice(held, 'darwin')).toContain(
-      '2. Allow for this session (only in /work/cloud/src/notifications; anywhere else still asks)',
+      `2. Allow for this session (only in ${resolve('/work/cloud/src/notifications')}; anywhere else still asks)`,
     );
   });
 

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  slashed,
   ACTOR_TYPE,
   DECISION_EFFECT,
   ENFORCEMENT_MODE,
@@ -131,7 +132,7 @@ describe('the daemon noticing capability drift', () => {
     expect(rows).toHaveLength(1);
     const [row] = rows;
     expect(row?.surface).toBe(EVENT_SURFACE.CONFIG);
-    expect(row?.target).toBe(CLAUDE_CONFIG);
+    expect(slashed(row?.target ?? '')).toBe(CLAUDE_CONFIG);
     expect(row?.reason).toContain('before: absent; after:');
     expect(row?.rule?.name).toBe('watch for capability drift');
     // A config change is not agent work, so nothing counting work ever sees it.

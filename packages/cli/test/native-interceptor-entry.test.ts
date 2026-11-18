@@ -1,9 +1,10 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { shippedNativeInterceptor } from '../src/protect/interceptor-entry';
 
 describe('the native wrapper this package shipped', () => {
-  const built = '/pkg/dist/native/darwin-arm64/memnox-intercept-native';
+  const built = join('/pkg/dist', 'native', 'darwin-arm64', 'memnox-intercept-native');
 
   it('is named where it was built for this platform', () => {
     const found = shippedNativeInterceptor(

@@ -492,7 +492,7 @@ describe('memnox setup', () => {
 
     const text = out.text;
     expect(text).toContain('can use');
-    expect(text).toContain('.aws/credentials');
+    expect(text).toContain(join('.aws', 'credentials'));
   });
 
   it('names the id, the config it would rewrite, and the servers already in it', async () => {

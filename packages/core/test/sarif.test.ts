@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CHANGE_DIRECTION, CHANGE_SUBJECT } from '../src/discovery/discovery.constants';
 import { SARIF_LEVEL, SARIF_VERSION, sarifOf } from '../src/discovery/sarif';
@@ -69,7 +70,11 @@ describe('a comparison as SARIF', () => {
     const uris = run?.results.map(
       (result) => result.locations?.[0]?.physicalLocation.artifactLocation.uri,
     );
-    expect(uris).toEqual(['.claude/settings.json', 'file:///home/dev/.claude.json']);
+    // A URI as the platform makes one, which on Windows names the drive.
+    expect(uris).toEqual([
+      '.claude/settings.json',
+      pathToFileURL('/home/dev/.claude.json').href,
+    ]);
   });
 
   it('says who reaches it and what caused it, in the sentence a person reads', () => {

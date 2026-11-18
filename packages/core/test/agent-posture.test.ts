@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   agentHostOf,
@@ -14,7 +14,11 @@ import { INVENTORY_VERSION, inventoryOf } from '../src/discovery/inventory';
 import { parseCodesign } from '../src/discovery/node-host-inspector';
 import { bandFor, RISK_RULE } from '../src/discovery/risk';
 import type { EnvironmentSnapshot } from '../src/discovery/snapshot';
+import { slashed } from '../src/domain/separators';
 import { FakeMachine } from './fake-machine';
+
+// Split as the platform splits PATH, since Windows reads `;` and a `:` there is a drive letter.
+const onPath = (...dirs: string[]): string => dirs.join(delimiter);
 
 const HOME = '/home/dev';
 const PROJECT = '/work/app';
@@ -157,10 +161,10 @@ describe('the binary an agent runs as', () => {
       '/usr/local/bin/claude': '',
     });
     const host = await agentHostOf(DISCOVERED_AGENT_KIND.CLAUDE_CODE, machine, {
-      path: '/usr/bin:/opt/homebrew/bin:/usr/local/bin',
+      path: onPath('/usr/bin', '/opt/homebrew/bin', '/usr/local/bin'),
       projectDirs: [],
     });
-    expect(host?.path).toBe('/opt/homebrew/bin/claude');
+    expect(slashed(host?.path ?? '')).toBe('/opt/homebrew/bin/claude');
     expect(host?.location).toBe(HOST_LOCATION.INSTALLED);
     expect(host?.signature.state).toBe(HOST_SIGNATURE.UNKNOWN);
   });
@@ -242,7 +246,7 @@ describe('an agent that approves its own actions, in the scan', () => {
   it('fires critical when the agent can also read a secret', async () => {
     const report = await discover(machine(), {
       now: NOW,
-      env: { PATH: '/tmp/evil:/usr/bin' },
+      env: { PATH: onPath('/tmp/evil', '/usr/bin') },
     });
     const band = bandFor(report);
     const fired = band.fired.find((rule) => rule.rule === RISK_RULE.AUTO_APPROVE);
@@ -253,7 +257,7 @@ describe('an agent that approves its own actions, in the scan', () => {
   it('fires on a binary resolved from temp', async () => {
     const report = await discover(machine(), {
       now: NOW,
-      env: { PATH: '/tmp/evil:/usr/bin' },
+      env: { PATH: onPath('/tmp/evil', '/usr/bin') },
     });
     expect(bandFor(report).fired.map((rule) => rule.rule)).toContain(
       RISK_RULE.HOST_OUTSIDE_INSTALL,
@@ -263,14 +267,14 @@ describe('an agent that approves its own actions, in the scan', () => {
   it('carries the posture and the binary into the inventory', async () => {
     const report = await discover(machine(), {
       now: NOW,
-      env: { PATH: '/tmp/evil:/usr/bin' },
+      env: { PATH: onPath('/tmp/evil', '/usr/bin') },
     });
     const inventory = inventoryOf(report, NOW);
     expect(inventory.version).toBe(INVENTORY_VERSION);
     const claude = inventory.agents.find((agent) => agent.kind === 'claude-code');
     expect(claude?.approval?.state).toBe(APPROVAL_STATE.AUTO);
     expect(claude?.host).toEqual({
-      path: '/tmp/evil/claude',
+      path: join('/tmp/evil', 'claude'),
       location: HOST_LOCATION.UNUSUAL,
       signature: HOST_SIGNATURE.UNKNOWN,
     });
