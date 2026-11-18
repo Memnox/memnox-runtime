@@ -2,6 +2,7 @@ import {
   DISCOVERED_AGENT_KIND,
   HUB_TRANSPORT,
   hubServerProblems,
+  isDirect,
   isKeptSecretName,
   isOrgServer,
   MCP_HUB_METHOD,
@@ -29,6 +30,7 @@ import { importServer, orgOwned, type HubChanged } from '../mcp/hub-changes';
 import { testHubServer, type ListerFor } from '../mcp/hub-test';
 import { readHubView } from '../mcp/hub-view';
 import { syncHub, type HubSynced } from '../mcp/hub-writer';
+import { startHubSignIn, type HubSignInSeams } from './mcp-sign-in-answer';
 
 /**
  * The MCP Hub's methods. Widening is proposed and holds once the person signs it on the card;
@@ -56,6 +58,10 @@ interface McpHubDeps {
   remote: boolean;
   secrets?: SecretStore;
   listerFor?: ListerFor;
+  /** How a remote server is reached; injected so a test needs no network. */
+  fetch?: typeof fetch;
+  /** What a sign in opens and waits on; injected so a test binds no port. */
+  signIn?: HubSignInSeams;
 }
 
 type Answered = Omit<DaemonResponse, 'id'>;
@@ -89,11 +95,15 @@ async function answerOf(
     case MCP_HUB_METHOD.ASSIGN:
       return assign(home, request, deps.now);
     case MCP_HUB_METHOD.IMPORT:
-      return importOne(home, request);
+      return importOne(home, request, deps);
     case MCP_HUB_METHOD.SYNC:
       return syncedAnswer(await syncHub(home, await readHub(home)));
     case MCP_HUB_METHOD.TEST:
       return test(home, request, deps);
+    case MCP_HUB_METHOD.SIGN_IN:
+      return startHubSignIn(home, request.mcpServerName, deps);
+    case MCP_HUB_METHOD.HAND_BACK:
+      return proposeHandBack(home, request, deps.now);
     case MCP_HUB_METHOD.SECRET_SET:
       return setSecret(request, deps);
     case MCP_HUB_METHOD.SECRET_REMOVE:
@@ -121,7 +131,10 @@ async function putServer(
   if (problems.length > 0) return refused(problems.join(' '));
   if (isOrgServer(await readOrgServers(home), server.name))
     return refused(orgOwned(server.name));
-  const rationale = `Add the MCP server ${server.name}${runs === undefined ? '' : `, started with ${runs}`}`;
+  const rationale =
+    server.direct === true
+      ? `Let your agents sign in to the MCP server ${server.name} themselves, so its calls are not ruled on`
+      : `Add the MCP server ${server.name}${runs === undefined ? '' : `, started with ${runs}`}`;
   const proposed = await propose(home, { put: server }, { rationale, now });
   if (runs === undefined || installs === undefined) return proposed;
   return { ...proposed, outcome: installedLine(sent, installs, runs) };
@@ -185,6 +198,19 @@ async function assign(
   return syncedAnswer(await syncHub(home, withAssignment(hub, { server, agent }, false)));
 }
 
+/** Handing a server back takes it out from behind the proxy, so it waits on a signature like any widening. */
+async function proposeHandBack(
+  home: string,
+  request: DaemonRequest,
+  now: Date,
+): Promise<Answered> {
+  const name = request.mcpServerName;
+  if (name === undefined) return refused('Name the server to hand back.');
+  if (isOrgServer(await readOrgServers(home), name)) return refused(orgOwned(name));
+  const rationale = `Hand the MCP server ${name} back to your agents, so they sign in to it themselves and its calls are no longer ruled on`;
+  return propose(home, { handBack: name }, { rationale, now });
+}
+
 /** A name only the organization holds, which this machine reads and never changes. */
 async function onlyOrganizations(home: string, name: string): Promise<boolean> {
   const own = await readHub(home);
@@ -207,12 +233,25 @@ async function propose(
   return { ok: true, proposed: proposal.id };
 }
 
-async function importOne(home: string, request: DaemonRequest): Promise<Answered> {
+async function importOne(
+  home: string,
+  request: DaemonRequest,
+  deps: Resolved,
+): Promise<Answered> {
   const name = request.mcpServerName;
   const agent = agentOf(request.mcpAgent);
   if (name === undefined || agent === null)
     return refused('Name the server and the agent it was found in.');
-  return changedAnswer(await importServer(home, { name, agent }));
+  return changedAnswer(
+    await importServer(
+      home,
+      { name, agent },
+      {
+        secrets: deps.secrets,
+        ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+      },
+    ),
+  );
 }
 
 async function test(
@@ -223,10 +262,15 @@ async function test(
   const hub = withOrganization(await readHub(home), await readOrgServers(home));
   const server = hub.servers.find((each) => each.name === request.mcpServerName);
   if (server === undefined) return refused('Name a server the hub holds.');
+  if (isDirect(server))
+    return refused(
+      `Your agents sign in to ${server.name} and reach it themselves, so Memnox cannot test it. Sign in through Memnox to test it and rule on its calls.`,
+    );
   const mcpHealth = await testHubServer(home, server, {
     secrets: deps.secrets,
     now: deps.now,
     ...(deps.listerFor === undefined ? {} : { listerFor: deps.listerFor }),
+    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
   });
   return { ok: true, mcpHealth };
 }
@@ -296,6 +340,8 @@ function hubServerFrom(value: unknown): HubServer | null {
     ...(args === undefined ? {} : { args }),
     ...(typeof url === 'string' ? { url } : {}),
     ...(headers === undefined ? {} : { headers }),
+    // Leaving a server for the agent to sign in to takes it out from behind the proxy, so it is signed like any put.
+    ...(raw['direct'] === true ? { direct: true as const } : {}),
     env,
     secrets,
   };
