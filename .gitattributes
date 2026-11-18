@@ -1,5 +1,5 @@
-# Shell scripts run under sh on every platform, so a Windows checkout must not turn their endings into CRLF.
-* text=auto
+# LF on every platform, since committed fixtures and vectors are compared byte for byte and a Windows checkout would turn them CRLF.
+* text=auto eol=lf
 *.sh text eol=lf
 *.cmd text eol=crlf
 *.bat text eol=crlf

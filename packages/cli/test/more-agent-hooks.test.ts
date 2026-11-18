@@ -244,8 +244,17 @@ describe('the Codex inside the ChatGPT app', () => {
       (binary) => binary.includes('ChatGPT.app'),
     );
 
+    // Joined as the platform joins it, since the path is built rather than written out.
     expect(asked).toEqual([
-      '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex',
+      join(
+        '/Applications',
+        'ChatGPT.app',
+        'Contents',
+        'Resources',
+        'codex-cli',
+        'bin',
+        'codex',
+      ),
     ]);
   });
 });

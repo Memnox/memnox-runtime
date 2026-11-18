@@ -5,6 +5,7 @@
 import { basename } from 'node:path';
 
 import type { ActionRequest } from '../domain/action-event';
+import { slashed } from '../domain/separators';
 import { ACTION } from '../constants/action.constants';
 import { RISK_LEVEL, type RiskLevel } from '../constants/risk.constants';
 import {
@@ -298,6 +299,9 @@ function hostOf(target: string): string | null {
 }
 
 function shortened(path: string, home: string): string {
-  if (home === '' || !path.startsWith(`${home}/`)) return path;
-  return `~/${path.slice(home.length + 1)}`;
+  // Compared with `/`, so a Windows home is shortened to `~` as surely as any other.
+  const spelled = slashed(path);
+  const root = slashed(home);
+  if (root === '' || !spelled.startsWith(`${root}/`)) return path;
+  return `~/${spelled.slice(root.length + 1)}`;
 }

@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 import type { Command } from 'commander';
 
 import {
+  nativePath,
   DAEMON_EVENT,
   describeMission,
   Missions,
@@ -228,7 +229,8 @@ function worktreesOf(root: string): string[] {
 }
 
 function repositoryAt(dir: string): string | null {
-  return git(dir, ['rev-parse', '--show-toplevel'])?.trim() ?? null;
+  const top = git(dir, ['rev-parse', '--show-toplevel']);
+  return top === null ? null : nativePath(top);
 }
 
 function git(dir: string, args: readonly string[]): string | null {

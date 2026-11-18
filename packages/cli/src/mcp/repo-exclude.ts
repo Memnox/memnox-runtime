@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
-import { runGit, secondsToMs } from '@memnox/core';
+import { nativePath, runGit, secondsToMs } from '@memnox/core';
 
 /**
  * What a repository's git says about a config file Memnox would write in it: whether it is tracked,
@@ -41,7 +41,7 @@ async function repositoryOf(root: string): Promise<Repository | null | undefined
     GIT_TIMEOUT_MS,
   );
   if (top !== null && exclude !== null)
-    return { top: top.trim(), exclude: resolve(root, exclude.trim()) };
+    return { top: nativePath(top), exclude: resolve(root, exclude.trim()) };
   return existsSync(join(root, '.git')) ? undefined : null;
 }
 

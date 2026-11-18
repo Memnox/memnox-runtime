@@ -9,6 +9,7 @@ import {
   EVENT_SCHEMA_VERSION,
   EVENT_SURFACE,
   newEventId,
+  slashed,
   TOOL_CLASS,
   type MemnoxEvent,
   type ToolClass,
@@ -364,13 +365,14 @@ function filesTouched(event: SessionEvent): FileTouch[] {
 }
 
 /**
- * Relative to the repository where the file is inside it, so no home directory is sent.
+ * Relative to the repository where the file is inside it, so no home directory is sent, and
+ * spelled with `/`, so a row from Windows names the file the way every other row does.
  */
 function shown(path: string, root: string | undefined, cwd: string | undefined): string {
   const base = root ?? cwd;
-  if (base === undefined || !isAbsolute(path)) return path;
+  if (base === undefined || !isAbsolute(path)) return slashed(path);
   const inside = relative(base, path);
-  return inside.startsWith('..') ? path : inside;
+  return inside.startsWith('..') ? path : slashed(inside);
 }
 
 interface FileRowInput {

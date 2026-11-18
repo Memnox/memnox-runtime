@@ -10,7 +10,8 @@ import type { Policy } from '../policy/index';
  * How a repository writes code, as its team states it. `enforce` entries are refused at
  * the write; the rest is guidance told at session start, since judgment is not a pattern.
  */
-export const CODE_FINGERPRINT_FILE = join('.memnox', 'code-fingerprint.yaml');
+// Spelled with `/` everywhere, since it is a path in the repository that agents are told and join still reads.
+export const CODE_FINGERPRINT_FILE = '.memnox/code-fingerprint.yaml';
 
 /** One convention checked on every line a write adds to the files it names. */
 export interface FingerprintCheck {

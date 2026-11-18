@@ -11,6 +11,7 @@ import {
 import type { EnvironmentSnapshot, SnapshotHook } from '../src/discovery/snapshot';
 import { compareSnapshots } from '../src/discovery/snapshot-changes';
 import { FakeMachine } from './fake-machine';
+import { slashed } from '../src/domain/separators';
 
 const HOME = '/home/dev';
 const PROJECT = '/srv/app';
@@ -114,7 +115,7 @@ describe('hooks the agents here run on their own', () => {
     expect(found).toHaveLength(3);
     expect(new Set(found.map((hook) => hook.plugin))).toEqual(new Set(['ecc@ecc']));
     // The newest installed version, ordered as numbers rather than as text.
-    expect(found[0]?.declaredIn).toContain('/2.10.0/');
+    expect(slashed(found[0]?.declaredIn ?? '')).toContain('/2.10.0/');
     expect(describeHooks(found)).toContain('from ecc@ecc');
   });
 

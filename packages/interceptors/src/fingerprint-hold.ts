@@ -9,6 +9,7 @@ import {
   markShown,
   notYetShown,
   readCodeFingerprint,
+  slashed,
   SessionContextStore,
 } from '@memnox/core';
 
@@ -38,7 +39,8 @@ export async function fingerprintHold(
   const inside = call.requests.some(
     (each) =>
       each.action === ACTION.FILESYSTEM_WRITE &&
-      each.target?.startsWith(`${root}/`) === true,
+      // Compared with `/`, so a write on Windows is placed in its repository too.
+      slashed(each.target ?? '').startsWith(`${slashed(root)}/`),
   );
   if (!inside) return null;
   if ((await readCodeFingerprint(root).catch(() => null)) !== null) return null;

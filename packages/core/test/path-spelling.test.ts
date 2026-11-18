@@ -1,3 +1,4 @@
+import { delimiter, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ownProcessEnv,
@@ -54,7 +55,9 @@ describe('PATH however the platform spells it', () => {
   });
 
   it("strips Memnox's own directory from a Path spelled the Windows way", () => {
-    const env = ownProcessEnv('/h', { Path: `/h/.memnox/bin:/usr/bin` });
+    // Joined and split as the platform does, which is how a real PATH arrives.
+    const own = join('/h', '.memnox', 'bin');
+    const env = ownProcessEnv('/h', { Path: [own, '/usr/bin'].join(delimiter) });
     expect(env).toEqual({ Path: '/usr/bin' });
   });
 });

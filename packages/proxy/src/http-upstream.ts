@@ -1,3 +1,10 @@
+import {
+  carriesCredential,
+  SERVER_TROUBLE,
+  troubleForAgent,
+  troubleOfStatus,
+  type ServerTroubleKind,
+} from '@memnox/core';
 import { isJsonRpcMessage, parseIncoming, type JsonRpcMessage } from './json-rpc';
 import type { RemoteServer } from './firewall-options';
 
@@ -13,6 +20,9 @@ const EVENT_STREAM = 'text/event-stream';
 const JSON_TYPE = 'application/json';
 const INITIALIZE = 'initialize';
 
+/** The status a server answers when it wants a sign in, or will not take the one it was sent. */
+const UNAUTHORIZED = 401;
+
 /** A JSON-RPC code in the range left to servers, for a call the remote server never answered. */
 const UNREACHABLE_CODE = -32000;
 
@@ -27,6 +37,21 @@ const CLOSE_TIMEOUT_MS = 5_000;
 
 type Fetch = typeof fetch;
 
+/** A request the server never answered: what that means for a person, and whether it was the opening one. */
+export interface UpstreamFailure {
+  kind: ServerTroubleKind;
+  opening: boolean;
+}
+
+/** A sign in kept for the server: the token to send, and another where that one is refused. */
+export interface UpstreamSignIn {
+  token(): Promise<string | undefined>;
+  renew(refused: string): Promise<string | undefined>;
+}
+
+const AUTHORIZATION = 'authorization';
+const BEARER = 'Bearer ';
+
 export interface HttpUpstreamOptions extends RemoteServer {
   /** The server's name, which is all an error says about where it went. */
   name: string;
@@ -34,6 +59,12 @@ export interface HttpUpstreamOptions extends RemoteServer {
   onLine: (line: string) => void;
   /** Never handed a header value, so a credential cannot reach a log. */
   log: (message: string) => void;
+  /** The sign in Memnox holds for it, sent where the headers carry no credential of their own. */
+  signIn?: UpstreamSignIn;
+  /** Told each time a request is not answered, so whoever started this can say why to a person. */
+  onFailure?: (failure: UpstreamFailure) => void;
+  /** Told each time one is, so trouble written down earlier is known to be over. */
+  onReached?: () => void;
   fetch?: Fetch;
   timeoutMs?: number;
   mostResponseBytes?: number;
@@ -60,8 +91,8 @@ export class HttpUpstream {
     const owed = new Set(messages.flatMap(requestIdOf));
     const opening = messages.some((message) => message.method === INITIALIZE);
     const posted = opening
-      ? this.post(payload, owed)
-      : this.ready.then(() => this.post(payload, owed));
+      ? this.post(payload, owed, true)
+      : this.ready.then(() => this.post(payload, owed, false));
     if (opening) this.ready = posted;
     this.inFlight.add(posted);
     void posted.finally(() => this.inFlight.delete(posted));
@@ -73,42 +104,71 @@ export class HttpUpstream {
     this.closed = true;
     await Promise.allSettled([...this.inFlight]);
     if (this.session === undefined) return;
-    await this.request('DELETE', undefined, CLOSE_TIMEOUT_MS)
+    const token = await this.bearer();
+    await this.request('DELETE', undefined, CLOSE_TIMEOUT_MS, token)
       .then((response) => response.body?.cancel())
       .catch(() => undefined);
   }
 
-  private async post(payload: string, owed: Owed): Promise<void> {
+  private async post(payload: string, owed: Owed, opening: boolean): Promise<void> {
     const timeout = this.options.timeoutMs ?? RESPONSE_TIMEOUT_MS;
     try {
-      const response = await this.request('POST', payload, timeout);
+      const response = await this.signedIn(payload, timeout);
       const named = response.headers.get(SESSION_HEADER);
       if (named !== null) this.session = named;
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
-        return this.failed(owed, `answered ${response.status}`);
+        this.options.onFailure?.({ kind: this.troubleOf(response.status), opening });
+        return this.failed(owed, `answered ${response.status}`, response.status);
       }
+      this.options.onReached?.();
       await this.read(response, owed);
       if (owed.size > 0) this.failed(owed, 'closed its answer without replying');
     } catch (error) {
+      this.options.onFailure?.({ kind: SERVER_TROUBLE.UNREACHABLE, opening });
       this.failed(owed, reasonOf(error));
     }
+  }
+
+  /** The post with the kept sign in on it, sent once more with a renewed token where the first is refused. */
+  private async signedIn(payload: string, timeoutMs: number): Promise<Response> {
+    const token = await this.bearer();
+    const response = await this.request('POST', payload, timeoutMs, token);
+    if (response.status !== UNAUTHORIZED || token === undefined) return response;
+    const fresh = await this.options.signIn?.renew(token).catch(() => undefined);
+    if (fresh === undefined) return response;
+    await response.body?.cancel().catch(() => undefined);
+    return this.request('POST', payload, timeoutMs, fresh);
+  }
+
+  /** Undefined where the headers already carry a credential, which then is the one that speaks. */
+  private async bearer(): Promise<string | undefined> {
+    if (carriesCredential(this.options.headers)) return undefined;
+    return this.options.signIn?.token().catch(() => undefined);
   }
 
   private async request(
     method: 'POST' | 'DELETE',
     body: string | undefined,
     timeoutMs: number,
+    token?: string,
   ): Promise<Response> {
     const fetcher = this.options.fetch ?? fetch;
     return fetcher(this.options.url, {
       method,
-      headers: this.headers(),
+      headers: {
+        ...this.headers(),
+        ...(token === undefined ? {} : { [AUTHORIZATION]: `${BEARER}${token}` }),
+      },
       ...(body === undefined ? {} : { body }),
       // A credential header never follows a redirect to wherever the server points.
       redirect: 'error',
       signal: AbortSignal.timeout(timeoutMs),
     });
+  }
+
+  private troubleOf(status: number | undefined): ServerTroubleKind {
+    return troubleOfStatus(status, carriesCredential(this.options.headers));
   }
 
   private headers(): Record<string, string> {
@@ -157,15 +217,26 @@ export class HttpUpstream {
     this.options.onLine(JSON.stringify(incoming));
   }
 
-  /** Each request still owed is answered with the reason, by the server's name and never its headers. */
-  private failed(owed: Owed, why: string): void {
-    const reason = `${this.options.name} ${why}`;
-    this.options.log(reason);
+  /**
+   * Each request still owed is answered with the reason, by the server's name and never its headers. A
+   * sign in or a refused credential is said as that, since the agent's server list is where a person looks.
+   */
+  private failed(owed: Owed, why: string, status?: number): void {
+    this.options.log(`${this.options.name} ${why}`);
+    const kind = this.troubleOf(status);
+    const reason =
+      kind === SERVER_TROUBLE.UNREACHABLE
+        ? `${this.options.name} ${why}`
+        : troubleForAgent(this.options.name, kind);
     for (const id of owed) {
       const answer: JsonRpcMessage = {
         jsonrpc: '2.0',
         id,
-        error: { code: UNREACHABLE_CODE, message: reason },
+        error: {
+          code: UNREACHABLE_CODE,
+          message: reason,
+          ...(status === undefined ? {} : { data: { status } }),
+        },
       };
       this.options.onLine(JSON.stringify(answer));
     }

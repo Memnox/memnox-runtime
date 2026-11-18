@@ -1,6 +1,9 @@
 import { canonicalJson } from '../domain/canonical-json';
 import { digest } from '../domain/digest';
-import type { DiscoveredAgentKind } from '../discovery/discovery.constants';
+import {
+  DISCOVERED_AGENT_KIND,
+  type DiscoveredAgentKind,
+} from '../discovery/discovery.constants';
 import { SESSION_SERVER_NAME, WORKSPACE_SERVER_NAME } from '../discovery/own-tools';
 import {
   AGENT_FLAG,
@@ -31,10 +34,24 @@ export const HUB_MARKER = '--memnox-hub';
 export const URL_FLAG = '--url';
 export const HEADER_FLAG = '--header';
 
-/** A remote server as a JSON config declares it. */
+/** How an agent's JSON config names a server it reaches over HTTP itself. */
+export const URL_ENTRY_TYPE = 'http';
+
+/** A remote server as a JSON config declares it, which the agent reaches and signs in to itself. */
 export interface UrlEntry {
+  type: typeof URL_ENTRY_TYPE;
   url: string;
+  headers?: Record<string, string>;
 }
+
+/** Agents that start a command and skip a line naming an address, so none is written for them. */
+const COMMAND_ONLY_AGENTS: readonly DiscoveredAgentKind[] = [
+  DISCOVERED_AGENT_KIND.CLAUDE_DESKTOP,
+];
+
+/** Said where a server the agent must sign in to cannot be written as an address. */
+export const NO_ADDRESS_LINE =
+  'It signs you in through the agent, and this agent cannot be given a server by its address, so add it in the agent itself.';
 
 export type HubEntry = ServerLaunch | UrlEntry;
 
@@ -76,10 +93,11 @@ export interface SyncPlan {
 }
 
 /**
- * The line one agent gets for one server, always a command behind the proxy: a remote server is
- * reached by the proxy, so every agent that starts a command has its calls ruled on and recorded.
+ * The line one agent gets for one server: a command behind the proxy, which also reaches a remote
+ * server, so its calls are ruled on and recorded. Only a server the agent must sign in to is its address.
  */
 export function entryFor(server: HubServer, agent: DiscoveredAgentKind): HubEntry {
+  if (isDirect(server)) return directEntry(server);
   if (server.transport === HUB_TRANSPORT.HTTP) return remoteEntry(server, agent);
   const env: Record<string, string> = { ...server.env };
   for (const [variable, secret] of Object.entries(server.secrets))
@@ -99,6 +117,29 @@ export function entryFor(server: HubServer, agent: DiscoveredAgentKind): HubEntr
     ],
     ...(Object.keys(env).length === 0 ? {} : { env }),
   };
+}
+
+/** Whether the agent reaches this server itself, because the sign in it asks for is the agent's to do. */
+export function isDirect(server: HubServer): boolean {
+  return server.transport === HUB_TRANSPORT.HTTP && server.direct === true;
+}
+
+/** The address line an agent's own config holds, as the agent would have written it. */
+export function directEntry(server: Pick<HubServer, 'url' | 'headers'>): UrlEntry {
+  const headers = server.headers ?? {};
+  return {
+    type: URL_ENTRY_TYPE,
+    url: server.url ?? '',
+    ...(Object.keys(headers).length === 0 ? {} : { headers }),
+  };
+}
+
+/** Whether a config can hold a server by its address: a JSON one, for an agent that reads such a line. */
+export function takesAddressLine(
+  format: ConfigFormat,
+  agent: DiscoveredAgentKind,
+): boolean {
+  return format === CONFIG_FORMAT.JSON && !COMMAND_ONLY_AGENTS.includes(agent);
 }
 
 function remoteEntry(server: HubServer, agent: DiscoveredAgentKind): ServerLaunch {
@@ -175,6 +216,7 @@ function planFile(hub: Hub, config: ConfigServers): FilePlan {
   }
   const agent = config.agent;
   const wanted = new Map(serversFor(hub, agent).map((server) => [server.name, server]));
+  skipUnwritable(plan, wanted, { format: config.format, agent });
   for (const [name, current] of Object.entries(config.servers)) {
     // Memnox's own lines, which onboarding writes and owns, are neither offered for import nor overwritten.
     if (isMemnoxLine(name, current)) continue;
@@ -193,6 +235,22 @@ function planFile(hub: Hub, config: ConfigServers): FilePlan {
       planMissing(plan, { server, agent, written: writtenHere.has(name) });
   }
   return plan;
+}
+
+/**
+ * A server the agent must sign in to, where this config cannot hold an address: not wanted here
+ * after all, so a proxy line the hub wrote earlier is taken back rather than left dead.
+ */
+function skipUnwritable(
+  plan: FilePlan,
+  wanted: Map<string, HubServer>,
+  config: { format: ConfigFormat; agent: DiscoveredAgentKind },
+): void {
+  for (const [name, server] of wanted) {
+    if (!isDirect(server) || takesAddressLine(config.format, config.agent)) continue;
+    wanted.delete(name);
+    plan.skipped.push({ name, reason: NO_ADDRESS_LINE });
+  }
 }
 
 function emptyPlan(config: ConfigServers): FilePlan {

@@ -11,6 +11,7 @@ import {
   ENV_POLICIES,
   EXIT,
   holdFor,
+  KeptSignIn,
   openLedger,
   openNotice,
   PROBATION_KIND,
@@ -19,7 +20,10 @@ import {
   projectIdAt,
   protectionStopped,
   remoteAddressProblem,
+  RemoteSignIns,
   resolveHeaderRefs,
+  SERVER_TROUBLE,
+  ServerTroubles,
   SESSION_VAR,
   trustCommandFor,
   UNNAMED_AGENT,
@@ -30,6 +34,7 @@ import {
 
 import { parseFirewallArgs, type FirewallArgs } from './firewall-args';
 import { McpFirewall, type FirewallOptions, type RemoteServer } from './firewall';
+import type { ServerTroubleSink } from './firewall-options';
 import { ENV_TOOLS_ALLOW, ENV_TOOLS_DENY } from './firewall.constants';
 import { LiveGate } from './live-gate';
 import { localGateEnvironment } from './local-gate-loader';
@@ -75,10 +80,57 @@ async function main(): Promise<void> {
     process.exit(EXIT.FAILED);
   }
 
-  await resolveSecrets(homedir());
+  await resolveSecrets(args, homedir());
   const remote = await remoteFor(args, homedir());
   const options = await firewallOptionsFor(args, homedir());
-  new McpFirewall(remote === undefined ? options : { ...options, remote }).start();
+  const trouble = troubleSinkFor(args, homedir());
+  new McpFirewall(
+    remote === undefined ? { ...options, trouble } : { ...options, remote, trouble },
+  ).start();
+}
+
+/** The agent the line was written for, which is who a person is told the server is disconnected in. */
+function agentOf(args: FirewallArgs): string | undefined {
+  return process.env[ENV_AGENT_NAME] ?? args.agent;
+}
+
+/** Written in the background and never awaited: a note that cannot be kept must not stop a server. */
+function troubleSinkFor(args: FirewallArgs, home: string): ServerTroubleSink {
+  const troubles = new ServerTroubles(home);
+  const agent = agentOf(args);
+  return {
+    note: (kind) => {
+      void troubles
+        .note({
+          server: args.serverName,
+          ...(agent === undefined ? {} : { agent }),
+          kind,
+          at: new Date().toISOString(),
+        })
+        .catch(() => undefined);
+    },
+    clear: () => {
+      void troubles.clear(args.serverName, agent).catch(() => undefined);
+    },
+  };
+}
+
+/** Kept before the exit, so the person is told which secret rather than left with a dead server. */
+async function noteMissingSecret(
+  args: FirewallArgs,
+  home: string,
+  secret: string,
+): Promise<void> {
+  const agent = agentOf(args);
+  await new ServerTroubles(home)
+    .note({
+      server: args.serverName,
+      ...(agent === undefined ? {} : { agent }),
+      kind: SERVER_TROUBLE.MISSING_SECRET,
+      secret,
+      at: new Date().toISOString(),
+    })
+    .catch(() => undefined);
 }
 
 /**
@@ -103,16 +155,19 @@ async function remoteFor(
       warn(
         `the ${each.header} header needs the secret ${each.secret}, which this machine does not hold`,
       );
+    await noteMissingSecret(args, home, resolved.missing[0]?.secret ?? '');
     process.exit(EXIT.FAILED);
   }
-  return { url, headers: resolved.headers };
+  // Read from the OS store only when a request needs it, so a server with no sign in costs nothing.
+  const signIn = new KeptSignIn(new RemoteSignIns(store, home), url);
+  return { url, headers: resolved.headers, signIn };
 }
 
 /**
  * Swaps each secret reference the hub wrote for its value from the OS store, here and in no
  * other process, so the server gets the credential and the agent's config never held it.
  */
-async function resolveSecrets(home: string): Promise<void> {
+async function resolveSecrets(args: FirewallArgs, home: string): Promise<void> {
   const store = nodeSecretStore(home);
   const resolved = await resolveSecretRefs(process.env, (name) => store.get(name));
   if (resolved.missing.length > 0) {
@@ -121,6 +176,7 @@ async function resolveSecrets(home: string): Promise<void> {
       warn(
         `${each.variable} needs the secret ${each.secret}, which this machine does not hold`,
       );
+    await noteMissingSecret(args, home, resolved.missing[0]?.secret ?? '');
     process.exit(EXIT.FAILED);
   }
   for (const [variable, value] of Object.entries(resolved.env))
@@ -133,7 +189,7 @@ async function firewallOptionsFor(
   home: string,
 ): Promise<FirewallOptions> {
   // The environment `memnox run` sets, then the agent the wrapped line was written for.
-  const agent = process.env[ENV_AGENT_NAME] ?? args.agent;
+  const agent = agentOf(args);
   const gate = await liveGateFor(args, home);
   const ledger = openLedger(home);
   const session = process.env[SESSION_VAR];

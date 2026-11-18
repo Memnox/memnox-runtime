@@ -2,6 +2,8 @@
  * How a rule's pattern is matched against an action, a path or a name. One matcher for
  * every domain, because a second would be a rule that fires on one screen and not at the seam.
  */
+import { slashed } from '../domain/separators';
+
 const WILDCARD = '*';
 /** Patterns come from policy files, so the set is bounded; the cap is a backstop. */
 const MAX_CACHED_PATTERNS = 10_000;
@@ -10,7 +12,7 @@ const compiled = new Map<string, RegExp>();
 function compile(pattern: string): RegExp {
   const cached = compiled.get(pattern);
   if (cached !== undefined) return cached;
-  const escaped = pattern
+  const escaped = slashed(pattern)
     .toLowerCase()
     .split(WILDCARD)
     .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -24,7 +26,7 @@ function compile(pattern: string): RegExp {
 
 /** Case-insensitive wildcards; "*" spans ".", "/" and line breaks too. */
 export function matchesPattern(pattern: string, value: string): boolean {
-  return compile(pattern).test(value.toLowerCase());
+  return compile(pattern).test(slashed(value).toLowerCase());
 }
 
 /** A pattern that takes matches back out, as `!api.stripe.com` or `!{workspace}/**`. */

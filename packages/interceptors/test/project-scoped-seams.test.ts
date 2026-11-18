@@ -23,8 +23,9 @@ import { ruleOnTool } from '../src/tool-policy';
  * which project it runs in, read off the folder: here, every seam that builds one.
  */
 
-const BILLING = '/work/billing';
-const ELSEWHERE = '/work/scratch';
+// Built with join, as a seam builds the folders it is handed, so the two are spelled alike.
+const BILLING = join('/work', 'billing');
+const ELSEWHERE = join('/work', 'scratch');
 const PROJECT = 'billing-pack';
 
 /** Billing's own rule: nothing there is pushed by force, while every other folder is left alone. */

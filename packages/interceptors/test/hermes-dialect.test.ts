@@ -1,3 +1,4 @@
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ACTION } from '@memnox/core';
 import { agentEditsOf, agentDenial, EDIT_HOST, endedSessionOf } from '../src/agent-edits';
@@ -65,11 +66,12 @@ describe('Hermes before a tool', () => {
 
     expect(read?.requests[0]).toMatchObject({
       action: ACTION.FILESYSTEM_READ,
-      target: `${HOME}/.ssh/id_ed25519`,
+      target: join(HOME, '.ssh', 'id_ed25519'),
     });
     expect(write?.requests[0]).toMatchObject({
       action: ACTION.FILESYSTEM_WRITE,
-      target: '/repo/src/a.ts',
+      // Resolved as the call resolves it, which on Windows puts it on the current drive.
+      target: resolve('/repo', 'src', 'a.ts'),
     });
   });
 

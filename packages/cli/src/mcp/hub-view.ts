@@ -1,6 +1,9 @@
 import {
+  agentShown,
   agentsOf,
   daysToMs,
+  describeTrouble,
+  isDirect,
   EVENT_SURFACE,
   LEDGER_SCAN_LIMIT,
   MCP_HEALTH,
@@ -10,6 +13,7 @@ import {
   readHubHealth,
   readOrgServers,
   secretsOfServer,
+  ServerTroubles,
   withOrganization,
   type HubHealth,
   type Hub,
@@ -20,6 +24,7 @@ import {
   type McpProjectAssignment,
   type MemnoxEvent,
   type SecretStore,
+  type ServerTrouble,
   type SyncPlan,
 } from '@memnox/core';
 import { withEvents } from '../event-store';
@@ -42,14 +47,16 @@ export async function readHubView(
   home: string,
   { secrets, now }: HubViewInput,
 ): Promise<McpHubView> {
-  const [own, org, health, configs, calls] = await Promise.all([
+  const [own, org, tested, troubles, configs, calls] = await Promise.all([
     readHub(home),
     readOrgServers(home),
     readHubHealth(home),
+    new ServerTroubles(home).all(),
     readHubConfigs(home, home),
     callsSince(home, new Date(now.getTime() - daysToMs(WEEK_DAYS))),
   ]);
   const hub = withOrganization(own, org);
+  const health = withTroubles(tested, troubles);
   const agents = configs.flatMap((config) =>
     config.agent === undefined ? [] : [{ agent: config.agent, path: config.path }],
   );
@@ -60,8 +67,10 @@ export async function readHubView(
       ? agentsOf(hub, server.name)
       : orgAgentsOf(hub, server, agents);
     const projects = projectsOf(hub, server.name, given);
+    const trouble = troubleShown(tested, troubles, server.name);
     servers.push({
       ...serverFields(server, health),
+      ...(trouble === undefined ? {} : { trouble }),
       scope: personal ? MCP_SCOPE.PERSONAL : MCP_SCOPE.ORGANIZATION,
       agents: given,
       ...(projects.length === 0 ? {} : { projects }),
@@ -70,6 +79,39 @@ export async function readHubView(
     });
   }
   return { servers, agents, ...entriesOf(planSync(hub, configs)) };
+}
+
+/**
+ * What a proxy found when an agent really started the server, laid over the last test where it is
+ * newer, so a card says why the agent shows it disconnected without anybody pressing Test.
+ */
+function withTroubles(tested: HubHealth, troubles: readonly ServerTrouble[]): HubHealth {
+  const health: HubHealth = { ...tested };
+  for (const trouble of troubles) {
+    const last = health[trouble.server]?.checkedAt;
+    if (last !== undefined && last >= trouble.at) continue;
+    health[trouble.server] = {
+      state: MCP_HEALTH.ERROR,
+      checkedAt: trouble.at,
+      error: describeTrouble(
+        trouble,
+        trouble.agent === undefined ? undefined : agentShown(trouble.agent),
+      ),
+    };
+  }
+  return health;
+}
+
+/** The newest trouble with a server that no later test has answered, which is what a card offers a way out of. */
+function troubleShown(
+  tested: HubHealth,
+  troubles: readonly ServerTrouble[],
+  server: string,
+): ServerTrouble['kind'] | undefined {
+  const last = tested[server]?.checkedAt;
+  return troubles
+    .filter((each) => each.server === server && (last === undefined || last < each.at))
+    .at(-1)?.kind;
 }
 
 /** An organization server handed to every agent is shown on the agents here, not on every kind there is. */
@@ -101,7 +143,10 @@ type ServerFields = Omit<
 >;
 
 function serverFields(server: HubServer, health: HubHealth): ServerFields {
-  const last = health[server.name] ?? { state: MCP_HEALTH.UNKNOWN };
+  // A test kept from before it was handed back says nothing about how the agents reach it now.
+  const last = isDirect(server)
+    ? { state: MCP_HEALTH.UNKNOWN }
+    : (health[server.name] ?? { state: MCP_HEALTH.UNKNOWN });
   const tools = last.tools ?? [];
   return {
     name: server.name,
@@ -112,8 +157,8 @@ function serverFields(server: HubServer, health: HubHealth): ServerFields {
     ...(server.url === undefined ? {} : { url: server.url }),
     envNames: Object.keys(server.env),
     ...(server.headers === undefined ? {} : { headerNames: Object.keys(server.headers) }),
-    // Every server the hub writes is behind the proxy, a remote one reached by it over HTTP.
-    governed: true,
+    // Behind the proxy, a remote one reached by it over HTTP, unless the agent must sign in to it itself.
+    governed: !isDirect(server),
     toolCount: tools.length,
     ...(tools.length === 0 ? {} : { tools }),
     health: {

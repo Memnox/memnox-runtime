@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { isBorrowedNode, orderedNodes } from '../src/node-choice';
 
@@ -9,9 +10,9 @@ const HOME = '/Users/me';
 describe('a Node another app owns', () => {
   it("is one inside another product's folder or an app bundle", () => {
     expect(isBorrowedNode('/Users/me/.hermes/node/bin/node', HOME)).toBe(true);
-    expect(isBorrowedNode('/Applications/Cursor.app/Contents/Resources/node', HOME)).toBe(
-      true,
-    );
+    // Joined as the platform hands paths over, which is how one reaches this.
+    const bundled = join('/Applications', 'Cursor.app', 'Contents', 'Resources', 'node');
+    expect(isBorrowedNode(bundled, HOME)).toBe(true);
   });
 
   it("is never the person's own, nor the one Memnox unpacks for itself", () => {

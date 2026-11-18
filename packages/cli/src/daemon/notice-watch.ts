@@ -50,6 +50,7 @@ import { WorkspaceStream } from './workspace-stream';
 import { SessionViews } from './session-view';
 import { SignInWatcher } from './sign-in-watch';
 import { BudgetWatch } from './budget-watch';
+import { ServerTroubleWatch } from './server-trouble-watch';
 import { personalAccounts } from '../sync/personal-work';
 import { readWorkspaceName } from '../sync/workspace-reads';
 
@@ -76,10 +77,7 @@ export class NoticeWatcher {
   private readonly told = new Map<string, DaemonEvent>();
   /** Background commands whose end was told, kept for the daemon's life so none is told twice. */
   private readonly ended = new Set<string>();
-  /**
-   * Watchers that each keep their own memory of what they told: every session as it begins and
-   * ends, sign ins the person was offered, and budgets passing their line or running out.
-   */
+  /** Watchers with their own memory of what they told: sessions, sign ins, budgets, servers that will not connect. */
   private readonly others: readonly { look(moment: string): Promise<DaemonEvent[]> }[];
   /** Pairs of sessions already told as colliding, so a pair working on for an hour is said once. */
   private readonly collided = new Set<string>();
@@ -105,6 +103,7 @@ export class NoticeWatcher {
       new SessionLives(home, started),
       new SignInWatcher(home, () => personalAccounts(home)),
       new BudgetWatch(home),
+      new ServerTroubleWatch(home, started),
     ];
   }
 

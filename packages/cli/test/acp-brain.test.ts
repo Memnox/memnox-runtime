@@ -242,10 +242,10 @@ describe.skipIf(process.platform === 'win32')('AcpBrain', () => {
     const brain = brainFor(setup);
 
     const chunks = await turn(brain, 'run something');
+    // The turn ends on the permission answer, so the file answer may still be on its way.
+    const calls = await untilLogged(setup.log, (call) => call.answered === 1901);
     brain.close();
-    const answers = (await logged(setup.log)).filter(
-      (call) => call.answered !== undefined,
-    );
+    const answers = calls.filter((call) => call.answered !== undefined);
 
     expect(chunks.at(-1)).toEqual({ kind: BRAIN_CHUNK.DONE });
     expect(answers).toContainEqual({

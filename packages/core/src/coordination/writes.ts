@@ -1,6 +1,8 @@
+import { isAbsolute } from 'node:path';
 import { TOOL_CLASS } from '../discovery/classify';
 import { COMMAND_CLASS } from '../intercept/binary-class';
 import { withoutTrailing } from '../domain/plain-text';
+import { slashed } from '../domain/separators';
 import { normalizeLeasePath } from './lease';
 
 /**
@@ -32,10 +34,12 @@ export function leasePathFor(
   // A host or a URL is not a path, and neither is a branch spelled with a slash.
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) return null;
 
-  const absolute = target.startsWith('/')
-    ? target
-    : `${withoutTrailing(cwd, '/')}/${target}`;
-  const root = withoutTrailing(repoRoot, '/');
+  // Spelled with `/` throughout, so a Windows path is placed in its repository as any other is.
+  const spelled = slashed(target);
+  const absolute = isAbsolute(target)
+    ? spelled
+    : `${withoutTrailing(slashed(cwd), '/')}/${spelled}`;
+  const root = withoutTrailing(slashed(repoRoot), '/');
   if (absolute !== root && !absolute.startsWith(`${root}/`)) return null;
 
   return normalizeLeasePath(absolute.slice(root.length));

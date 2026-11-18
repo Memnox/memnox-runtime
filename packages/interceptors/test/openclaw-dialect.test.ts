@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ACTION, DECISION_EFFECT, ENFORCEMENT_MODE, TOOL_CLASS } from '@memnox/core';
 import { agentEditsOf, EDIT_HOST, endedSessionOf } from '../src/agent-edits';
@@ -56,7 +57,7 @@ describe('OpenClaw before a tool', () => {
       const call = toolCallOf(openClaw('before_tool_call', 'read', input), HOME);
       expect(call?.requests[0]).toMatchObject({
         action: ACTION.FILESYSTEM_READ,
-        target: `${HOME}/.aws/credentials`,
+        target: join(HOME, '.aws', 'credentials'),
       });
     }
   });

@@ -6,6 +6,7 @@ import {
   ENFORCEMENT_MODE,
   EXIT,
   exitCodeForSignal,
+  SERVER_TROUBLE,
   serverDownEvent,
   toolArrivalEvent,
   UNNAMED_AGENT,
@@ -31,7 +32,7 @@ import {
   type RemoteServer,
 } from './firewall-options';
 import { FirewallSession, type FirewallChannel } from './firewall-session';
-import { HttpUpstream } from './http-upstream';
+import { HttpUpstream, type HttpUpstreamOptions } from './http-upstream';
 import { LineBuffer } from './json-rpc';
 import { ProbationAuthorizer } from './probation-authorizer';
 import { recordToLedger, type LedgerContext } from './ledger';
@@ -87,6 +88,8 @@ export class McpFirewall {
   private ending = false;
   /** Set once the server's stdin errors, since `writable` can lag behind a pipe already broken. */
   private pipeBroken = false;
+  /** Whether the local server has written anything, which is what tells a start from a death at once. */
+  private spoke = false;
   /** Set on the first exit, because a spawn error and an exit can both arrive for one child. */
   private exiting = false;
   /** Filled by the first listing; built before the authorizer, which reads it. */
@@ -243,13 +246,14 @@ export class McpFirewall {
       const status = exitStatus(code, signal);
       // A server that dies under a working agent is said, since everything using it now fails.
       if (status === EXIT.OK || this.ending) return finish(status);
+      this.neverStarted();
       const row = this.serverDown(status);
       if (row === null) return finish(status);
       void row.then(() => finish(status));
     });
     // Unheard, a misspelled server command is an unhandled exception rather than a reason.
     child.on('error', (error) => {
-      this.log(`could not start ${this.options.serverName}: ${error.message}`);
+      this.couldNotStart(error);
       finish(EXIT.NOT_FOUND);
     });
     // Unheard, an EPIPE from a server mid death would crash the proxy it was talking through.
@@ -273,6 +277,7 @@ export class McpFirewall {
       name: this.options.serverName,
       onLine: (line) => this.session.fromServer(line),
       log: this.log,
+      ...this.troubleWiring(),
       ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     });
     this.upstream = upstream;
@@ -287,6 +292,44 @@ export class McpFirewall {
       for (const signal of ENDING_SIGNALS)
         process.once(signal, () => finish(exitCodeForSignal(signal)));
     this.pipeClient(deps.input ?? process.stdin, () => finish(EXIT.OK));
+  }
+
+  private couldNotStart(error: Error): void {
+    this.log(`could not start ${this.options.serverName}: ${error.message}`);
+    this.neverStarted();
+  }
+
+  /** A local server gone before it said a word never connected, which the person is told with why. */
+  private neverStarted(): void {
+    if (!this.spoke) this.options.trouble?.note(SERVER_TROUBLE.NOT_STARTED);
+  }
+
+  /** Its first output means it started, so trouble written down on an earlier try is over. */
+  private serverSpoke(): void {
+    if (this.spoke) return;
+    this.spoke = true;
+    this.options.trouble?.clear();
+  }
+
+  /**
+   * A sign in or a refused credential is written down at any moment; any other failure only at the opening, since
+   * one slow call later is not a server a person has to do something about.
+   */
+  private troubleWiring(): Pick<HttpUpstreamOptions, 'onFailure' | 'onReached'> {
+    const trouble = this.options.trouble;
+    if (trouble === undefined) return {};
+    let reached = false;
+    return {
+      onFailure: ({ kind, opening }) => {
+        if (kind !== SERVER_TROUBLE.UNREACHABLE || opening) trouble.note(kind);
+      },
+      onReached: () => {
+        // Once per proxy, so a busy session does not remove one file a thousand times.
+        if (reached) return;
+        reached = true;
+        trouble.clear();
+      },
+    };
   }
 
   /**
@@ -330,6 +373,7 @@ export class McpFirewall {
     }
     const serverToClient = new LineBuffer();
     child.stdout.on('data', (chunk: Buffer) => {
+      this.serverSpoke();
       for (const line of serverToClient.push(chunk.toString('utf8'))) {
         this.session.fromServer(line);
       }

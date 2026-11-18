@@ -46,9 +46,12 @@ export function transcriptPathFor(home: string, sessionId: string): string {
   return join(home, MEMNOX_HOME, TRANSCRIPTS_DIR, `${sessionId}${TRANSCRIPT_SUFFIX}`);
 }
 
-/** A config's own path, flattened: two clients may both ship a `settings.json`. */
+/**
+ * A config's own path, flattened: two clients may both ship a `settings.json`. The drive's
+ * colon goes too, since `C:` in a Windows file name writes into a hidden stream of a file named C.
+ */
 export function backupPathFor(home: string, path: string): string {
-  return join(home, MEMNOX_HOME, BACKUP_DIR, path.replace(/[/\\ ]/g, '_'));
+  return join(home, MEMNOX_HOME, BACKUP_DIR, path.replace(/[/\\: ]/g, '_'));
 }
 
 /**

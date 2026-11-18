@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parse } from 'jsonc-parser';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -240,7 +240,8 @@ describe('where OpenClaw resolves a relative path', () => {
     expect(
       await rootFor({ config: { agents: { defaults: { workspace: '/srv/ws' } } } }),
     ).toEqual({
-      cwd: '/srv/ws',
+      // Resolved as OpenClaw resolves it, which on Windows puts it on the current drive.
+      cwd: resolve('/srv/ws'),
       sandboxed: undefined,
     });
   });
@@ -253,13 +254,13 @@ describe('where OpenClaw resolves a relative path', () => {
       },
     };
 
-    expect((await rootFor({ config }, 'scout'))['cwd']).toBe('/srv/ws/scout');
+    expect((await rootFor({ config }, 'scout'))['cwd']).toBe(resolve('/srv/ws/scout'));
   });
 
   it("follows the agent's run directory where one is set", async () => {
     const config = { agents: { defaults: { workspace: '/srv/ws', cwd: 'app' } } };
 
-    expect((await rootFor({ config }))['cwd']).toBe('/srv/ws/app');
+    expect((await rootFor({ config }))['cwd']).toBe(resolve('/srv/ws/app'));
   });
 
   it("takes OpenClaw's own resolver over its own reading of the config", async () => {
@@ -280,7 +281,7 @@ describe('where OpenClaw resolves a relative path', () => {
           runtime,
         })
       )['cwd'],
-    ).toBe('/live');
+    ).toBe(resolve('/live'));
   });
 
   it('names no directory for a sandboxed call, whose paths are inside its container', async () => {

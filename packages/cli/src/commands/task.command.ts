@@ -10,6 +10,7 @@ import { isAbsolute, join } from 'node:path';
 import type { Command } from 'commander';
 
 import {
+  nativePath,
   ownProcessEnv,
   REPOSITORY_TASK_HOURS,
   RepositoryTasks,
@@ -153,12 +154,13 @@ function globFor(root: string, path: string): string {
 
 function rootHere(): string {
   try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    const top = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       // The real git: the one on PATH may be the interceptor, which would rule on this.
       env: ownProcessEnv(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    });
+    return nativePath(top);
   } catch {
     // Outside a repository the directory itself is the scope somebody meant.
     return process.cwd();

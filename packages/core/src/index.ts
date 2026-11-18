@@ -14,6 +14,7 @@ export * from './domain/capability';
 export * from './domain/time';
 export * from './domain/redact';
 export * from './domain/line-buffer';
+export * from './domain/separators';
 export * from './domain/plain-text';
 export * from './domain/exit-code';
 export * from './domain/action-event';

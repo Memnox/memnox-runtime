@@ -9,6 +9,7 @@ import { RufloDetector } from '../src/discovery/detectors/ruflo-detector';
 import { SURFACE_KIND } from '../src/discovery/discovery.constants';
 import { FILTER_PRECEDENCE, passesFilter } from '../src/discovery/surface';
 import { FakeMachine } from './fake-machine';
+import { slashed } from '../src/domain/separators';
 
 const NOW = '2026-09-06T09:00:00.000Z';
 
@@ -178,7 +179,9 @@ describe('the Ruflo detector', () => {
     });
 
     expect(found?.agent.kind).toBe('ruflo');
-    expect(found?.agent.configPaths).toContain(`${PROJECT}/claude-flow.config.json`);
+    expect(found?.agent.configPaths.map(slashed)).toContain(
+      `${PROJECT}/claude-flow.config.json`,
+    );
   });
 
   it('names the roles, the runtime it drives and the hooks it installed', async () => {
@@ -188,7 +191,9 @@ describe('the Ruflo detector', () => {
 
     expect(found?.hosted?.roles).toEqual(['coder', 'deployer', 'planner']);
     expect(found?.hosted?.runtimes).toEqual(['claude-code']);
-    expect(found?.hosted?.hooks).toContain(`${PROJECT}/.claude/settings.json`);
+    expect(found?.hosted?.hooks.map(slashed)).toContain(
+      `${PROJECT}/.claude/settings.json`,
+    );
     expect(found?.hosted?.federated).toBe(true);
   });
 

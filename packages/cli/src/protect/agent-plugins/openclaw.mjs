@@ -31,7 +31,11 @@ function expanded(value) {
 // The live config where OpenClaw offers it, since the one given at registration is a snapshot.
 function configOf(api) {
   try {
-    const live = api.runtime && api.runtime.config && api.runtime.config.current && api.runtime.config.current();
+    const live =
+      api.runtime &&
+      api.runtime.config &&
+      api.runtime.config.current &&
+      api.runtime.config.current();
     if (live) return live;
   } catch {}
   return api.config || {};
@@ -40,7 +44,10 @@ function configOf(api) {
 function defaultAgent(cfg) {
   const entries = (cfg.agents && cfg.agents.entries) || {};
   const ids = Object.keys(entries);
-  return ids.find((id) => entries[id] && entries[id].default === true) || (ids.length === 1 ? ids[0] : 'main');
+  return (
+    ids.find((id) => entries[id] && entries[id].default === true) ||
+    (ids.length === 1 ? ids[0] : 'main')
+  );
 }
 
 // OpenClaw's own resolver where it is exposed, and its rules from the config where not.
@@ -50,11 +57,16 @@ function workspaceOf(api, cfg, id) {
     if (typeof found === 'string' && found !== '') return found;
   } catch {}
   const agents = cfg.agents || {};
-  const own = expanded(agents.entries && agents.entries[id] && agents.entries[id].workspace);
+  const own = expanded(
+    agents.entries && agents.entries[id] && agents.entries[id].workspace,
+  );
   if (own) return own;
   const shared = expanded(agents.defaults && agents.defaults.workspace);
   const state = expanded(process.env.OPENCLAW_STATE_DIR) || join(homedir(), '.openclaw');
-  if (id === defaultAgent(cfg)) return shared || expanded(process.env.OPENCLAW_WORKSPACE_DIR) || join(state, 'workspace');
+  if (id === defaultAgent(cfg))
+    return (
+      shared || expanded(process.env.OPENCLAW_WORKSPACE_DIR) || join(state, 'workspace')
+    );
   return shared ? join(shared, id) : join(state, 'workspace-' + id);
 }
 
@@ -67,8 +79,12 @@ function rootOf(api, ctx) {
     const agents = cfg.agents || {};
     const own = (agents.entries && agents.entries[id]) || {};
     const defaults = agents.defaults || {};
-    const mode = (own.sandbox && own.sandbox.mode) || (defaults.sandbox && defaults.sandbox.mode) || 'off';
-    if (mode === 'all' || (mode === 'non-main' && !sessionOf(ctx).endsWith(':main'))) return { sandboxed: true };
+    const mode =
+      (own.sandbox && own.sandbox.mode) ||
+      (defaults.sandbox && defaults.sandbox.mode) ||
+      'off';
+    if (mode === 'all' || (mode === 'non-main' && !sessionOf(ctx).endsWith(':main')))
+      return { sandboxed: true };
     const workspace = workspaceOf(api, cfg, id);
     // A relative run directory is the workspace's, never the gateway's own.
     const cwd = withHome(own.cwd || defaults.cwd);
@@ -162,7 +178,9 @@ export default {
       async (event, ctx) => {
         const call = callOf(EVENT.BEFORE_TOOL, event, ctx);
         const answered = async (decision) => {
-          said(await run({ ...call, hook_event_name: EVENT.APPROVAL_RESOLVED, decision }));
+          said(
+            await run({ ...call, hook_event_name: EVENT.APPROVAL_RESOLVED, decision }),
+          );
         };
         return verdict(said(await run(call, ctx && ctx.abortSignal)), answered);
       },
