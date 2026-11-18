@@ -104,7 +104,7 @@ describe('memnox update', () => {
     const verify = vi.fn(async (): Promise<Verdict> => ({
       ok: false,
       reason:
-        'memnox@0.13.0 was published without provenance, so nothing ties it to https://github.com/Memnox/memnox',
+        'memnox@0.13.0 was published without provenance, so nothing ties it to https://github.com/Memnox/memnox-runtime',
     }));
     const { out, run, rewire, record } = await update({ verify });
     const failed = process.exitCode;
@@ -115,7 +115,7 @@ describe('memnox update', () => {
     expect(record).not.toHaveBeenCalled();
     expect(failed).toBe(1);
     expect(out.text).toContain(
-      'Memnox 0.13.0 was not installed, because memnox@0.13.0 was published without provenance, so nothing ties it to https://github.com/Memnox/memnox.',
+      'Memnox 0.13.0 was not installed, because memnox@0.13.0 was published without provenance, so nothing ties it to https://github.com/Memnox/memnox-runtime.',
     );
     expect(out.text).toContain('memnox update --skip-verify');
   });

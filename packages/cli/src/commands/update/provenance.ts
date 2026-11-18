@@ -6,7 +6,7 @@ import { X509Certificate } from 'node:crypto';
 
 /** The only build allowed to produce a package that runs on every command an agent issues. */
 const RELEASE_SOURCE = {
-  repository: 'https://github.com/Memnox/memnox',
+  repository: 'https://github.com/Memnox/memnox-runtime',
   workflow: '.github/workflows/release.yml',
   refPrefix: 'refs/tags/v',
 } as const;
