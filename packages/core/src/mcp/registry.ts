@@ -27,6 +27,11 @@ export interface HubServer {
   url?: string;
   /** On http: sent with every request; a credential is written as `memnox-secret:<name>` and resolved by the proxy. */
   headers?: Record<string, string>;
+  /**
+   * On http: the server signs the person in through the agent, which the proxy cannot do, so the
+   * agent reaches it itself and its calls are not ruled on. Absent is behind the proxy.
+   */
+  direct?: true;
   /** Plain values, written into the agent's config as they are. */
   env: Record<string, string>;
   /** Env name to secret name: only a reference reaches the config, the value stays in the OS store. */
@@ -76,6 +81,13 @@ const CREDENTIAL_HEADERS: readonly string[] = [
   'api-key',
 ];
 
+/** Whether these headers carry a credential, so a refusal is of that credential and not a sign in to do. */
+export function carriesCredential(headers: Readonly<Record<string, string>>): boolean {
+  return Object.keys(headers).some((name) =>
+    CREDENTIAL_HEADERS.includes(name.toLowerCase()),
+  );
+}
+
 /** Plain http is for a server on this machine only, since a header may carry a credential. */
 const LOOPBACK_HOSTS: readonly string[] = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -105,7 +117,20 @@ export function hubServerProblems(server: HubServer): string[] {
       problems.push(`${secret} is not a secret name Memnox can keep.`);
   }
   problems.push(...headerProblems(server.headers ?? {}));
+  problems.push(...directProblems(server));
   return problems;
+}
+
+/** A server the agent reaches itself is a remote one, and holds nothing only the proxy can resolve. */
+function directProblems(server: HubServer): string[] {
+  if (server.direct !== true) return [];
+  if (server.transport !== HUB_TRANSPORT.HTTP)
+    return ['Only a remote server can be left for the agent to sign in to.'];
+  if (secretsOfServer(server).length > 0)
+    return [
+      'A server the agent signs in to itself cannot carry a kept secret, since only the proxy can read one.',
+    ];
+  return [];
 }
 
 function headerProblems(headers: Readonly<Record<string, string>>): string[] {
@@ -226,11 +251,15 @@ export function withAssignment(hub: Hub, assignment: HubAssignment, on: boolean)
   return { ...hub, assignments: on ? [...others, assignment] : others };
 }
 
-/** A widening change the person signs before it holds: a server added or replaced, or given to one more agent. */
-export type HubChange = { put: HubServer } | { assign: HubAssignment };
+/**
+ * A change the person signs before it holds: a server added or replaced, given to one more agent, or
+ * handed back to its agents to sign in to, which takes it out from behind the proxy.
+ */
+export type HubChange =
+  { put: HubServer } | { assign: HubAssignment } | { handBack: string };
 
+/** The hub after a put or an assignment; a hand back rewrites configs as well, so it is carried out by its own routine. */
 export function withChange(hub: Hub, change: HubChange): Hub {
-  return 'put' in change
-    ? withServer(hub, change.put)
-    : withAssignment(hub, change.assign, true);
+  if ('put' in change) return withServer(hub, change.put);
+  return 'assign' in change ? withAssignment(hub, change.assign, true) : hub;
 }
