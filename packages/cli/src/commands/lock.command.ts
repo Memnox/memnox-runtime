@@ -1,4 +1,5 @@
 /** `memnox lock`: who holds what, from a third terminal, and taking or letting go of it. */
+import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { relative, resolve } from 'node:path';
 import type { Command } from 'commander';
@@ -221,6 +222,15 @@ function renderHolding(deps: LockDeps, lease: Lease, agent: string): void {
   flow.hint('Let it go early with "memnox lock --release".');
 }
 
+function realFolder(folder: string): string {
+  try {
+    return realpathSync.native(folder);
+  } catch {
+    // A folder nobody can read the real name of is still the folder it was named as.
+    return folder;
+  }
+}
+
 /**
  * Exactly the path that was named, relative to the repository. The seam widens a write to
  * its directory; a person who typed a path has already said what they mean.
@@ -230,7 +240,8 @@ async function resolveScope(project: string, path: string): Promise<string> {
   if (root === null) {
     throw new Error('A lease is repository-relative, and this is not a repository.');
   }
-  const wanted = normalizeLeasePath(relative(root, resolve(project, path)));
+  // From where the folder really is, since Windows may hand it over by a short name git never uses.
+  const wanted = normalizeLeasePath(relative(root, resolve(realFolder(project), path)));
   if (wanted === null) {
     throw new Error(`${path} is outside this repository, so nothing can lease it.`);
   }

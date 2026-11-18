@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { slashed } from '../domain/separators';
 import type { AgentRef } from './agent';
 import {
   FINGERPRINT_ALGORITHM,
@@ -57,9 +58,10 @@ const SENSITIVE_PATTERNS = [
 ];
 
 export function classifySensitivity(path: string): Sensitivity {
-  if (CRITICAL_PATTERNS.some((pattern) => pattern.test(path)))
+  const spelled = slashed(path);
+  if (CRITICAL_PATTERNS.some((pattern) => pattern.test(spelled)))
     return SENSITIVITY.CRITICAL;
-  if (SENSITIVE_PATTERNS.some((pattern) => pattern.test(path)))
+  if (SENSITIVE_PATTERNS.some((pattern) => pattern.test(spelled)))
     return SENSITIVITY.SENSITIVE;
   return SENSITIVITY.ORDINARY;
 }
@@ -72,6 +74,7 @@ export function isCredentialPath(path: string): boolean {
 export function classifyResourceKind(path: string): ResourceKind {
   if (path.endsWith('.sock')) return RESOURCE_KIND.SOCKET;
   if (isCredentialPath(path)) return RESOURCE_KIND.SECRET;
-  if (path.endsWith('/.git') || path.includes('/.git/')) return RESOURCE_KIND.REPO;
+  const spelled = slashed(path);
+  if (spelled.endsWith('/.git') || spelled.includes('/.git/')) return RESOURCE_KIND.REPO;
   return RESOURCE_KIND.FILE;
 }

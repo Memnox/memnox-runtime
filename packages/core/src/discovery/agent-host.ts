@@ -1,4 +1,5 @@
 import { delimiter, join } from 'node:path';
+import { slashed } from '../domain/separators';
 import { DISCOVERED_AGENT_KIND, type DiscoveredAgentKind } from './discovery.constants';
 import type { MachineReader } from './ports';
 
@@ -64,7 +65,11 @@ const UNUSUAL_SYSTEM_PREFIXES: readonly string[] = [
   '/private/tmp/',
   '/var/folders/',
 ];
-const UNUSUAL_HOME_DIRS: readonly string[] = ['Downloads', 'Desktop'];
+const UNUSUAL_HOME_DIRS: readonly string[] = [
+  'Downloads',
+  'Desktop',
+  'AppData/Local/Temp',
+];
 
 export interface HostSearch {
   /** The PATH the agent would be started with, split by the platform's delimiter. */
@@ -108,9 +113,12 @@ export function locationOf(
   home: string,
   projectDirs: readonly string[],
 ): HostLocation {
+  // Compared with `/` throughout, so a Windows path is placed as surely as any other.
+  const spelled = slashed(path);
+  const under = (dir: string): boolean => spelled.startsWith(`${slashed(dir)}/`);
   const unusual =
-    UNUSUAL_SYSTEM_PREFIXES.some((prefix) => path.startsWith(prefix)) ||
-    UNUSUAL_HOME_DIRS.some((dir) => path.startsWith(`${join(home, dir)}/`)) ||
-    projectDirs.some((dir) => path.startsWith(`${dir}/`));
+    UNUSUAL_SYSTEM_PREFIXES.some((prefix) => spelled.startsWith(prefix)) ||
+    UNUSUAL_HOME_DIRS.some((dir) => under(join(home, dir))) ||
+    projectDirs.some(under);
   return unusual ? HOST_LOCATION.UNUSUAL : HOST_LOCATION.INSTALLED;
 }

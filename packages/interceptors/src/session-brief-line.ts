@@ -5,6 +5,7 @@ import {
   readAccount,
   renderSessionBrief,
   SessionTasks,
+  slashed,
   type SessionBriefAsk,
 } from '@memnox/core';
 
@@ -78,8 +79,9 @@ function resourcesOf(
 /** A declared path or a folder as the repository names it, or null where it lies outside it. */
 function repositoryPath(raw: string, root: string | null): string | null {
   const bare = raw.replace(GLOB_TAIL, '');
-  if (!isAbsolute(bare)) return bare.replace(/^\.\//, '');
+  // Spelled with `/`, since the workspace keys on it and Windows hands over `\`.
+  if (!isAbsolute(bare)) return slashed(bare).replace(/^\.\//, '');
   if (root === null) return null;
   const inside = relative(root, bare);
-  return inside.startsWith('..') || isAbsolute(inside) ? null : inside;
+  return inside.startsWith('..') || isAbsolute(inside) ? null : slashed(inside);
 }

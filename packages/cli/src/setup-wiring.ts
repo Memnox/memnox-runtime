@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { ownProcessEnv, rememberRepository } from '@memnox/core';
+import { nativePath, ownProcessEnv, rememberRepository } from '@memnox/core';
 import { wrapEveryServer } from './mcp/wrap-servers';
 import { installClaudeHook } from './protect/claude-hook';
 import { writeHookLauncher } from './protect/hook-launcher';
@@ -165,13 +165,14 @@ function daemonState(service: InstallResult): WiredState {
 /** The repository `cwd` is in, or null where it is in none. */
 function repositoryOf(cwd: string): string | null {
   try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    const top = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd,
       // Setup's own question, so it goes to the real git rather than through the gate.
       env: ownProcessEnv(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    });
+    return nativePath(top);
   } catch {
     // Not a repository, or no git: nothing to watch from here.
     return null;
