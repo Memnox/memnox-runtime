@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ACTION } from '@memnox/core';
 import { agentEditsOf, agentDenial, EDIT_HOST, endedSessionOf } from '../src/agent-edits';
@@ -70,7 +70,8 @@ describe('Hermes before a tool', () => {
     });
     expect(write?.requests[0]).toMatchObject({
       action: ACTION.FILESYSTEM_WRITE,
-      target: join('/repo', 'src', 'a.ts'),
+      // Resolved as the call resolves it, which on Windows puts it on the current drive.
+      target: resolve('/repo', 'src', 'a.ts'),
     });
   });
 

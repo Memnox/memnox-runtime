@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CLAIM_ANSWER,
@@ -109,7 +109,8 @@ describe("what each of an agent's own tools does, as a rule names it", () => {
     ]);
     expect(
       toolCallOf(claude('Read', { file_path: '.env' }), HOME)?.requests[0]?.target,
-    ).toBe(`${REPO}/.env`);
+      // Resolved as the call resolves it, which on Windows puts it on the current drive.
+    ).toBe(resolve(REPO, '.env'));
   });
 
   it('searches the working directory where Grep and Glob name no path', () => {
