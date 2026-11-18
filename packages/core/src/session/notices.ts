@@ -44,6 +44,8 @@ export const NOTICE_KIND = {
   ASKING: 'asking',
   /** A budget passed the line its person asked to be told at, or ran out. */
   BUDGET: 'budget',
+  /** A server behind the proxy could not be reached, so the agent shows it as disconnected. */
+  SERVER_TROUBLE: 'server-trouble',
 } as const;
 
 export type NoticeKind = (typeof NOTICE_KIND)[keyof typeof NOTICE_KIND];
