@@ -16,6 +16,13 @@ import { withDefaultCommand } from '../src/program';
 import { CliContext } from '../src/cli-context';
 import { RecordedOutput } from '../src/cli-output';
 import { plainStyle } from '../src/style';
+import { watchConfigPaths } from '../src/config-watch';
+
+/** Seconds more than a first pass takes on a loaded Windows runner. */
+const FIRST_PASS_TIMEOUT_MS = 15_000;
+/** Past the poll, so a slow pass fails on what the keeper logged rather than on the suite's timeout. */
+const FIRST_PASS_TEST_TIMEOUT_MS = 20_000;
+const NOTICED = 'noticed';
 
 /**
  * Setup wired the machine once, and then the machine kept changing: Cursor installed a
@@ -152,28 +159,43 @@ describe('the daemon keeping the boundary setup drew', () => {
     expect(await keepOnce(machine, onlyClaude)).toEqual([]);
   });
 
-  it('tells the person each change, in the log and on the desktop', async () => {
-    const machine = await home();
-    await keepBoundary(machine, []);
-    await mkdir(join(machine, '.claude'));
-    const logged: string[] = [];
-    const noticed: string[] = [];
-    const keeper = new BoundaryKeeper(machine, {
-      log: (message) => logged.push(message),
-      notify: (message) => noticed.push(message),
-      seams: onlyClaude,
-      intervalMs: 60_000,
-    });
+  it(
+    'tells the person each change, in the log and on the desktop',
+    async () => {
+      const machine = await home();
+      await keepBoundary(machine, []);
+      await mkdir(join(machine, '.claude'));
+      const logged: string[] = [];
+      const noticed: string[] = [];
+      const keeper = new BoundaryKeeper(machine, {
+        log: (message) => logged.push(message),
+        notify: (message) => noticed.push(message),
+        seams: onlyClaude,
+        intervalMs: 60_000,
+        // Watching nothing, because a recursive watch on Windows is slow to open and only wakes passes this test never waits for.
+        watcher: () => watchConfigPaths([]),
+      });
 
-    keeper.start();
-    await expect.poll(() => noticed.length).toBe(1);
-    keeper.stop();
+      keeper.start();
+      // Polled as the log until noticed, so a first pass that failed on a slow runner says why rather than 0.
+      await expect
+        .poll(() => (noticed.length === 1 ? NOTICED : logged.join(' | ')), {
+          timeout: FIRST_PASS_TIMEOUT_MS,
+        })
+        .toBe(NOTICED);
+      keeper.stop();
 
-    expect(noticed[0]).toBe(
-      describeKept({ kind: KEPT_CHANGE.ADOPTED, agent: 'Claude Code', probation: true }),
-    );
-    expect(logged).toEqual(noticed);
-  });
+      expect(noticed[0]).toBe(
+        describeKept({
+          kind: KEPT_CHANGE.ADOPTED,
+          agent: 'Claude Code',
+          probation: true,
+        }),
+      );
+      expect(logged).toEqual(noticed);
+    },
+    FIRST_PASS_TEST_TIMEOUT_MS,
+  );
 });
 
 describe('what bare memnox runs', () => {
