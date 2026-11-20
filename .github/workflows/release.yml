@@ -119,6 +119,7 @@ jobs:
           git push origin "$TAG"
           gh workflow run release.yml --ref "$TAG"
           gh workflow run release-noise-apple.yml -f tag="$TAG"
+          gh workflow run release-noise-android.yml -f tag="$TAG"
           echo "::notice::tagged $TAG; the publish runs at the tag"
 
   # The Noise addon is native, so each platform builds its own on its own runner and the
