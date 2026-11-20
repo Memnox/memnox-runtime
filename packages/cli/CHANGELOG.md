@@ -1,5 +1,15 @@
 # memnox
 
+## 0.15.2
+
+### Patch Changes
+
+- a6c645a: On Windows, two agents writing one store at once no longer fail with `EPERM`, because a lock still being released is now waited on rather than reported as a fault.
+- a6c645a: `memnox status` and `memnox update` say first when the installed version was withdrawn with `npm deprecate`, with the reason the team gave, so a person with no desktop app learns of a faulty release too.
+  - @memnox/core@0.15.2
+  - @memnox/proxy@0.15.2
+  - @memnox/interceptors@0.15.2
+
 ## 0.15.1
 
 ### Patch Changes
