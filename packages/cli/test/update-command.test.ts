@@ -11,8 +11,10 @@ import {
   INSTALL_METHOD,
   installOf,
   isNewer,
+  isPlainVersion,
   pinnedTo,
   recordUpdate,
+  withdrawnReason,
 } from '../src/commands/update/install';
 import type { Verdict } from '../src/commands/update/provenance';
 import { keepBoundary } from '../src/keeper/kept';
@@ -52,6 +54,7 @@ async function update(
     home: () => home,
     installed: () => '0.12.0',
     latest: async () => '0.13.0',
+    withdrawn: async () => null,
     install: () => installOf(NPM_ENTRY),
     confirm: async () => true,
     run,
@@ -236,5 +239,38 @@ describe('how this copy was installed', () => {
     expect(isNewer('0.12.10', '0.12.9')).toBe(true);
     expect(isNewer('0.12.0', '0.12.0')).toBe(false);
     expect(isNewer('0.11.9', '0.12.0')).toBe(false);
+  });
+});
+
+describe('memnox update on a version the team withdrew', () => {
+  it('says why the installed version was withdrawn before it asks', async () => {
+    const { out, run } = await update({
+      withdrawn: async (version) =>
+        version === '0.12.0' ? 'signature check fault' : null,
+    });
+
+    expect(out.text).toContain(
+      'Memnox 0.12.0 was withdrawn for a fault: signature check fault',
+    );
+    expect(run).toHaveBeenCalledWith(['npm', 'install', '-g', 'memnox@0.13.0']);
+  });
+
+  it('says nothing of a withdrawal for a version that stands', async () => {
+    const { out } = await update({});
+
+    expect(out.text).not.toContain('withdrawn');
+  });
+});
+
+describe('asking npm whether a version was withdrawn', () => {
+  it('names only a plain version, so nothing else becomes an npm command', () => {
+    expect(isPlainVersion('0.15.1')).toBe(true);
+    for (const odd of ['latest', '0.15', '0.15.1-beta', '--registry=x', '0.15.1 x', '']) {
+      expect(isPlainVersion(odd)).toBe(false);
+    }
+  });
+
+  it('asks npm nothing for a version that is not plain', async () => {
+    expect(await withdrawnReason('--registry=https://elsewhere.test')).toBeNull();
   });
 });

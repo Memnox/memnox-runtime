@@ -205,6 +205,7 @@ describe('memnox stop and memnox start', () => {
     const out = new RecordedOutput();
     const program = new Command();
     registerStatusCommand(program, new CliContext(out, plainStyle), {
+      withdrawn: async () => null,
       read: async () => ({
         ...SET_UP,
         stopped: {

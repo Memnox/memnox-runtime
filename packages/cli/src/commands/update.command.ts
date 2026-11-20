@@ -13,6 +13,7 @@ import { wireMachine, type Wiring } from '../setup-wiring';
 import {
   installOf,
   isNewer,
+  withdrawnReason,
   latestPublished,
   pinnedTo,
   recordUpdate,
@@ -32,6 +33,8 @@ export interface UpdateDeps {
   project: () => string;
   installed: () => string;
   latest: () => Promise<string | null>;
+  /** Why the team withdrew a version with `npm deprecate`, or null while it stands. */
+  withdrawn: (version: string) => Promise<string | null>;
   install: () => Install;
   confirm: Confirm;
   run: (command: readonly string[]) => Promise<boolean>;
@@ -69,6 +72,7 @@ export function registerUpdateCommand(
     project: () => process.cwd(),
     installed: () => CLI_VERSION,
     latest: latestPublished,
+    withdrawn: withdrawnReason,
     install: () => installOf(runningEntry()),
     confirm: confirmOnTerminal,
     run: runAttached,
@@ -111,7 +115,12 @@ async function runUpdate(
   flow.open('memnox update');
   const installed = deps.installed();
   const install = deps.install();
-  const latest = await deps.latest();
+  const [latest, withdrawn] = await Promise.all([
+    deps.latest(),
+    deps.withdrawn(installed),
+  ]);
+  // Said before anything else, since it is why this update matters more than any other.
+  if (withdrawn !== null) flow.aside(style.warn(withdrawnLine(installed, withdrawn)));
   if (latest === null) {
     flow.rows('Memnox', [{ label: 'installed', value: installed }]);
     flow.close(
@@ -130,6 +139,11 @@ async function runUpdate(
     return;
   }
   await upgrade(context, deps, { installed, latest, install, skipVerify });
+}
+
+/** What a withdrawn install says, the same on `memnox status` and `memnox update`. */
+export function withdrawnLine(version: string, reason: string): string {
+  return `Memnox ${version} was withdrawn for a fault: ${reason}`;
 }
 
 /** Asks, runs the upgrade, then rewires; each step that does not happen says what would. */

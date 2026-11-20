@@ -348,6 +348,7 @@ describe('dormant agents', () => {
         registerStatusCommand(program, context, {
           home: () => '/nowhere',
           project: () => '/nowhere',
+          withdrawn: async () => null,
           read: async () => ({
             setUp: true,
             mode: ENFORCEMENT_MODE.ENFORCE,

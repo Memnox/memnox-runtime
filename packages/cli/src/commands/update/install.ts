@@ -17,6 +17,8 @@ const LATEST = `${PACKAGE}@latest`;
 
 /** Long enough for a slow registry, short enough that an offline laptop is not left waiting. */
 const LOOKUP_TIMEOUT_MS = 10_000;
+/** Short, since status asks it beside everything else and must never wait on a slow network. */
+const WITHDRAWN_TIMEOUT_MS = 3_000;
 
 /** A whole install into a scratch directory and an audit of it, on a slow connection. */
 const VERIFY_TIMEOUT_MS = 180_000;
@@ -94,6 +96,30 @@ export function latestPublished(): Promise<string | null> {
       },
     );
   });
+}
+
+/**
+ * Why the team withdrew `version` with `npm deprecate`, or null while it stands or npm could not be asked. Only a
+ * plain version is named, so nothing read from elsewhere can turn this into another npm command.
+ */
+export function withdrawnReason(version: string): Promise<string | null> {
+  if (!isPlainVersion(version)) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile(
+      'npm',
+      ['view', `${PACKAGE}@${version}`, 'deprecated'],
+      { env: ownProcessEnv(), timeout: WITHDRAWN_TIMEOUT_MS },
+      (err, stdout) => {
+        const reason = String(stdout).trim();
+        resolve(err === null && reason !== '' ? reason : null);
+      },
+    );
+  });
+}
+
+/** Digits in three dotted parts, the only shape a published memnox version takes. */
+export function isPlainVersion(version: string): boolean {
+  return /^\d+\.\d+\.\d+$/.test(version);
 }
 
 /** The upgrade pinned to the version that was verified, so a release cut since cannot slip in. */

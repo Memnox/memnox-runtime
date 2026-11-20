@@ -37,6 +37,9 @@ import { describeProbations } from '../probation-view';
 import { readDormantHere } from '../keeper/keep-dormant';
 import { readHome } from '../daemon/home-answer';
 import { SessionViews } from '../daemon/session-view';
+import { CLI_VERSION } from '../defaults';
+import { withdrawnReason } from './update/install';
+import { withdrawnLine } from './update.command';
 
 /** Whether anything is holding the boundary setup drew, as the screen says it. */
 const DAEMON_STATE = {
@@ -79,6 +82,9 @@ interface StatusDeps {
   read: (home: string, project: string) => Promise<MachineStatus>;
   /** What is working and what could be handed over, the two home blocks status had no row for. */
   ahead: (home: string) => Promise<Ahead>;
+  /** The version running and why the team withdrew it, if it did; asked beside the rest so status never waits on it. */
+  installed: () => string;
+  withdrawn: (version: string) => Promise<string | null>;
 }
 
 /** The home's working and ready blocks, as the Mac and the iPhone show them. */
@@ -97,6 +103,8 @@ export function registerStatusCommand(
     project: () => process.cwd(),
     read: readStatus,
     ahead: readAhead,
+    installed: () => CLI_VERSION,
+    withdrawn: withdrawnReason,
     ...overrides,
   };
   program
@@ -104,15 +112,26 @@ export function registerStatusCommand(
     .description('Where this machine stands: what is held, and what happened today')
     .option('--json', 'machine-readable output')
     .action(async (options: { json?: boolean }) => {
-      const status = await deps.read(deps.home(), deps.project());
+      const version = deps.installed();
+      const [status, reason] = await Promise.all([
+        deps.read(deps.home(), deps.project()),
+        deps.withdrawn(version).catch(() => null),
+      ]);
       const ahead = status.setUp
         ? await deps.ahead(deps.home()).catch((): Ahead => ({ working: [] }))
         : { working: [] };
+      const withdrawn = reason === null ? undefined : { version, reason };
       if (options.json === true) {
-        context.out.json({ ...status, ...ahead });
+        context.out.json({
+          ...status,
+          ...ahead,
+          ...(withdrawn === undefined ? {} : { withdrawn }),
+        });
         return;
       }
-      renderStatus(context, status, ahead);
+      renderStatus(context, status, ahead, withdrawn);
+      if (withdrawn !== undefined)
+        context.flow.hint('"memnox update" moves to the fixed version.');
     });
 }
 
@@ -236,9 +255,17 @@ function renderAhead(context: CliContext, ahead: Ahead): void {
   }
 }
 
-function renderStatus(context: CliContext, status: MachineStatus, ahead: Ahead): void {
+function renderStatus(
+  context: CliContext,
+  status: MachineStatus,
+  ahead: Ahead,
+  withdrawn?: { version: string; reason: string },
+): void {
   const { flow, style } = context;
   flow.open('memnox status');
+  // First, since a withdrawn version is the one thing on this screen that should be fixed today.
+  if (withdrawn !== undefined)
+    flow.aside(style.warn(withdrawnLine(withdrawn.version, withdrawn.reason)));
   if (!status.setUp) {
     flow.close('This machine is not under Memnox yet.');
     flow.hint('"memnox setup" puts it there, with no account.');
