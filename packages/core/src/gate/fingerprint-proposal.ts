@@ -7,6 +7,7 @@ import {
   parseCodeFingerprint,
   type CodeFingerprint,
 } from './code-fingerprint';
+import { slashed } from '../domain/separators';
 
 /**
  * What the agent working in a repository is asked, once, so the fingerprint is read out
@@ -123,7 +124,8 @@ export function checksBreakingExisting(
     broken.push({
       name: check.name,
       lines: hits.reduce((sum, each) => sum + each.count, 0),
-      first: first.file.path.slice(root.length + 1),
+      // Named as the repository names it, so an agent on Windows reads the same path.
+      first: slashed(first.file.path.slice(root.length + 1)),
     });
   }
   return broken;

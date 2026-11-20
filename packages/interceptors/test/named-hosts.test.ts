@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ACTION, DECISION_EFFECT, ENFORCEMENT_MODE, TOOL_CLASS } from '@memnox/core';
 import { agentEditsOf, agentDenial, EDIT_HOST, endedSessionOf } from '../src/agent-edits';
@@ -194,7 +195,7 @@ describe('OpenCode', () => {
     );
     if (call === null) throw new Error('a read is a tool call');
 
-    expect(call.requests[0]).toMatchObject({ target: `${HOME}/.aws/credentials` });
+    expect(call.requests[0]).toMatchObject({ target: join(HOME, '.aws', 'credentials') });
     expect(JSON.parse(toolReply(call, ASK, true)?.stdout ?? '')).toMatchObject({
       decision: 'block',
     });

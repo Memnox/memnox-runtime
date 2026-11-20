@@ -1,26 +1,131 @@
 name: Release
 
-# Releasing is a decision, and a tag is how somebody makes it.
+# Releasing is a decision, and merging the release pull request is how somebody makes it.
 #
-# This ran on every push to main, which was safe only while a changeset was always
-# pending: the action opens a version PR when it finds one and publishes when it does
-# not. With none pending, merging anything to main published it — and because this
-# workflow and `ci.yml` are independent, it would have published without waiting to
-# see whether the tests passed.
+# A merge to main with changesets pending publishes nothing: it opens, or brings up to date, one pull request
+# titled "chore(release): version packages" that raises the versions and writes the changelogs. Merging that pull
+# request is the release. The merge reaches main with no changeset left and a version npm has not seen, so this
+# workflow tags it vX.Y.Z and runs itself again at that tag, where it builds every Noise addon, proves the commit
+# with the typecheck, the build and the tests, and publishes to npm. A merge with nothing pending and nothing new
+# publishes nothing.
+#
+# It publishes only at a tag because `memnox update` refuses a package whose provenance does not name this file at a
+# refs/tags/v ref (packages/cli/src/commands/update/provenance.ts). A tag made by the workflow's own token starts no
+# workflow, so the run at the tag, and the Apple Noise build, are started by name, which that token may do.
+#
+# This once published on any push to main without waiting for the tests. Now nothing reaches npm unless a person
+# merged a version raise, and the release job runs the tests itself before it publishes.
+#
+# npm trusts this workflow directly through trusted publishing, so no npm token exists to leak: GitHub signs a
+# short lived identity for the run, npm checks it names this repository, this file and the release environment,
+# and every package carries a provenance attestation. The release environment only main and v tags may deploy to.
+#
+# `pnpm ship` still works: it pushes a v tag with main, and the tag releases exactly as before.
 on:
   push:
+    branches: [main]
     tags: ['v*']
+  # How the tag job below starts the publish at the tag it made.
+  workflow_dispatch:
 
-# `id-token` is what signs the provenance attestation; `contents` is only read here,
-# because a tag build publishes what the tag points at and writes nothing back.
 permissions:
   contents: read
-  id-token: write
+
+# A merge and the tag `pnpm ship` pushes with it run one after the other, so the second finds the work done.
+concurrency:
+  group: release-runtime
+  cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Decide what this push releases
+    runs-on: ubuntu-latest
+    outputs:
+      pending: ${{ steps.plan.outputs.pending }}
+      publish: ${{ steps.plan.outputs.publish }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Plan
+        id: plan
+        run: |
+          pending=$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | wc -l | tr -d ' ')
+          version=$(node -p "require('./packages/cli/package.json').version")
+          publish=false
+          tag=false
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            publish=true
+          elif [ "$GITHUB_REF_NAME" = main ] && [ "$pending" = 0 ] && [ -z "$(git tag -l "v$version")" ] && [ -z "$(npm view "memnox@$version" version 2>/dev/null)" ]; then
+            # Only a merged version raise leaves main with nothing pending and a version neither tagged nor on npm.
+            tag=true
+          fi
+          echo "pending=$pending" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "::notice::$pending changesets pending, version $version, tag $tag, publish $publish"
+
+  # Opened by the workflow's own token, which starts no workflow, so CI does not run on it by itself; the release
+  # job tests the merged commit before anything reaches npm.
+  version-pr:
+    name: Open the release pull request
+    needs: plan
+    if: github.ref_name == 'main' && needs.plan.outputs.pending != '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@v1
+        with:
+          version: pnpm run version
+          title: 'chore(release): version packages'
+          commit: 'chore(release): version packages'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  # The merged version raise is tagged on the commit that was merged, and the publish and the Apple Noise build are
+  # started at that tag, the same as a tag `pnpm ship` pushes would start them.
+  tag:
+    name: Tag the version raise
+    needs: plan
+    if: needs.plan.outputs.tag == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      TAG: v${{ needs.plan.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
+          gh workflow run release.yml --ref "$TAG"
+          gh workflow run release-noise-apple.yml -f tag="$TAG"
+          echo "::notice::tagged $TAG; the publish runs at the tag"
+
   # The Noise addon is native, so each platform builds its own on its own runner and the
   # release job publishes each one inside the package npm installs on that platform only.
   noise:
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
     strategy:
       fail-fast: true
       matrix:
@@ -54,8 +159,14 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: noise
+    needs: [plan, noise]
+    environment: release
     runs-on: ubuntu-latest
+    # `id-token` is the identity npm trusts and what signs the provenance; `contents` is only read here, because a
+    # tag build publishes what the tag points at and writes nothing back.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,16 +187,17 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later, newer than the one Node 22 brings.
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
-      # This job does not wait for `ci.yml`, so it proves the tag itself before anything reaches npm.
+      # This job does not wait for `ci.yml`, so it proves the commit itself before anything reaches npm.
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: pnpm run test
-      # The action exists to open version PRs from changesets, which a tag build is
+      # The action exists to open version PRs from changesets, which this job is
       # past. `changeset publish` is the half that matters here: it skips anything
       # already on the registry and publishes the rest in dependency order, so
       # `@memnox/core` lands before the CLI that requires it.
       - run: pnpm run release
         env:
           NPM_CONFIG_PROVENANCE: true
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -15,14 +15,15 @@ else happens in your agent session, and every command below is still there:
 `memnox help --all` lists them all, and `memnox help <command>` describes one.
 
 ### `memnox stop`
+
 Turns protection off on this machine, on purpose and on the record. Every seam and
 hook lets everything through without ruling, and the daemon stops putting hooks back
 and adopting new agents, so nothing turns protection on again behind your back.
 
-| Flag | What it does |
-|---|---|
+| Flag               | What it does                                               |
+| ------------------ | ---------------------------------------------------------- |
 | `--for <duration>` | come back on by itself after this long, e.g. `30m` or `2h` |
-| `--reason <text>` | why, in the words your team will read |
+| `--reason <text>`  | why, in the words your team will read                      |
 
 The mode in `config.toml` is left as it was, and `~/.memnox/stopped.json` says who
 stopped it, why, until when, and in which mode. A seam reads that file before it
@@ -35,10 +36,12 @@ reports the machine as running `off`, because a machine turning its own protecti
 off is something its team has to see. `memnox status` shows the stop first.
 
 ### `memnox start`
+
 Turns protection back on, in exactly the mode it was stopped in. Where a timed stop
 already ran out, it says so rather than recording a start of its own.
 
 ### `memnox update`
+
 Prints the installed version and the latest published one, and upgrades only after
 you say yes, with the command for how this copy was installed: `npm install -g
 memnox@latest` for an npm global install, `pnpm add -g memnox@latest` for pnpm.
@@ -51,32 +54,33 @@ it says so and changes nothing.
 Before anything is installed it checks who built the release. npm installs exactly
 that version into a scratch directory with no scripts run, `npm audit signatures`
 checks every registry signature and provenance attestation in it, and every `memnox`
-and `@memnox/*` package must carry provenance from `github.com/Memnox/memnox`'s
+and `@memnox/*` package must carry provenance from `github.com/Memnox/memnox-runtime`'s
 `release.yml` at a version tag. Anything else refuses the update and names the
 package and what failed, and the install that follows is pinned to the version that
 was checked. Each update is a line in `~/.memnox/updates.jsonl`.
 
-| Flag | What it does |
-|---|---|
-| `-y, --yes` | update without asking |
+| Flag            | What it does                                                         |
+| --------------- | -------------------------------------------------------------------- |
+| `-y, --yes`     | update without asking                                                |
 | `--skip-verify` | install without the check; said on screen and recorded as unverified |
 
 ## What can act here
 
 ### `memnox scan`
+
 The default command, so `npx memnox` runs it.
 
-| Flag | What it does |
-|---|---|
-| `--tools` | every tool by class, server by server |
-| `--mcp <server>` | one server: what it declares, asks for and reaches |
-| `--usage <window>` | granted against used, e.g. `--usage 7d` |
-| `--save` | keep this scan as a baseline for a later `--since` |
-| `--since <when>` | what changed since the last scan at or before then |
-| `--fail-on <gate>` | `any`, `write-capable` or `credential`; non-zero exit for CI |
-| `--sarif` | a comparison as SARIF 2.1.0 for code scanning; needs `--fail-on`, `--since` or `--from` |
-| `--no-probe` | do not start MCP servers; tools go uncounted |
-| `--json` | the capability inventory (version 4) |
+| Flag               | What it does                                                                            |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `--tools`          | every tool by class, server by server                                                   |
+| `--mcp <server>`   | one server: what it declares, asks for and reaches                                      |
+| `--usage <window>` | granted against used, e.g. `--usage 7d`                                                 |
+| `--save`           | keep this scan as a baseline for a later `--since`                                      |
+| `--since <when>`   | what changed since the last scan at or before then                                      |
+| `--fail-on <gate>` | `any`, `write-capable` or `credential`; non-zero exit for CI                            |
+| `--sarif`          | a comparison as SARIF 2.1.0 for code scanning; needs `--fail-on`, `--since` or `--from` |
+| `--no-probe`       | do not start MCP servers; tools go uncounted                                            |
+| `--json`           | the capability inventory (version 4)                                                    |
 
 Agents are found by config file, never by a process list — JSON for the editors, TOML
 for Codex, YAML for Hermes. Claude Code, Claude Desktop, Cursor, Codex, Cline and VS
@@ -113,6 +117,7 @@ never a result, and a file inside the checkout is named relative to it so code s
 can open it. A first run with no kept scan writes an empty run rather than failing.
 
 ### `memnox setup`
+
 The whole first run, in one command: log in, find the agents on this machine,
 and go through them one at a time.
 
@@ -121,12 +126,12 @@ does the precise version of its last step, and two commands one word apart is a
 pair somebody has to read twice to tell apart. Bare `memnox` still runs `scan`:
 the first thing this shows you is your own machine, not a sign-in page.
 
-| Flag | What it does |
-|---|---|
-| `--url <base>` | the control plane, when it is not the default |
-| `--enforce` | start in enforce rather than observe |
-| `--no-open` | print the code and the approval URL instead of opening a browser |
-| `--no-probe` | do not start MCP servers to ask what they hold |
+| Flag           | What it does                                                     |
+| -------------- | ---------------------------------------------------------------- |
+| `--url <base>` | the control plane, when it is not the default                    |
+| `--enforce`    | start in enforce rather than observe                             |
+| `--no-open`    | print the code and the approval URL instead of opening a browser |
+| `--no-probe`   | do not start MCP servers to ask what they hold                   |
 
 **One approval, and it is for the machine.** You answer a browser once, when
 this laptop enrols. Every agent on it is then enrolled on the credential that
@@ -260,7 +265,7 @@ workspace: a record written against one control plane is not proof the next one
 has that agent. A revocation the old plane did not answer is named with the
 machine id to revoke by hand rather than counted as done.
 
-An agent whose record names another workspace and which was *not* handed back,
+An agent whose record names another workspace and which was _not_ handed back,
 which is the state `memnox login --url` on its own leaves, is reported as
 `elsewhere` rather than onboarded over. Rewriting it would back up a config that
 already points at the other plane, which turns `offboard` into a second way to
@@ -270,18 +275,19 @@ end up there, so the run names `memnox agents offboard <name>` and moves on.
 steps separately, for when you want one of them.
 
 ### `memnox agents`
+
 The agents on this machine: find them, name them, put them to work. `discover` is
 the default.
 
-| Command | What it does |
-|---|---|
-| `agents discover` | scan this machine, ask what to call what it found, keep the scan, and report it if this machine is enrolled |
-| `agents list` | what the last scan found, without taking a new one, and whether each is onboarded |
-| `agents name <agent> [name]` | call one whatever you call it; `--clear` puts the detected name back |
-| `agents status <agent>` | one agent, and the file that proved each surface it has |
-| `agents onboard [agent]` | back its config up and route it through Memnox; with no agent, lists what could be. `--name` says what the workspace should call it |
-| `agents offboard <agent>` | put the config back and revoke the credential |
-| `agents control [agent]` | collect what an operator has said, and acknowledge it |
+| Command                      | What it does                                                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `agents discover`            | scan this machine, ask what to call what it found, keep the scan, and report it if this machine is enrolled                         |
+| `agents list`                | what the last scan found, without taking a new one, and whether each is onboarded                                                   |
+| `agents name <agent> [name]` | call one whatever you call it; `--clear` puts the detected name back                                                                |
+| `agents status <agent>`      | one agent, and the file that proved each surface it has                                                                             |
+| `agents onboard [agent]`     | back its config up and route it through Memnox; with no agent, lists what could be. `--name` says what the workspace should call it |
+| `agents offboard <agent>`    | put the config back and revoke the credential                                                                                       |
+| `agents control [agent]`     | collect what an operator has said, and acknowledge it                                                                               |
 
 **Names are yours, and ids stay the identity.** `agt_claude-code` is what every
 ledger row is keyed on and it never moves. The name is a second field over the
@@ -312,7 +318,7 @@ it asks. So it names the three steps in order, says that authority does not chan
 and prints the undo beside the result. Nothing on disk is touched until the
 approval comes back, and the screen says that too.
 
-All of it is about *this machine*. The console answers what the whole fleet runs,
+All of it is about _this machine_. The console answers what the whole fleet runs,
 because only something holding every machine's reports can, and answering that from
 here would mean widening what a machine credential reaches.
 
@@ -326,6 +332,7 @@ back is a person's own words for whoever is at the agent, and it is never permis
 what the agent does next is decided here, against the rules already on disk.
 
 ### `memnox doctor`
+
 What is reachable that should not be, ranked, each with the one change that closes it.
 `--by-agent` decomposes per agent. Counts by severity, never a total.
 
@@ -337,6 +344,7 @@ settings, in your own (which a local edit can remove), or in both (every call ru
 twice). Every line that is not `ok` names the command that fixes it.
 
 ### `memnox explain <subject>`
+
 A tool name gives its provenance: which server, which config, which agents reach it,
 how long it has been there.
 
@@ -344,7 +352,7 @@ An agent kind — `cursor`, `codex-cli`, `hermes` — gives what that product ho
 the files that declared it, its surfaces, the MCP servers its own config names, whether
 it holds a shell, and any path its tools open together.
 
-It ends with **Governed by**: which seams are in front of *that* agent right now, and
+It ends with **Governed by**: which seams are in front of _that_ agent right now, and
 the command that closes each one that is not. `doctor --wiring` answers the same
 question for the machine, which is the wrong grain once there is more than one agent on
 it — a wrapped Claude Code and an unwrapped Cursor average out to a number nobody can
@@ -381,21 +389,23 @@ organization intended is not on this disk, so it is not answered here.
 ## What changed
 
 ### `memnox scan --since <when>`
+
 The same scan, compared against the last one this machine kept. Part of `scan`
 rather than a command of its own, because a person who has just seen what can act
 here asks what changed next, and two commands for one question is one of them
 going unrun.
 
-| Flag | What it does |
-|---|---|
-| `--since <when>` | compare against the last scan at or before then |
-| `--from` / `--to` | compare two kept scans |
+| Flag               | What it does                                                 |
+| ------------------ | ------------------------------------------------------------ |
+| `--since <when>`   | compare against the last scan at or before then              |
+| `--from` / `--to`  | compare two kept scans                                       |
 | `--fail-on <gate>` | `any`, `write-capable` or `credential`; non-zero exit for CI |
 
 A narrowing never trips `--fail-on`. It needs no account, no network and no
 baseline anybody had to remember to take, because every saved scan records one.
 
 ### `memnox watch`
+
 Reports what arrived: new servers, new write tools, credentials that became
 reachable, agents that updated themselves, and a harness that gained a role, a hook
 file or a federation link — which arrives without any config a client reads changing. It wakes when an agent's
@@ -405,31 +415,32 @@ configuration changes, so a server added mid-watch shows up in seconds; the
 ## Rules
 
 ### `memnox protect`
+
 Proposes reversible steps by default and prints the undo before it runs anything.
 
-| Flag | What it does |
-|---|---|
-| `--apply` | write the proposed steps |
-| `--revert [id]` | undo one, or all of them |
-| `--observe` / `--enforce` | set the mode |
-| `--apply-native` | also write the rules into Claude Code's own permissions |
-| `--revert-native` | take ours back out, leaving theirs |
-| `--for <name>` | write rules for one CLI or MCP server only |
-| `--from-usage <window>` | draft ask rules for what was granted and never used |
-| `--ask <action...>` / `--deny <action...>` | write a rule you decided here; on an enrolled machine the next sync offers it to your team as a proposal a second admin approves |
-| `--interceptors` | install the PATH wrappers for every CLI this machine has |
-| `--hooks` | install `pre-push` and `pre-commit` in this repository |
-| `--claude-hook` | make Claude Code take a lease before it writes a file |
-| `--revert-claude-hook` | take that hook back out of Claude Code |
-| `--project-hook` | put that hook in this repository's own `.claude/settings.local.json` too, which a Claude Code started by a harness with project setting sources only still reads |
-| `--revert-project-hook` | take the hook back out of this repository |
-| `--managed` | move Claude Code's hook into its managed settings, where no local config can remove it |
-| `--revert-managed` | move it back into your own settings |
-| `--exclusive` | with `--managed`, run only managed hooks, so none a repository ships can |
-| `--vscode` | install the extension that lets the voice show the exact VS Code, Cursor or Windsurf terminal a session runs in |
-| `--revert-vscode` | take that extension back out of those editors |
-| `--os-guard` | write the kernel sandbox profile from your filesystem rules |
-| `--interactive` / `--yes` | walk the domains, or take the recommendation |
+| Flag                                       | What it does                                                                                                                                                     |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--apply`                                  | write the proposed steps                                                                                                                                         |
+| `--revert [id]`                            | undo one, or all of them                                                                                                                                         |
+| `--observe` / `--enforce`                  | set the mode                                                                                                                                                     |
+| `--apply-native`                           | also write the rules into Claude Code's own permissions                                                                                                          |
+| `--revert-native`                          | take ours back out, leaving theirs                                                                                                                               |
+| `--for <name>`                             | write rules for one CLI or MCP server only                                                                                                                       |
+| `--from-usage <window>`                    | draft ask rules for what was granted and never used                                                                                                              |
+| `--ask <action...>` / `--deny <action...>` | write a rule you decided here; on an enrolled machine the next sync offers it to your team as a proposal a second admin approves                                 |
+| `--interceptors`                           | install the PATH wrappers for every CLI this machine has                                                                                                         |
+| `--hooks`                                  | install `pre-push` and `pre-commit` in this repository                                                                                                           |
+| `--claude-hook`                            | make Claude Code take a lease before it writes a file                                                                                                            |
+| `--revert-claude-hook`                     | take that hook back out of Claude Code                                                                                                                           |
+| `--project-hook`                           | put that hook in this repository's own `.claude/settings.local.json` too, which a Claude Code started by a harness with project setting sources only still reads |
+| `--revert-project-hook`                    | take the hook back out of this repository                                                                                                                        |
+| `--managed`                                | move Claude Code's hook into its managed settings, where no local config can remove it                                                                           |
+| `--revert-managed`                         | move it back into your own settings                                                                                                                              |
+| `--exclusive`                              | with `--managed`, run only managed hooks, so none a repository ships can                                                                                         |
+| `--vscode`                                 | install the extension that lets the voice show the exact VS Code, Cursor or Windsurf terminal a session runs in                                                  |
+| `--revert-vscode`                          | take that extension back out of those editors                                                                                                                    |
+| `--os-guard`                               | write the kernel sandbox profile from your filesystem rules                                                                                                      |
+| `--interactive` / `--yes`                  | walk the domains, or take the recommendation                                                                                                                     |
 
 `--interceptors` wraps only binaries that are actually installed: a shim for an
 absent `aws` would answer `command -v aws` and send every script that checks for
@@ -438,6 +449,7 @@ path stays unreadable even to a binary that never saw a wrapper — and any patt
 the kernel cannot express as a literal subpath is printed rather than dropped.
 
 ### `memnox check "<intent>"`
+
 Decides before the loop starts rather than interrupting it half an hour in. The same
 engine, the same rules and the same state, run against the actions an intent resolves
 to, with nothing executed. Exits non-zero when something would stop.
@@ -447,16 +459,18 @@ A command line is resolved exactly. A phrase resolves to every action it could m
 it was read as is printed, so a wrong reading is visible rather than mysterious.
 
 ### `memnox policy check [file]`
+
 Reads every rule file this machine would load and says what is in force, what
 moved and what will not parse. Without a file it checks the whole registry.
 
-| Flag | What it does |
-|---|---|
+| Flag      | What it does                                           |
+| --------- | ------------------------------------------------------ |
 | `--prune` | forget registered paths that are no longer on the disk |
 
 Exits non-zero when a file is broken, so a CI step can run it.
 
 ### `memnox why`
+
 Prints the rule, where it is declared, the reason and the alternative — and, for a git
 action, what this repository already says about itself: branch protection, CODEOWNERS,
 and whether the open pull request is approved and its checks are passing. All of it is
@@ -467,6 +481,7 @@ What Slack, the ticket tracker and the calendar say is not here and is not comin
 needs a token on every laptop. It is the cloud's half of the same question.
 
 ### When a session is paused
+
 An agent that retries the same failing command is stopped by the circuit breaker, and
 the seam does it in process — there is no daemon to install and no counter to keep:
 
@@ -485,6 +500,7 @@ action that tripped it has already run; holding it at that point would be a rece
 rather than a control.
 
 ### `memnox next --role <name>` / `--roles`
+
 A rule about a product is wrong the moment the team adopts a second one; a rule about
 the job survives the tool being swapped underneath it. `--role` evaluates the boundary
 as that job, so a `roles:` rule fires:
@@ -511,6 +527,7 @@ A role is read from the rules, never from a roster: a job nothing has a rule abo
 name somebody typed once, and listing it would suggest it governs something.
 
 ### `memnox doctor --prove`
+
 Asks every seam to refuse something, and reports what came back. It plants a rule in a
 scratch directory, attempts the thing the rule forbids through the MCP proxy and the
 shell interceptor, and says whether the action was actually stopped.
@@ -529,13 +546,14 @@ and fails the second.
 
 The probe runs with **no `MEMNOX_POLICIES` set and its own `HOME`**, because that is
 what an agent has: an editor opened from a dock icon carries no environment. A probe
-that exported the variable would prove a seam *can* refuse rather than that it *will*.
+that exported the variable would prove a seam _can_ refuse rather than that it _will_.
 
 **Absent never fails the command.** A machine with no egress proxy has declined the
 test, not failed it, and going red for that teaches people to stop running the check.
 Only a seam that was in place and let the action through exits non-zero.
 
 ### `memnox policy use [file]`
+
 Registers a rule file, so every seam loads it. Writing `memnox.policies.toml` makes it
 testable; registering it makes it enforced. `protect --apply` registers what it writes,
 so this is for a file you wrote by hand.
@@ -545,31 +563,36 @@ not ok: `policy test` answering DENY while every seam allows the same action is 
 state a health check must never print a clean number about.
 
 ### `memnox policy test "<action>"`
+
 Dry run. Prints the effect, the reason, the rule and the alternative. Exits non-zero
 on anything that is not an allow, so it works in a hook.
 
 ### `memnox freeze [subject]`
+
 Stops external-state actions for a while. Every freeze carries an expiry: one
 that outlives its incident is worse than none, because the next one gets
 ignored.
 
-| Flag | What it does |
-|---|---|
-| `--for <window>` | how long, e.g. `2h` or `3d`. Defaults to two hours |
-| `--reason <text>` | what the refusal will say |
-| `--lift` | end it early; it stays in the record rather than vanishing |
+| Flag              | What it does                                               |
+| ----------------- | ---------------------------------------------------------- |
+| `--for <window>`  | how long, e.g. `2h` or `3d`. Defaults to two hours         |
+| `--reason <text>` | what the refusal will say                                  |
+| `--lift`          | end it early; it stays in the record rather than vanishing |
 
 ### `memnox config`
+
 `get`, `set` and `list`. Settings: `mode`, `retentionDays`, `failOpen`, `telemetry`.
 
 ## Calls waiting for a person
 
 ### `memnox approvals`
+
 Calls held for somebody to answer. A hold written to disk is what lets a second
 terminal — and later a platform lead in Slack — release something the first
 terminal is still waiting on.
 
 ### `memnox approve <id>` / `memnox deny <id>`
+
 Answers one, or `--group` to answer for every waiting call of the same kind.
 
 **An `ask` rule now holds rather than denies.** The seam writes the question to
@@ -597,14 +620,14 @@ person is asked for: freeing lines another agent holds, acknowledging or
 resolving an incident, approving a decision, verifying a fact, approving a
 policy change. What a person decides without being asked is typed there too:
 
-| Command | What it does |
-|---|---|
-| `/memnox waiting` | how many agents are waiting on a person |
-| `/memnox tell <agent> <message>` | a note the agent reads at its next step |
+| Command                                        | What it does                                |
+| ---------------------------------------------- | ------------------------------------------- |
+| `/memnox waiting`                              | how many agents are waiting on a person     |
+| `/memnox tell <agent> <message>`               | a note the agent reads at its next step     |
 | `/memnox freeze 2h [why]` / `/memnox unfreeze` | stop agents shipping until then, or lift it |
-| `/memnox approve-agent <agent>` | let a new agent out of shadow |
-| `/memnox mode <machine> observe` | change how a machine is governed |
-| `/memnox revoke <machine>` | cut a machine off |
+| `/memnox approve-agent <agent>`                | let a new agent out of shadow               |
+| `/memnox mode <machine> observe`               | change how a machine is governed            |
+| `/memnox revoke <machine>`                     | cut a machine off                           |
 
 A press or a command counts only from a chat account linked to a person with
 the role the action needs. Slack accounts are linked from Slack's member
@@ -614,6 +637,7 @@ members can act from chat, and where the Slack and Discord apps should point.
 ## Running an agent
 
 ### `memnox mcp wrap` / `unwrap`
+
 Repoints every MCP server at the proxy, backing up each config first. `unwrap`
 restores byte for byte. `--dry-run` changes nothing.
 
@@ -636,19 +660,65 @@ where the file needs it, the merged file is staged under `~/.memnox/managed` and
 the copy in `~/.claude/settings.json` comes out, so no moment passes with neither in
 place. Codex has no managed hook file Memnox knows of, so its hook stays user level.
 
+### `memnox mcp signin <server>`
+
+Signs in to a remote MCP server through Memnox, in your browser, and keeps the sign in
+in the operating system's own store. The proxy then sends it and renews it, so a server
+that asks for a sign in connects behind Memnox and its calls stay ruled on.
+
+It follows the MCP authorization rules: it reads where the server says people sign in,
+registers Memnox as a client that comes back to this computer only, and uses a proof key
+so an approval can finish only the sign in that began it. A server already connected is
+left exactly as it is. A sign in that does not end in a server that answers is not kept,
+and whatever was kept before stands again.
+
+Some servers take sign ins only from apps they already know. Where the server's maker gave
+you a client id for your own app, pass it with `--client-id <id>`, and `--port <port>`
+where that client was registered to come back to one port. Otherwise the command says so
+and names `memnox mcp repair` as the way out.
+
+Nothing in Memnox signs you out of a tool. There is no sign out command, and `unwrap`
+and `uninstall` put every remote server back as its own address.
+
+### `memnox mcp repair`
+
+Asks every remote MCP server behind the proxy whether it connects, and says what each
+one answered. A server that asks for a sign in nobody has done through Memnox cannot
+connect there, and there are two ways to mend it, offered in this order.
+
+First it offers to sign in to each one through Memnox, one browser page at a time, which
+keeps the server behind Memnox and its calls ruled on. Each server is shown as it goes, its
+result is said before the next one starts, and Enter skips the one being waited on. The
+browser tab shows a Memnox page with the real outcome once the server has answered. This is also the only way for an
+agent that cannot be given a server by its address, such as Claude Desktop, Codex or
+Hermes. What a sign in did not mend it then offers to hand back: the line becomes the
+server's own address again, so the agent reaches it and signs in itself, and Memnox
+stops ruling on it. Each of the two is asked once and neither happens without a yes.
+
+`--yes` hands back without asking and skips the sign in, since a sign in needs a person
+at a browser. `--dry-run` changes nothing. A server that refused a credential Memnox
+holds is named and left, because replacing that secret is what mends it. An agent can
+never run this: it can loosen what is governed, so it is a person's to run.
+
+The same two ways are on the server's card in the MCP Hub: Sign in through Memnox, and
+Hand back to my agents, which waits for your signature.
+
+Restart the agent afterwards, or reconnect the server in it.
+
 ### `memnox run -- <command>`
+
 Starts an agent with the interceptor directory first on `PATH`, `SHELL` pointed at the
 governed shell, and a session id. Hands back the agent's own exit code. When
 `protect --os-guard` has written a profile, the agent starts inside it.
 
-| Flag | What it does |
-|---|---|
-| `--shell <path>` | the shell the agent should use |
-| `--transcript` | keep a local copy of what the agent printed |
-| `--no-guard` | start outside the kernel sandbox even when a profile exists |
-| `--untrusted` | a repository nobody here vouched for: see below |
-| `--hold-credentials` | keep tokens out of the agent's environment and hand each only to the CLI that uses it |
-| `--brief <id>` | hand the agent a workspace brief the voice gathered before its first turn: the ticket, what was said about it and the decisions it must keep to |
+| Flag                 | What it does                                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--shell <path>`     | the shell the agent should use                                                                                                                  |
+| `--transcript`       | keep a local copy of what the agent printed                                                                                                     |
+| `--no-guard`         | start outside the kernel sandbox even when a profile exists                                                                                     |
+| `--untrusted`        | a repository nobody here vouched for: see below                                                                                                 |
+| `--hold-credentials` | keep tokens out of the agent's environment and hand each only to the CLI that uses it                                                           |
+| `--brief <id>`       | hand the agent a workspace brief the voice gathered before its first turn: the ticket, what was said about it and the decisions it must keep to |
 
 **`--hold-credentials`** starts the agent without any variable that looks like a
 credential, except its own model key, and keeps them in the `memnox run` process, in
@@ -675,13 +745,12 @@ The governed shell obeys the shell contract: `$SHELL -c "<line>"` is what an
 agent's Bash tool calls, and every command in that line is ruled on separately,
 so `gh pr merge && vercel deploy` is two rulings rather than one opaque string.
 
-
 Declare what you asked for and it becomes enforceable: `--task "<statement>"`
 with `--paths`, `--repos`, `--services`, `--envs` (comma separated) lets a rule
 match on `scope`, and `--expect <count>` is what an action explosion is measured
 against. `--role <name>` is the job the agent is enrolled under, matched by a
 rule's `roles:`, and `--for <person>` is the person it works for, matched by a rule's
-`principals:`, so an agent on a shared credential never does what its person may not. A session that declares nothing is *undeclared* throughout,
+`principals:`, so an agent on a shared credential never does what its person may not. A session that declares nothing is _undeclared_ throughout,
 never in violation — nothing is inferred.
 
 **Writes stay in the repository.** A write or delete outside the repository the session
@@ -728,6 +797,7 @@ When a run starts in a repository nobody here has worked in (no commit of yours,
 one the seams have seen, no matching origin), it prints one line suggesting `--untrusted`.
 
 ### `memnox agents trust <agent>` / `memnox mcp trust <server>`
+
 An agent the daemon adopted, or an MCP server it wrapped, starts **on probation for seven
 days**: its writes, outward and destructive actions ask whatever the rules allow, and
 its reads do not. The notice that announced it says so, and `memnox status` lists what
@@ -735,6 +805,7 @@ is on probation and until when. `trust` ends one now, on the record. A probation
 was served or ended is never started again because a config was rewritten.
 
 ### `memnox agents pause <agent>` / `memnox agents resume <agent>`
+
 Stops one agent on this machine, every session of it, and leaves every other agent
 working. The agent is named the way a person says it (`codex`, `Claude Code`, the name
 you gave it), and a name that fits two agents is refused with both named. The pause is a
@@ -747,6 +818,7 @@ on that agent this machine knows of, and says so when the workspace still holds 
 voice, "pause Codex" happens at once, and letting it carry on waits for Touch ID.
 
 ### `memnox daemon`
+
 Holds the rules in one process so an interceptor pays a connect instead of a file
 read. Optional: an interceptor that cannot reach it evaluates in process instead.
 It also runs the egress proxy on a free loopback port the system picks, so it never
@@ -756,14 +828,16 @@ proxy is bounded in connections and idle time, and starts and stops with the dae
 ## What happened
 
 ### `memnox timeline`
-| Flag | What it does |
-|---|---|
-| `--session` / `--agent` | narrow to one |
-| `--since <when>` | `30m`, `2h`, `7d` or an ISO timestamp |
-| `--only <effect>` | `allow`, `ask`, `deny` or `blocked` |
-| `--export <format>` | `jsonl` or `json` |
+
+| Flag                    | What it does                          |
+| ----------------------- | ------------------------------------- |
+| `--session` / `--agent` | narrow to one                         |
+| `--since <when>`        | `30m`, `2h`, `7d` or an ISO timestamp |
+| `--only <effect>`       | `allow`, `ask`, `deny` or `blocked`   |
+| `--export <format>`     | `jsonl` or `json`                     |
 
 ### `memnox why [id]`
+
 The last thing that did not simply proceed. `--allowed` for the last allow,
 `--evidence` for the digests and the outcome. Read back from the row, never
 re-evaluated against today's rules.
@@ -789,19 +863,20 @@ Context
 ```
 
 ### `memnox rewind`
+
 Puts the working tree back to before an agent touched it. A milestone is a tree object
 under `refs/memnox/` — never a commit, never a branch, never the stash — and a rewind
 takes its own milestone first, so what it replaced is still reachable.
 
-| Flag | What it does |
-|---|---|
-| `--list` | the milestones there are |
-| `--to <id>` | a particular one, rather than the last |
-| `--take` | keep the tree as it is now, restoring nothing |
-| `--note <text>` | what this milestone is, for the listing |
+| Flag              | What it does                                             |
+| ----------------- | -------------------------------------------------------- |
+| `--list`          | the milestones there are                                 |
+| `--to <id>`       | a particular one, rather than the last                   |
+| `--take`          | keep the tree as it is now, restoring nothing            |
+| `--note <text>`   | what this milestone is, for the listing                  |
 | `--forget [keep]` | drop all but the newest few; the newest is never dropped |
-| `--session <id>` | back to before that session first changed anything |
-| `--last` | the same, for the session whose milestone is newest |
+| `--session <id>`  | back to before that session first changed anything       |
+| `--last`          | the same, for the session whose milestone is newest      |
 
 It moves files and nothing else, it leaves ignored files alone, and it refuses outright
 mid-merge or mid-rebase — a restore there would write over the state that says how to
@@ -819,6 +894,7 @@ nothing starts no process, and every git call goes to the real git rather than t
 interceptor on PATH. A milestone that cannot be kept is logged and never stops the agent.
 
 ### `memnox replay [session]`
+
 One session step by step, in the order it happened: every action with its surface,
 operation, target and verdict (and what enforce would have said while it was observed),
 exit codes, breaker trips and who resumed them, holds still waiting, and the milestones
@@ -830,11 +906,13 @@ works long after every process involved has gone. A hold that was answered is vi
 only where its row names who allowed it, because an answered hold is cleared from disk.
 
 ### `memnox trace <id>`
+
 One action end to end: the command, the rule that governed it, the exit code, the
 duration and the argument digest. When the session kept a transcript, the tail of what
 it printed. An id prefix is enough.
 
 ### `memnox traces [id]`
+
 What ran, inside what, for how long, and what failed, drawn as a waterfall the way
 Logfire draws one. Two kinds of trace live here:
 
@@ -855,10 +933,12 @@ what is sent is names, timings, decisions and paths, never output or what was sa
 Traces are kept locally for seven days.
 
 ### `memnox collisions`
+
 Two agents in one file, and two agents building one thing. `--since <when>` to
 narrow the window.
 
 ### `memnox lock [path]`
+
 Holds a path while you work on it, so a second agent waits instead of writing
 over you. `--list` shows every lease on this machine, `--for <duration>` sets
 how long, `--release <id>` lets one go early, `--forget` drops the records of
@@ -999,14 +1079,15 @@ lease is coordination, not safety, and one that blocked work whenever the
 network hiccuped is one people would turn off inside a day.
 
 ### `memnox next`
+
 What you could safely stop being asked about. Reads the approval history and
 names the things a person has already said yes to often enough that being asked
 again is the tool wasting their attention. `--since <window>` to widen it.
 
 Three rules keep it honest. One refusal is enough to stop a recommendation. A
-destructive or outward action never rises past *supervised*, however routine it
+destructive or outward action never rises past _supervised_, however routine it
 became. And the ladder position is read off what is actually configured and
-seen, not off what the config claims — an install that says *autonomous* while
+seen, not off what the config claims — an install that says _autonomous_ while
 asking about everything is telling you a story about yourself.
 
 It prints counts, never hours. "Six hours a week you could get back" is a number
@@ -1020,6 +1101,7 @@ question with that reason beside it, since no single rule could allow it without
 more than was said yes to.
 
 ### `memnox next --agent <name>`
+
 What that agent would do on its own, in three bands: runs on its own, waits for
 you, never. Under `next` rather than beside it, because it answers the same
 decision from the other side: bare `next` reads the ledger backwards for what
@@ -1033,6 +1115,7 @@ on its own". It refuses to call a boundary ready when something destructive
 would run unasked, or when more of what the agent can do is unruled than ruled.
 
 ### `memnox autopilot`
+
 What the daemon handed each agent on its own record, and the way to take it back.
 It is off until a person runs `memnox config set autopilot true`, and an agent can
 never turn it on or run `next --hand-over` itself.
@@ -1048,6 +1131,7 @@ pass. Every grant and every revocation is a row in the ledger and a notice on th
 desktop naming the command that undoes it. `--revoke <id>` takes one back now.
 
 ### `memnox unattended [--agent <name>] [--json]`
+
 Whether an agent can be left running, as one screen: how many of its actions run
 on their own, wait for you, never happen or have no rule, and then every reason
 not to walk away yet, in the order to deal with them. Observe mode comes first,
@@ -1056,6 +1140,7 @@ unasked, calls waiting on you, paused sessions and spent budgets. Each line is a
 count or a fact, never a score.
 
 ### `memnox voice` / `memnox voice forget-key`
+
 `memnox voice` shows the key the Mac app signs its confirmations with: when it was
 registered and how it ends, never the whole of it. The first key to register is
 trusted and the daemon never replaces it, so `forget-key` is how a person clears it,
@@ -1064,6 +1149,7 @@ key to register is the one trusted; open the app straight after. An agent is ref
 it, like every command that loosens what agents may do.
 
 ### `memnox voice address [words]`
+
 How the voice addresses you, such as `sir`, `ma'am` or your name, said the way
 J.A.R.V.I.S. says it: now and then, at the end of a sentence. Nothing is guessed, so
 with none chosen it uses no form of address at all; `--clear` goes back to that, and
@@ -1071,6 +1157,7 @@ with no words it says the current one. You can also just tell the voice, "call m
 sir". It applies from the voice's next conversation.
 
 ### `memnox ask "<anything>"`
+
 Ask about your agents in your own words, and get the answer your voice would
 hear. The words go whole to your own Claude Code, logged in as you already are,
 started with every built-in tool switched off and one MCP server,
@@ -1097,6 +1184,7 @@ quiet. Cursor is not a brain: `cursor-agent -p` has write and shell access with
 no way to narrow it.
 
 ### `memnox report`
+
 What your agents did in a window and what of it was redone: actions, succeeded,
 failed, blocked, held, and where the same work went twice.
 
@@ -1107,6 +1195,7 @@ prices nothing: a model call's cost is knowable to the agent and to nobody else
 on this machine.
 
 ### `memnox budget`
+
 How much an agent may do in a window, as against what it may do. `budget set
 <name> --actions <patterns> --limit <n>` writes one, `--window day|hour|session`
 and `--unit calls|usd`, `budget suggest --yes` writes a generous starting set,
@@ -1124,6 +1213,7 @@ machine has counted itself, so a control plane that cannot be reached degrades a
 fleet budget to a machine budget rather than to no budget at all.
 
 ### `memnox paused` / `memnox resume <session>`
+
 Sessions the circuit breaker is holding, and lifting one. The breaker watches
 outcomes rather than requests, and holds a session on five identical failures,
 eight failures in a row with nothing succeeding between them, an action count
@@ -1132,6 +1222,7 @@ spend ceiling. A pause names the count that produced it and says how to lift it:
 a stop nobody can argue with or undo is one people work around by uninstalling.
 
 ### `memnox skills`
+
 What your agents run on beyond their config, treated like deployments: skills
 they wrote for themselves, and definitions somebody installed into them.
 `--accept <name>` records that you have looked.
@@ -1149,11 +1240,12 @@ shell, writes, and every connected MCP server — so an absent key is the widest
 grant on the machine and not the narrowest. Public rosters run to hundreds of
 files and almost none of them set it.
 
-Two claims, kept apart. What a file *declares* is read out of its own header and
-stated as fact. What it *names* is a match against the verb tables: evidence it
+Two claims, kept apart. What a file _declares_ is read out of its own header and
+stated as fact. What it _names_ is a match against the verb tables: evidence it
 may use a tool, never proof that it does, and the screen says so.
 
 ### `memnox claims [session]`
+
 What the agent said it did, against what the record says it did. Reads the
 transcript from `memnox run --transcript`, or `--file <path>`. `contradicted` is
 the one that matters: it ran, it failed, and somebody was told otherwise.
@@ -1161,6 +1253,7 @@ the one that matters: it ran, it failed, and somebody was told otherwise.
 somewhere this machine cannot see — never a finding of dishonesty.
 
 ### `memnox env`
+
 The environment an agent needs when something other than `memnox run` starts it:
 systemd, a container, a cron line. `--format sh|systemd|docker`, `--shell`,
 `--session`.
@@ -1171,6 +1264,7 @@ the whole path, which is an agent that can run nothing at all. Nothing here
 edits a unit file.
 
 ### `memnox purge`
+
 Drops history past `retentionDays`. `--dry-run` says what would go.
 
 ## Connecting to a workspace
@@ -1180,6 +1274,7 @@ network and no key; this section is the only part of the runtime that talks to
 anything, and it does nothing at all until `memnox login` has succeeded.
 
 ### `memnox login`
+
 Connects this machine to a workspace, so it gets the rules that workspace
 publishes. It opens the approval page in a browser and waits for somebody with
 access to approve it there. **Nothing has to be typed:** the link the control
@@ -1198,11 +1293,11 @@ console those are two different origins, so a page derived from the API base is
 a page that does not exist. A control plane too old to say gets the derived
 address as a fallback, which is right only where the two share an origin.
 
-| Flag | What it does |
-|---|---|
-| `--url <base>` | the control plane, default `https://api.memnox.com` |
-| `--enforce` | start in enforce rather than observe |
-| `--no-open` | print the code and the URL instead of opening a browser |
+| Flag           | What it does                                            |
+| -------------- | ------------------------------------------------------- |
+| `--url <base>` | the control plane, default `https://api.memnox.com`     |
+| `--enforce`    | start in enforce rather than observe                    |
+| `--no-open`    | print the code and the URL instead of opening a browser |
 
 It writes `~/.memnox/account.json`, owner only: the workspace, a machine id, a
 token scoped to this machine, and an Ed25519 private key generated here. **The
@@ -1210,19 +1305,23 @@ private key never leaves.** Anything that can read that file can act as this
 machine, which is why it is `0600` and why `memnox logout` exists.
 
 ### `memnox logout`
+
 Forgets the credential. Rules already pulled stay in force, because a machine
 that silently stopped being governed the moment it lost its token would be a
 worse failure than one that keeps the last rules it was given.
 
 ### `memnox sync`
+
 Pulls the rules the workspace publishes and sends what happened. It runs on the
 daemon's heartbeat, about once a minute, backing off to fifteen minutes while the
 control plane is unreachable.
 
 ### `memnox sync now`
+
 Does a pass immediately rather than waiting. `--json` for the result.
 
 ### `memnox sync pair [machine] [--fingerprint <fingerprint>]`
+
 Moves the personal sync key to another of your own machines from a terminal. Run
 it on the new machine first, which registers it and says what it is called; then
 on the machine holding the key, which lists every machine waiting with the
@@ -1241,16 +1340,16 @@ reads the file this wrote, minutes later, with no network anywhere near it.
 
 **Sent, per action, in signed batches of at most 500:**
 
-| Field | What it is |
-|---|---|
-| `dedupKey`, `subjectId` | the event id, so a resend is deduplicated |
-| `occurredAt`, `agentSessionId` | when, and which session |
-| `surface`, `operation`, `classes` | `shell`, `git.push-force`, `destructive` |
-| `effect`, `reason`, `ruleId` | what was decided and which rule decided it |
-| `resourceRef` | what it acted on: a path, a host, a branch |
-| `argsDigest` | **a hash of the arguments, never the arguments** |
-| `exitCode`, `startedAt` | how it ended and how long it took |
-| `policyHash` | the rule set in force at the time |
+| Field                             | What it is                                       |
+| --------------------------------- | ------------------------------------------------ |
+| `dedupKey`, `subjectId`           | the event id, so a resend is deduplicated        |
+| `occurredAt`, `agentSessionId`    | when, and which session                          |
+| `surface`, `operation`, `classes` | `shell`, `git.push-force`, `destructive`         |
+| `effect`, `reason`, `ruleId`      | what was decided and which rule decided it       |
+| `resourceRef`                     | what it acted on: a path, a host, a branch       |
+| `argsDigest`                      | **a hash of the arguments, never the arguments** |
+| `exitCode`, `startedAt`           | how it ended and how long it took                |
+| `policyHash`                      | the rule set in force at the time                |
 
 **Never sent:** the arguments themselves, transcripts, file contents, credential
 values, or anything under `~/.memnox/` other than the fields above. The payload is
@@ -1274,7 +1373,7 @@ TLS, and the machine token. **The bundle carries no signature of its own**, so
 https is required and `memnox login --url` refuses anything else, loopback aside.
 
 What makes that sufficient rather than merely acceptable is the engine: rules
-compose most-restrictive-wins, so a pulled rule can only ever *tighten* what this
+compose most-restrictive-wins, so a pulled rule can only ever _tighten_ what this
 machine already enforces. A control plane cannot grant your agent anything. The
 worst a bad bundle can do is deny too much, which is visible immediately.
 
@@ -1283,6 +1382,7 @@ back through the same loader the gate uses, and renamed into place only once it
 has parsed. A half-applied rule set is one nobody wrote.
 
 ### If it cannot reach the control plane
+
 Nothing stops. The gate has already answered and the row is already written by
 the time any of this runs, so a failed send loses a send and never a verdict.
 The rows stay and the next pass retries them.
@@ -1290,4 +1390,5 @@ The rows stay and the next pass retries them.
 ## Taking it back out
 
 ### `memnox uninstall`
+
 Interceptors, git hooks and wrapping. `--purge` also deletes `~/.memnox`.

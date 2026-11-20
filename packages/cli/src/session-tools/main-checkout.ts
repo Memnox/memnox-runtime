@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { nativePath, slashed } from '@memnox/core';
 
 /**
  * The checkout a person has open in their editor for a folder an agent worked in: the
@@ -25,8 +26,10 @@ export function mainCheckoutOf(folder: string): string {
 
 /** A worktree's `.git` is a file naming `<main>/.git/worktrees/<name>`, and `<main>` is the checkout. */
 function throughWorktree(marker: string, root: string): string {
-  const pointer = /^gitdir:\s*(.+)$/m.exec(readFileSync(marker, 'utf8'))?.[1]?.trim();
-  if (pointer === undefined) return root;
+  const named = /^gitdir:\s*(.+)$/m.exec(readFileSync(marker, 'utf8'))?.[1];
+  if (named === undefined) return root;
+  // Git writes `C:/...` on Windows, so it is read with `/` and handed back as the platform spells it.
+  const pointer = slashed(named.trim());
   const at = pointer.indexOf(WORKTREES);
-  return at === -1 ? root : pointer.slice(0, at);
+  return at === -1 ? root : nativePath(pointer.slice(0, at));
 }

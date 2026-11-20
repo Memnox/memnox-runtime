@@ -78,6 +78,25 @@ Codex's TOML and Hermes' YAML have their two launch lines replaced and every oth
 copied through, so `memnox mcp unwrap` gives the file back byte for byte. Anything that
 will not parse is skipped and named, never rewritten.
 
+### An MCP server shows as disconnected. Is Memnox blocking it?
+
+Memnox never refuses a server silently. A rule that stops a call says so, names the rule
+and asks you where a person can be asked. A server that will not connect at all is a
+different thing, and the usual cause is a remote server that signs you in through your
+agent: behind the proxy the agent never gets to sign in, so the server stays
+disconnected.
+
+You are told when that happens, on the waiting feed, on the server's card in the MCP Hub
+and in `memnox doctor --servers`, and the agent's own server list says why. There are two
+ways to put it right. `memnox mcp signin <server>` signs in through Memnox, so the server
+connects and its calls stay ruled on. `memnox mcp repair` hands the server back to the
+agent, which then signs in itself, and Memnox no longer rules on that server's calls.
+Run with nobody's help, `memnox mcp repair` offers the sign in first and the hand back
+for whatever is left, and both are also buttons on the server's card in the MCP Hub.
+
+Memnox does not move a server behind the proxy until the server has answered there, and
+it never signs you out of a tool you are connected to.
+
 ### What is "combined capability"?
 
 A set of tools that opens a path none of them opens alone: `read_customer`,

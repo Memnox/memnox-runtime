@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import {
+  nativePath,
   ownProcessEnv,
   CloudLeases,
   GitRegionReader,
@@ -194,7 +195,7 @@ export function projectRootOf(cwd: string, home: string): string | null {
   let found: string | null = null;
   let at = resolve(cwd);
   // Only below home: a marker in home itself would make every folder one project.
-  while (at !== stop && at.startsWith(`${stop}/`)) {
+  while (at !== stop && at.startsWith(`${stop}${sep}`)) {
     const here = at;
     if (PROJECT_MARKERS.some((marker) => existsSync(join(here, marker)))) found = here;
     at = dirname(at);
@@ -259,13 +260,14 @@ function pastShell(pid: number): number {
 /** The checkout `cwd` is in, or null outside one. */
 export function repositoryRootOf(cwd: string): string | null {
   try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    const top = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd,
       // The real git: the one on PATH is this interceptor, which would ask this again.
       env: ownProcessEnv(),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    });
+    return nativePath(top);
   } catch {
     // Not a repository, which is an answer rather than a failure.
     return null;

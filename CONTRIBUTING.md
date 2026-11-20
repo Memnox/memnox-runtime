@@ -259,17 +259,30 @@ A user-visible change also needs a changeset:
 pnpm changeset
 ```
 
-A release is one command, run on `main` once the changes it carries are committed:
+A release is one merge. Every merge to `main` with changesets pending opens, or brings up
+to date, a pull request titled `chore(release): version packages` that bumps the
+manifests and writes the changelogs. Merging it is the release: `release.yml` tags the
+merged commit `vX.Y.Z` and runs again at that tag, where it typechecks, builds and tests,
+then publishes every package. A merge with no version raise never publishes anything.
+
+GitHub publishes through npm trusted publishing, so no npm token exists to leak, no
+passkey is asked for, and nothing is published from a working tree that holds unfinished
+work. It publishes at the tag because `memnox update` installs only packages whose
+provenance names `release.yml` at a `refs/tags/v` ref.
+
+The older way still works, run on `main` once the changes it carries are committed:
 
 ```sh
 pnpm ship "what this release does"
 ```
 
-It bumps the manifests from the pending changesets, commits the release, tags it
-`vX.Y.Z` and pushes both. The tag is what `release.yml` listens for: GitHub typechecks,
-builds and tests the tag, then publishes every package with the repository's npm token,
-so no passkey is asked for and nothing is published from a working tree that holds
-unfinished work. A push to `main` on its own never publishes anything.
+It bumps the manifests, commits the release, tags it `vX.Y.Z` and pushes both, and the
+tag publishes exactly as above.
+
+Every job that publishes runs in the `release` environment, which only `main` and `v*`
+tags may deploy to. Each package is linked once on npmjs.com, under its Settings,
+Trusted Publisher, to the repository `Memnox/memnox`, the workflow `release.yml` and the
+environment `release`.
 
 `pnpm version` syncs `CLI_VERSION` with the manifests, so never edit that constant by
 hand, because `memnox --version` reading a number the package was not published under

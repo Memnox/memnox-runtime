@@ -5,6 +5,7 @@ import {
   DELIVERY_OPERATION,
   type ReplayStep,
   type SessionViewStep,
+  slashed,
 } from '@memnox/core';
 
 /**
@@ -71,7 +72,8 @@ function verbOf(operation: string | undefined): string | undefined {
 /** A path by its last two parts, which is how a file is recognised at a glance. */
 function shortTarget(target: string): string {
   if (!isAbsolute(target) && !target.startsWith('../')) return target;
-  return normalize(target)
+  // Split on `/` after normalize, which spells a Windows path with `\`.
+  return slashed(normalize(target))
     .split('/')
     .filter((part) => part !== '' && part !== '.' && part !== '..')
     .slice(-2)

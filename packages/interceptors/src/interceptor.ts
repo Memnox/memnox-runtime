@@ -1,5 +1,5 @@
 import { accessSync, constants, statSync } from 'node:fs';
-import { basename, delimiter, join, win32 } from 'node:path';
+import { basename, posix, win32 } from 'node:path';
 
 import {
   ruledFor,
@@ -353,11 +353,12 @@ export function resolveReal(
   if (isSelf(binary)) return null;
   const windows = (host.platform ?? process.platform) === WINDOWS;
   const pathExt = host.pathExt ?? process.env['PATHEXT'];
-  for (const entry of path.split(windows ? ';' : delimiter)) {
+  // Split and joined as the platform asked about does, not the one this runs on.
+  for (const entry of path.split(windows ? win32.delimiter : posix.delimiter)) {
     if (entry === '') continue;
     const candidates = windows
       ? windowsCandidatesIn(entry, binary, pathExt)
-      : [join(entry, binary)];
+      : [posix.join(entry, binary)];
     const found = candidates.find((candidate) => !isSelf(candidate) && exists(candidate));
     if (found !== undefined) return found;
   }

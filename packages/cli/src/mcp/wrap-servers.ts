@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { planUnwrap, planUpgrade, planWrap, type ServerLaunch } from '@memnox/core';
 import type { CliContext } from '../cli-context';
 import { TONE } from '../flow';
+import { restoreProxiedRemotes } from './hub-repair';
 import { unwrapProjectLocally, wrapProjectLocally } from './project-overrides';
 import {
   isProxyOnPath,
@@ -115,7 +116,21 @@ export async function unwrapEveryServer(
       await writeRelaunches(home, file, restore);
     }
   }
-  return restored;
+  return restored + (await unwrapRemotes(home, context));
+}
+
+/** A remote server has no command to read back, so its line becomes the address it was reached at. */
+async function unwrapRemotes(home: string, context: CliContext): Promise<number> {
+  const { handed, left } = await restoreProxiedRemotes(home);
+  if (handed.length + left.length === 0) return 0;
+  context.flow.list('Remote servers', [
+    ...handed.map((each) => ({
+      tone: TONE.OK,
+      text: `${each.name}  proxy → its own address, where your agent signs in itself`,
+    })),
+    ...left.map((each) => ({ tone: TONE.WARN, text: `${each.name}  ${each.reason}` })),
+  ]);
+  return handed.length;
 }
 
 /** The file's servers as launched before any wrap, writing it back where one was found. */

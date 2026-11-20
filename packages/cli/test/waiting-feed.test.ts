@@ -36,7 +36,8 @@ describe('a held call, as a person needs to hear it', () => {
     await new SessionHosts(home).note({
       sessionId: 'ses_shop',
       agent: 'claude-code',
-      pid: 1,
+      // A process that is certainly alive, since pid 1 is init elsewhere and nothing on Windows.
+      pid: process.pid,
       cwd: '/Users/me/work/shop',
       seenAt: NOW,
     });

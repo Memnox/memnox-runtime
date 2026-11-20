@@ -44,6 +44,8 @@ import type { CliContext } from '../cli-context';
 import { defaultScanSeams, scanMachine } from '../machine-scan';
 import {
   recentlyStopped,
+  disconnected,
+  renderDisconnected,
   renderServerHealth,
   renderStopped,
   serverHealthOf,
@@ -167,10 +169,12 @@ async function runServers(deps: DoctorDeps, asJson: boolean): Promise<void> {
   const { report } = await scanMachine(defaultScanSeams(deps.cwd()), { probe: true });
   const servers = serverHealthOf(report);
   const stopped = await recentlyStopped(deps.home(), deps.now());
+  const troubles = await disconnected(deps.home());
   if (asJson) {
-    deps.context.out.json({ servers, stopped });
+    deps.context.out.json({ servers, stopped, disconnected: troubles });
     return;
   }
+  renderDisconnected(deps.context, troubles);
   renderStopped(deps.context, stopped);
   if (!renderServerHealth(deps.context, servers)) process.exitCode = EXIT.FAILED;
 }

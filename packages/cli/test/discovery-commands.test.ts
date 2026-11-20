@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { McpLister } from '@memnox/core';
 import { registerScanCommand } from '../src/commands/scan.command';
@@ -142,9 +143,11 @@ describe('memnox (scan)', () => {
       ['doctor', '--json'],
     );
 
-    expect(seen.out.text).toContain(`${PROJECT}/.env`);
+    // Spelled as the platform joins it, and as JSON writes that spelling.
+    const env = JSON.stringify(join(PROJECT, '.env')).slice(1, -1);
+    expect(seen.out.text).toContain(env);
     // The finding discover surfaced has to be one doctor can name.
-    expect(ranked.out.text).toContain(`${PROJECT}/.env`);
+    expect(ranked.out.text).toContain(env);
   });
 
   it('never prints a secret value', async () => {
@@ -314,7 +317,7 @@ describe('memnox doctor', () => {
     );
 
     expect(out.text).toContain('critical');
-    expect(out.text).toContain(`${HOME}/.aws/credentials`);
+    expect(out.text).toContain(join(HOME, '.aws', 'credentials'));
     expect(out.text).toContain('Nothing here compares this machine to another.');
   });
 

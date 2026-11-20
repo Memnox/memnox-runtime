@@ -4,6 +4,7 @@ import * as proxy from '@memnox/proxy';
 import { describe, expect, it } from 'vitest';
 import { ollamaEmbedder } from '../src/memory/ollama-embedding';
 import { insecureRelayUrl } from '../src/remote/relay-link';
+import { slashed } from '@memnox/core';
 
 /**
  * The promise on the front page, as a test.
@@ -43,6 +44,10 @@ const ALLOWED: Record<string, string> = {
     'a local embedding model on this machine, off until the person names one, and refusing any other address, pinned below',
   'mcp/remote-tools.ts':
     "lists a remote MCP server's tools through the proxy's upstream, only when the person asks to test that server",
+  'mcp/sign-in-flow.ts':
+    'signs in to a remote MCP server the person named, at the addresses that server publishes, only when they run `memnox mcp signin`',
+  'mcp/callback-listener.ts':
+    'the one page a sign in comes back to, on the loopback address, open only while `memnox mcp signin` waits, pinned below',
   'bin/mcp-proxy.ts':
     'the proxy bin, which reaches a remote MCP server only when the person wrapped one',
   'daemon/workspace-stream.ts':
@@ -90,7 +95,8 @@ describe('nothing reaches the network but the sync client', () => {
   it('keeps every outbound call in one module', () => {
     const offenders = sources(ROOT)
       .filter((path) => OUTBOUND.test(readFileSync(path, 'utf8')))
-      .map((path) => path.slice(ROOT.length + 1))
+      // Named with `/`, as the list below names them, whichever separator found them.
+      .map((path) => slashed(path.slice(ROOT.length + 1)))
       .filter((path) => ALLOWED[path] === undefined);
 
     expect(
@@ -140,6 +146,15 @@ describe('nothing reaches the network but the sync client', () => {
 
     expect(broker).toContain('server.listen(path');
     expect(broker).not.toMatch(/listen\(\s*\d/);
+  });
+
+  // A sign in comes back to this machine and nowhere else, so its page is never on an address anything off it can reach.
+  it('keeps the sign in callback on the loopback address', () => {
+    const listener = readFileSync(join(ROOT, 'mcp', 'callback-listener.ts'), 'utf8');
+
+    expect(listener).toContain("const LOOPBACK = '127.0.0.1'");
+    expect(listener).toContain('server.listen(port ?? ANY_PORT, LOOPBACK');
+    expect(listener).not.toMatch(/0\.0\.0\.0|['"]::['"]/);
   });
 
   // A line is rendered by the Mac app's Kokoro on this machine, never by anything off it.

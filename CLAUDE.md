@@ -127,13 +127,16 @@ sits uncommitted in the same tree, so commit your own files and nothing else.
 change: `.changeset/<name>.md`, with all four packages at `patch`, since they release
 together.
 
-**A release is `pnpm ship "<summary>"` on `main`, and nothing else.** It versions,
-commits `chore(release): X.Y.Z, <summary>`, tags `vX.Y.Z` and pushes, and `release.yml`
-tests the tag and publishes with the repository's npm token. Never run `pnpm release` or
+**A release is merging the `chore(release): version packages` pull request.** Every
+merge to `main` with changesets pending opens or updates it, and merging it makes
+`release.yml` tag `vX.Y.Z` and publish at that tag through npm trusted publishing, with
+no npm token anywhere. It must publish at a tag, because `memnox update` refuses
+provenance that names any other ref. `pnpm ship "<summary>"` on `main` still releases
+by pushing the tag itself. Never run `pnpm release` or
 `changeset publish` from a laptop: the `@memnox/*` packages require two factor
 authentication, a passkey cannot answer from a script, and 0.13.8 went out as a CLI
 whose own dependencies did not exist yet until they were published by hand. Pushing and
-publishing leave this machine, so an agent prepares and commits a release and runs
+publishing leave this machine, so an agent merges the release pull request or runs
 `pnpm ship` only when the person asked for the release.
 
 **`memnox.policies.toml` is the person's to commit.** It is Memnox's own rules, and
@@ -709,6 +712,53 @@ date on what the other is doing at most every quarter hour, and both people get 
 agent whose turn ended at most every two minutes so two agents can never keep each other
 running, what they said is kept per feature and read back by `memnox_work`, and every message
 an agent picks up is a ledger row.
+
+**A server that would not connect was read as Memnox blocking it, and nothing said otherwise.**
+The hub writes a remote server as a command behind the proxy, and a server that signs a person
+in through the agent can never connect there: the proxy sends the headers it was given and
+nothing else, and an agent that sees a command never starts its own sign in. It answered 401,
+the agent said disconnected, and the person was left to find the proxy in their own config.
+Observe mode made no difference, because this is a transport failing and no rule deciding, so
+no prompt and no `why` row ever existed to explain it. Three things closed it. `importServer`
+asks a remote server first and leaves one that wants a sign in exactly as the person set it
+up, since that line works and may hold what the agent signed in with. `HubServer.direct`
+marks one the agent reaches itself, written as its address and shown as not governed, and
+`memnox mcp repair` hands back the ones already broken, read off each agent's config as well
+as the hub so a line whose hub record is gone is still mended. And the proxy writes down
+what it could not reach in `~/.memnox/mcp-trouble`, which the waiting feed tells once, the
+hub card shows and `doctor --servers` lists, while the agent's own server list carries the
+reason and the command in place of a status code.
+
+**Handing back un-governs, so the proxy learned to sign in.** `memnox mcp signin <server>`
+does the MCP authorization flow in the person's browser, from `core/mcp/remote-sign-in.ts`:
+the server's published metadata, a client registered to come back to the loopback address
+only, a proof key, and the token kept in the OS store by the server's address. The proxy
+sends it where the headers carry no credential of their own and renews it once on a refusal;
+two proxies renewing at once settle by reading what the other kept rather than by spending
+the refresh token twice. The token never reaches a config or an agent's environment.
+
+**Three rules keep a person connected, and they outrank governing.** Nothing moves behind
+the proxy until it has answered there, so `importServer` leaves a remote server that wants a
+sign in or did not answer exactly as it was. A sign in is kept only once the server answered
+with it, and a failed try puts back whatever was kept before. And nothing signs anybody out:
+there is no sign out command, a server already connected is left alone by `signin`, and
+`unwrap` and `uninstall` turn every remote proxy line back into its address, where they used
+to leave it pointing at a proxy that was gone. A product that disconnects a tool to govern it
+is one that gets uninstalled, and then governs nothing.
+
+**The order of the two ways out is the product's position, so it is fixed.** `repair` offers
+the sign in through Memnox first, because it keeps the server ruled on and is the only way
+for an agent that cannot hold a server by its address, and hands back only what a sign in
+did not mend. The hub card offers the same two from `trouble` on the view. A sign in waits
+minutes on a browser and the daemon answers its requests in order, so `mcp-sign-in` answers
+the press at once and writes what it came to onto the card; `mcp-hand-back` is a signed
+proposal, a third `HubChange`, because it un-governs. A phone may propose the hand back and
+may never start the sign in, since the page opens on the computer.
+
+Handing a server back takes it out from behind the proxy, so it is never done silently: the
+command asks first, an agent cannot run it, and the same change from a screen is a signed
+put. A 401 with a credential sent is a refused credential and is never handed back, because
+replacing the secret mends it and un-governing the server would not.
 ---
 
 ## Sequencing and staffing

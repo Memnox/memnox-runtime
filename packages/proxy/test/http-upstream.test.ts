@@ -122,9 +122,80 @@ describe('a streamable HTTP server reached through the proxy', () => {
 
     expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({
       id: 1,
-      error: { message: 'github answered 401' },
+      error: {
+        message:
+          "github refused the credential Memnox holds for it. Tell your person to replace that secret on the server's card in the MCP Hub.",
+        data: { status: 401 },
+      },
     });
     expect([...lines, ...logged].join('\n')).not.toContain(TOKEN);
+  });
+
+  it('sends the sign in Memnox keeps, and once more with a renewed one where it is refused', async () => {
+    const sent: string[] = [];
+    const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+      const authorization =
+        (init?.headers as Record<string, string>)['authorization'] ?? '';
+      sent.push(authorization);
+      return authorization === 'Bearer second'
+        ? json({ jsonrpc: '2.0', id: 1, result: {} })
+        : new Response('no', { status: 401 });
+    }) as typeof fetch;
+    const lines: string[] = [];
+    const upstream = new HttpUpstream({
+      url: URL,
+      headers: {},
+      name: 'videos',
+      onLine: (line) => lines.push(line),
+      log: () => undefined,
+      fetch: fetcher,
+      signIn: { token: async () => 'first', renew: async () => 'second' },
+    });
+
+    upstream.send(INITIALIZE);
+    await upstream.close();
+
+    expect(sent.slice(0, 2)).toEqual(['Bearer first', 'Bearer second']);
+    expect(JSON.parse(lines[0] ?? '{}')).toEqual({ jsonrpc: '2.0', id: 1, result: {} });
+  });
+
+  it('says to sign in again where the kept sign in cannot be renewed', async () => {
+    const lines: string[] = [];
+    const upstream = new HttpUpstream({
+      url: URL,
+      headers: {},
+      name: 'videos',
+      onLine: (line) => lines.push(line),
+      log: () => undefined,
+      fetch: (async () => new Response('no', { status: 401 })) as typeof fetch,
+      signIn: { token: async () => 'first', renew: async () => undefined },
+    });
+
+    upstream.send(INITIALIZE);
+    await upstream.close();
+
+    expect(JSON.parse(lines[0] ?? '{}').error.message).toContain(
+      'memnox mcp signin videos',
+    );
+  });
+
+  it('leaves a credential the config already carries as the one that speaks', async () => {
+    const server = fakeServer(() => json({ jsonrpc: '2.0', id: 1, result: {} }));
+    const upstream = new HttpUpstream({
+      url: URL,
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      name: 'github',
+      onLine: () => undefined,
+      log: () => undefined,
+      fetch: server.fetch,
+      signIn: { token: async () => 'kept', renew: async () => undefined },
+    });
+
+    upstream.send(INITIALIZE);
+    await upstream.close();
+
+    expect(server.posted[0]?.headers).not.toHaveProperty('authorization');
+    expect(server.posted[0]?.headers['Authorization']).toBe(`Bearer ${TOKEN}`);
   });
 
   it('gives up an answer past its bound rather than holding it', async () => {
@@ -233,6 +304,46 @@ describe('the firewall in front of a remote server', () => {
     input.emit('end');
     return { code: await exited, posted: server.posted, written, rows };
   }
+
+  /** One initialize sent through the firewall to a server answering `status`, and what it wrote down. */
+  async function opened(status: number): Promise<string[]> {
+    const told: string[] = [];
+    const input = new EventEmitter();
+    const exited = new Promise<number>((resolve) => {
+      new McpFirewall({
+        command: [],
+        remote: { url: URL, headers: {} },
+        serverName: 'videos',
+        gate,
+        log: () => undefined,
+        trouble: {
+          note: (kind) => void told.push(kind),
+          clear: () => void told.push('cleared'),
+        },
+      }).start({
+        input,
+        exit: resolve,
+        fetch: (async () =>
+          status === 200
+            ? json({ jsonrpc: '2.0', id: 1, result: {} })
+            : new Response('no', { status })) as typeof fetch,
+        output: () => undefined,
+      });
+    });
+    input.emit('data', Buffer.from(INITIALIZE));
+    input.emit('end');
+    await exited;
+    return told;
+  }
+
+  it('writes down a server that asks for a sign in, so the person is told why it is disconnected', async () => {
+    expect(await opened(401)).toEqual(['sign-in']);
+  });
+
+  it('writes down a server that would not open, and forgets trouble once one answers', async () => {
+    expect(await opened(503)).toEqual(['unreachable']);
+    expect(await opened(200)).toEqual(['cleared']);
+  });
 
   it('rules on a call before it is posted, and keeps a row for each call', async () => {
     const { code, posted, written, rows } = await run([

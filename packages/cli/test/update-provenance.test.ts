@@ -8,14 +8,14 @@ import { installedFrom, judgeRelease } from '../src/commands/update/provenance';
 
 // Self signed stand ins for Fulcio certificates; npm checked the real chain before this runs.
 const RELEASE_CERT = [
-  'MIIB0zCCAXigAwIBAgIUTIAMSroebOb3adctVxFGtauXGAYwCgYIKoZIzj0EAwIwDzENMAsGA1UECgwE',
-  'dGVzdDAeFw0yNjEwMDcyMzMwMzhaFw0zNjEwMDQyMzMwMzhaMA8xDTALBgNVBAoMBHRlc3QwWTATBgcq',
-  'hkjOPQIBBggqhkjOPQMBBwNCAATsaW3lniuu49+BD2f2H0iVhLhdamEBAIkWAgOVVIJHIuoPaR/3knst',
-  '3mdRnmsML+2bJkT8F+wK/chH4bCTse/To4GxMIGuMB0GA1UdDgQWBBSedLYnvxdG118dqvGQXkMROpSJ',
-  'JzAfBgNVHSMEGDAWgBSedLYnvxdG118dqvGQXkMROpSJJzAPBgNVHRMBAf8EBTADAQH/MFsGA1UdEQRU',
-  'MFKGUGh0dHBzOi8vZ2l0aHViLmNvbS9NZW1ub3gvbWVtbm94Ly5naXRodWIvd29ya2Zsb3dzL3JlbGVh',
-  'c2UueW1sQHJlZnMvdGFncy92MC4xNC4wMAoGCCqGSM49BAMCA0kAMEYCIQCXYSeZde8jvzdbGLuHllMk',
-  'Nfljo0SX6juNKxF5gilyuQIhAPCJ0cpB5lVjyCJwLO6O/tJFJeGGXdZ8+pekrOsNYs2l',
+  'MIIBuDCCAV+gAwIBAgIUfgQx7yqOX9rA14hH4Y5lPhrACpEwCgYIKoZIzj0EAwIwDzENMAsGA1UECgwE',
+  'dGVzdDAeFw0yNjExMTgxOTIxMTdaFw0zNjExMTUxOTIxMTdaMA8xDTALBgNVBAoMBHRlc3QwWTATBgcq',
+  'hkjOPQIBBggqhkjOPQMBBwNCAAQyrv1MADGOxFYnmbF2RKTOOHw1IZFaj0syOV5njHIOvaWR1nlHPGyP',
+  '3bemA3wSVOjmZsSgsKg/PfZEtiNefX2ro4GYMIGVMB0GA1UdDgQWBBSCby+DmaWbvikUOUCij14DALZu',
+  'kjAPBgNVHRMBAf8EBTADAQH/MGMGA1UdEQRcMFqGWGh0dHBzOi8vZ2l0aHViLmNvbS9NZW1ub3gvbWVt',
+  'bm94LXJ1bnRpbWUvLmdpdGh1Yi93b3JrZmxvd3MvcmVsZWFzZS55bWxAcmVmcy90YWdzL3YwLjE0LjAw',
+  'CgYIKoZIzj0EAwIDRwAwRAIgZiI0+yoaOlvyrg2gdfLACzVzH8yXML0aUBwKwjhqTSUCIFfsCheX0fZW',
+  'SLQcA0BW28wpniT8JCTpNgONab1VwPzp',
 ].join('');
 
 const FORK_CERT = [
@@ -30,7 +30,7 @@ const FORK_CERT = [
 ].join('');
 
 const RELEASE_WORKFLOW = {
-  repository: 'https://github.com/Memnox/memnox',
+  repository: 'https://github.com/Memnox/memnox-runtime',
   path: '.github/workflows/release.yml',
   ref: 'refs/tags/v0.14.0',
 };
@@ -98,7 +98,7 @@ describe('judging a release before it is installed', () => {
     expect(verdict).toEqual({
       ok: false,
       reason:
-        '@memnox/core@0.14.0 was published without provenance, so nothing ties it to https://github.com/Memnox/memnox',
+        '@memnox/core@0.14.0 was published without provenance, so nothing ties it to https://github.com/Memnox/memnox-runtime',
     });
   });
 

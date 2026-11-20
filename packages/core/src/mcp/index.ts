@@ -5,3 +5,6 @@ export * from './install-line';
 export * from './node-secret-store';
 export * from './hub-store';
 export * from './org-servers';
+export * from './server-trouble';
+export * from './remote-sign-in';
+export * from './remote-sign-in-store';

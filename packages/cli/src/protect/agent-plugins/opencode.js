@@ -48,7 +48,9 @@ function refusal(answer) {
   if (line === undefined) return null;
   try {
     const said = JSON.parse(line);
-    return said.decision === 'block' ? String(said.reason || 'Memnox refused this.') : null;
+    return said.decision === 'block'
+      ? String(said.reason || 'Memnox refused this.')
+      : null;
   } catch {
     return null;
   }
@@ -65,7 +67,9 @@ export const MemnoxPlugin = async ({ directory }) => {
   });
   return {
     'tool.execute.before': async (input, output) => {
-      const reason = refusal(await run(callOf(EVENT.PRE_TOOL, input, output && output.args)));
+      const reason = refusal(
+        await run(callOf(EVENT.PRE_TOOL, input, output && output.args)),
+      );
       if (reason !== null) throw new Error(reason);
     },
     'tool.execute.after': async (input, output) => {
@@ -75,10 +79,18 @@ export const MemnoxPlugin = async ({ directory }) => {
     event: async ({ event }) => {
       const props = (event && event.properties) || {};
       if (event.type === 'session.idle' && props.sessionID) {
-        await run({ hook_event_name: EVENT.TURN_END, session_id: props.sessionID, cwd: directory });
+        await run({
+          hook_event_name: EVENT.TURN_END,
+          session_id: props.sessionID,
+          cwd: directory,
+        });
       }
       if (event.type === 'session.deleted' && props.info && props.info.id) {
-        await run({ hook_event_name: EVENT.SESSION_END, session_id: props.info.id, cwd: directory });
+        await run({
+          hook_event_name: EVENT.SESSION_END,
+          session_id: props.info.id,
+          cwd: directory,
+        });
       }
     },
   };

@@ -15,6 +15,7 @@ import {
   EFFECT_INFERENCE,
 } from '../src/discovery/discovery.constants';
 import { inferToolEffect } from '../src/discovery/surface';
+import { slashed } from '../src/domain/separators';
 import { FakeMachine } from './fake-machine';
 
 const NOW = '2026-08-31T09:00:00.000Z';
@@ -44,7 +45,7 @@ describe('the doctor', () => {
     const { findings } = await report();
 
     expect(findings[0]?.severity).toBe(FINDING_SEVERITY.CRITICAL);
-    expect(findings[0]?.evidence).toBe('/home/dev/.aws/credentials');
+    expect(slashed(findings[0]?.evidence ?? '')).toBe('/home/dev/.aws/credentials');
     expect(findings.every((finding) => finding.evidence.length > 0)).toBe(true);
   });
 
@@ -76,7 +77,7 @@ describe('the doctor', () => {
       surfaces: discovered.surfaces,
     });
 
-    const env = findings.find((finding) => finding.evidence.endsWith('/.env'));
+    const env = findings.find((finding) => slashed(finding.evidence).endsWith('/.env'));
     const aws = findings.find((finding) => finding.evidence.endsWith('credentials'));
 
     expect(env?.remediation?.apply.contents).toContain('.env.example');
@@ -168,7 +169,7 @@ describe('three harmless capabilities at once', () => {
       finding.title.includes('together that is an export'),
     );
     expect(combined).toBeDefined();
-    expect(combined?.evidence).toContain('.aws/credentials');
+    expect(slashed(combined?.evidence ?? '')).toContain('.aws/credentials');
     expect(combined?.evidence).toContain('slack.send_message');
   });
 

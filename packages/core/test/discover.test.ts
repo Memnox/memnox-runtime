@@ -3,6 +3,7 @@ import { discover, summarize } from '../src/discovery/discover';
 import { SENSITIVITY, SURFACE_KIND } from '../src/discovery/discovery.constants';
 import { agentRefOf } from '../src/discovery/agent';
 import { agentsReachingPath } from '../src/discovery/reachability';
+import { slashed } from '../src/domain/separators';
 import { FakeMachine } from './fake-machine';
 
 const NOW = '2026-08-31T09:00:00.000Z';
@@ -30,7 +31,9 @@ describe('discover', () => {
       'claude-code',
       'cursor',
     ]);
-    expect(report.agents[0]?.configPaths).toContain('/home/dev/.claude.json');
+    expect(report.agents[0]?.configPaths.map(slashed)).toContain(
+      '/home/dev/.claude.json',
+    );
   });
 
   it('never stores a secret value, only a path, a kind and a fingerprint', async () => {
@@ -39,7 +42,9 @@ describe('discover', () => {
 
     expect(serialized).not.toContain('AKIAEXAMPLE');
     expect(serialized).not.toContain('PRIVATE KEY MATERIAL');
-    const aws = report.resources.find((each) => each.path?.endsWith('.aws/credentials'));
+    const aws = report.resources.find((each) =>
+      slashed(each.path ?? '').endsWith('.aws/credentials'),
+    );
     expect(aws?.fingerprint).toMatch(/^[0-9a-f]{16}$/);
     expect(aws?.sensitivity).toBe(SENSITIVITY.CRITICAL);
   });
@@ -85,13 +90,16 @@ describe('discover', () => {
 
   it('counts a credential path exactly as the resource block counts the same file', async () => {
     const report = await discover(FakeMachine.from(MACHINE), { now: NOW });
-    const path = '/home/dev/.ssh/id_ed25519';
-    const resource = report.resources.find((each) => each.path === path);
+    const resource = report.resources.find(
+      (each) => slashed(each.path ?? '') === '/home/dev/.ssh/id_ed25519',
+    );
 
     expect(
-      agentsReachingPath(path, report.agents.map(agentRefOf), report.surfaces).map(
-        (ref) => ref.id,
-      ),
+      agentsReachingPath(
+        resource?.path ?? '',
+        report.agents.map(agentRefOf),
+        report.surfaces,
+      ).map((ref) => ref.id),
     ).toEqual(resource?.reachableBy.map((ref) => ref.id));
   });
 });

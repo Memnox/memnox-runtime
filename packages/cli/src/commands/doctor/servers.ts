@@ -3,11 +3,15 @@
  * for its tools, the way `memnox scan` asks, because configured is not the same as there.
  */
 import {
+  agentShown,
   DAY_MS,
+  describeTrouble,
   EVENT_SURFACE,
   SERVER_DOWN_OPERATION,
+  ServerTroubles,
   type DiscoveryReport,
   type MemnoxEvent,
+  type ServerTrouble,
 } from '@memnox/core';
 
 import type { CliContext } from '../../cli-context';
@@ -99,6 +103,30 @@ export function renderStopped(
     stopped.map((row) => ({
       tone: TONE.WARN,
       text: `${row.at.slice(0, 16)}  ${row.reason}`,
+    })),
+  );
+}
+
+/** Servers a proxy could not connect for an agent and that have not connected since. */
+export async function disconnected(home: string): Promise<ServerTrouble[]> {
+  return new ServerTroubles(home).all();
+}
+
+/** Said first, since it names why an agent shows a server disconnected and what puts it right. */
+export function renderDisconnected(
+  context: CliContext,
+  troubles: readonly ServerTrouble[],
+): void {
+  if (troubles.length === 0) return;
+  context.flow.list(
+    'Disconnected behind Memnox',
+    troubles.map((trouble) => ({
+      tone: TONE.WARN,
+      text: describeTrouble(
+        trouble,
+        trouble.agent === undefined ? undefined : agentShown(trouble.agent),
+      ),
+      detail: [`since ${trouble.at.slice(0, 16)}`],
     })),
   );
 }

@@ -7,6 +7,7 @@ import {
   type SurfaceKind,
 } from './discovery.constants';
 import type { HardenStep } from './finding';
+import { slashed } from '../domain/separators';
 import { ENV_FILE_PATTERN } from './resource';
 
 /**
@@ -94,7 +95,7 @@ export function askProductionStep(findingId: string): HardenStep {
  */
 function substituteFor(path: string, kind: ResourceKind): string | null {
   if (kind === RESOURCE_KIND.SOCKET) return null;
-  return ENV_FILE_PATTERN.test(path) ? `${path}.example` : null;
+  return ENV_FILE_PATTERN.test(slashed(path)) ? `${path}.example` : null;
 }
 
 /**

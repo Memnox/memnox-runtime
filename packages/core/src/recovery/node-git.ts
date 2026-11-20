@@ -3,6 +3,7 @@ import { access, copyFile, rm, rmdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { promisify } from 'node:util';
 import { ownProcessEnv } from '../coordination/own-path';
+import { nativePath } from '../domain/separators';
 import type { GitPort, WorktreePort } from './ports';
 
 /**
@@ -33,7 +34,7 @@ export class NodeGit implements GitPort {
 
   async root(): Promise<string | null> {
     try {
-      return await this.run(['rev-parse', '--show-toplevel']);
+      return nativePath(await this.run(['rev-parse', '--show-toplevel']));
     } catch {
       // Not a repository, which is an answer rather than a failure.
       return null;

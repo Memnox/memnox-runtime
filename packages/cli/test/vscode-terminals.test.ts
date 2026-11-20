@@ -49,111 +49,119 @@ function listing(vsix: string): Promise<string> {
   );
 }
 
-describe('the extension that shows a session its own VS Code terminal', () => {
-  it('packages itself and installs into the editors that are here', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
-    const calls: string[][] = [];
-    const out = new RecordedOutput();
-    await runVscodeTerminals(new CliContext(out), home, false, await seamsFor(calls));
+// The editors are found in /Applications and the extension is zipped with /usr/bin/zip, which is macOS.
+describe.skipIf(process.platform === 'win32')(
+  'the extension that shows a session its own VS Code terminal',
+  () => {
+    it('packages itself and installs into the editors that are here', async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
+      const calls: string[][] = [];
+      const out = new RecordedOutput();
+      await runVscodeTerminals(new CliContext(out), home, false, await seamsFor(calls));
 
-    const install = calls.find((each) => each[0] === CODE);
-    expect(install?.slice(1, 2)).toEqual(['--install-extension']);
-    const vsix = install?.[2] ?? '';
-    expect((await listing(vsix)).split('\n').sort()).toEqual(
-      expect.arrayContaining([
-        '[Content_Types].xml',
-        'extension.vsixmanifest',
-        'extension/package.json',
-        'extension/dist/extension.js',
-      ]),
-    );
-  });
-
-  it("finds an editor installed under the person's own Applications folder", async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
-    const own = join(
-      home,
-      'Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
-    );
-    const calls: string[][] = [];
-    const seams = await seamsFor(calls);
-    await runVscodeTerminals(new CliContext(new RecordedOutput()), home, false, {
-      ...seams,
-      exists: (path) => path === own,
+      const install = calls.find((each) => each[0] === CODE);
+      expect(install?.slice(1, 2)).toEqual(['--install-extension']);
+      const vsix = install?.[2] ?? '';
+      expect((await listing(vsix)).split('\n').sort()).toEqual(
+        expect.arrayContaining([
+          '[Content_Types].xml',
+          'extension.vsixmanifest',
+          'extension/package.json',
+          'extension/dist/extension.js',
+        ]),
+      );
     });
-    expect(
-      calls.some((each) => each[0] === own && each[1] === '--install-extension'),
-    ).toBe(true);
-  });
 
-  it('puts itself in as the daemon starts only where the copy there is not the one it ships', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
-    const calls: string[][] = [];
-    const seams = await seamsFor(calls);
-    const extensions = join(home, '.vscode', 'extensions');
-    await mkdir(join(extensions, `${TERMINALS_EXTENSION}-0.13.14`), { recursive: true });
-    const said: string[] = [];
-    await refreshVscodeTerminals(home, (line) => said.push(line), seams);
-    expect(installs(calls)).toHaveLength(1);
-    expect(said).toEqual([expect.stringContaining('put into VS Code')]);
-
-    // This very build there now, as the editor unpacks it, so the next start changes nothing.
-    const build = builtVersion(await readFile(seams.script() ?? '', 'utf8'));
-    await mkdir(join(extensions, `${TERMINALS_EXTENSION}-${build}`), { recursive: true });
-    calls.length = 0;
-    await refreshVscodeTerminals(home, (line) => said.push(line), seams);
-    expect(calls).toEqual([]);
-  });
-
-  it('puts itself back when the editor uninstalled it and left the folder behind', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
-    const calls: string[][] = [];
-    const seams = await seamsFor(calls);
-    const extensions = join(home, '.vscode', 'extensions');
-    const build = builtVersion(await readFile(seams.script() ?? '', 'utf8'));
-    const folder = `${TERMINALS_EXTENSION}-${build}`;
-    await mkdir(join(extensions, folder, 'dist'), { recursive: true });
-    await writeFile(
-      join(extensions, '.obsolete'),
-      JSON.stringify({ [folder]: true, 'someone.else-1.0.0': true }),
-    );
-    await refreshVscodeTerminals(home, () => undefined, seams);
-    expect(installs(calls)).toHaveLength(1);
-    // The removed copy goes with its mark, so the install is not made into a folder the editor wrote off.
-    expect(existsSync(join(extensions, folder))).toBe(false);
-    expect(JSON.parse(await readFile(join(extensions, '.obsolete'), 'utf8'))).toEqual({
-      'someone.else-1.0.0': true,
+    it("finds an editor installed under the person's own Applications folder", async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
+      const own = join(
+        home,
+        'Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+      );
+      const calls: string[][] = [];
+      const seams = await seamsFor(calls);
+      await runVscodeTerminals(new CliContext(new RecordedOutput()), home, false, {
+        ...seams,
+        exists: (path) => path === own,
+      });
+      expect(
+        calls.some((each) => each[0] === own && each[1] === '--install-extension'),
+      ).toBe(true);
     });
-  });
 
-  it('leaves an older copy on disk, since an editor open since before still loads it as its extensions restart', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
-    const calls: string[][] = [];
-    const seams = await seamsFor(calls);
-    const extensions = join(home, '.vscode', 'extensions');
-    const older = `${TERMINALS_EXTENSION}-0.13.14-0000beef`;
-    await mkdir(join(extensions, older, 'dist'), { recursive: true });
-    await writeFile(join(extensions, '.obsolete'), JSON.stringify({ [older]: true }));
-    await refreshVscodeTerminals(home, () => undefined, seams);
-    expect(installs(calls)).toHaveLength(1);
-    expect(existsSync(join(extensions, older))).toBe(true);
-    expect(JSON.parse(await readFile(join(extensions, '.obsolete'), 'utf8'))).toEqual({
-      [older]: true,
+    it('puts itself in as the daemon starts only where the copy there is not the one it ships', async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
+      const calls: string[][] = [];
+      const seams = await seamsFor(calls);
+      const extensions = join(home, '.vscode', 'extensions');
+      await mkdir(join(extensions, `${TERMINALS_EXTENSION}-0.13.14`), {
+        recursive: true,
+      });
+      const said: string[] = [];
+      await refreshVscodeTerminals(home, (line) => said.push(line), seams);
+      expect(installs(calls)).toHaveLength(1);
+      expect(said).toEqual([expect.stringContaining('put into VS Code')]);
+
+      // This very build there now, as the editor unpacks it, so the next start changes nothing.
+      const build = builtVersion(await readFile(seams.script() ?? '', 'utf8'));
+      await mkdir(join(extensions, `${TERMINALS_EXTENSION}-${build}`), {
+        recursive: true,
+      });
+      calls.length = 0;
+      await refreshVscodeTerminals(home, (line) => said.push(line), seams);
+      expect(calls).toEqual([]);
     });
-  });
 
-  it('takes itself back out by its id', async () => {
-    const calls: string[][] = [];
-    const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
-    await runVscodeTerminals(
-      new CliContext(new RecordedOutput()),
-      home,
-      true,
-      await seamsFor(calls),
-    );
-    expect(calls).toEqual([[CODE, '--uninstall-extension', TERMINALS_EXTENSION]]);
-  });
-});
+    it('puts itself back when the editor uninstalled it and left the folder behind', async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
+      const calls: string[][] = [];
+      const seams = await seamsFor(calls);
+      const extensions = join(home, '.vscode', 'extensions');
+      const build = builtVersion(await readFile(seams.script() ?? '', 'utf8'));
+      const folder = `${TERMINALS_EXTENSION}-${build}`;
+      await mkdir(join(extensions, folder, 'dist'), { recursive: true });
+      await writeFile(
+        join(extensions, '.obsolete'),
+        JSON.stringify({ [folder]: true, 'someone.else-1.0.0': true }),
+      );
+      await refreshVscodeTerminals(home, () => undefined, seams);
+      expect(installs(calls)).toHaveLength(1);
+      // The removed copy goes with its mark, so the install is not made into a folder the editor wrote off.
+      expect(existsSync(join(extensions, folder))).toBe(false);
+      expect(JSON.parse(await readFile(join(extensions, '.obsolete'), 'utf8'))).toEqual({
+        'someone.else-1.0.0': true,
+      });
+    });
+
+    it('leaves an older copy on disk, since an editor open since before still loads it as its extensions restart', async () => {
+      const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
+      const calls: string[][] = [];
+      const seams = await seamsFor(calls);
+      const extensions = join(home, '.vscode', 'extensions');
+      const older = `${TERMINALS_EXTENSION}-0.13.14-0000beef`;
+      await mkdir(join(extensions, older, 'dist'), { recursive: true });
+      await writeFile(join(extensions, '.obsolete'), JSON.stringify({ [older]: true }));
+      await refreshVscodeTerminals(home, () => undefined, seams);
+      expect(installs(calls)).toHaveLength(1);
+      expect(existsSync(join(extensions, older))).toBe(true);
+      expect(JSON.parse(await readFile(join(extensions, '.obsolete'), 'utf8'))).toEqual({
+        [older]: true,
+      });
+    });
+
+    it('takes itself back out by its id', async () => {
+      const calls: string[][] = [];
+      const home = await mkdtemp(join(tmpdir(), 'memnox-vscode-'));
+      await runVscodeTerminals(
+        new CliContext(new RecordedOutput()),
+        home,
+        true,
+        await seamsFor(calls),
+      );
+      expect(calls).toEqual([[CODE, '--uninstall-extension', TERMINALS_EXTENSION]]);
+    });
+  },
+);
 
 describe('the version an extension build carries', () => {
   it('names each build apart, so a reinstall never lands in the folder the editor just marked removed', () => {

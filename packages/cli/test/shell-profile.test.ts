@@ -61,7 +61,7 @@ describe('the shell profile line', () => {
     expect((await addToProfile(path, block)).state).toBe('unchanged');
 
     const after = await readFile(path, 'utf8');
-    expect(after.split('.memnox/bin').length - 1).toBe(1);
+    expect(after.split(join('.memnox', 'bin')).length - 1).toBe(1);
   });
 
   it('writes a profile that did not exist yet, and takes it back out', async () => {

@@ -215,7 +215,8 @@ describe('NodeSnapshotStore', () => {
   });
 
   /** A snapshot names every path an agent on this machine can reach. */
-  it('writes owner-only', async () => {
+  // Windows keeps access in ACLs and reports every file as 0o666, so the mode bits say nothing there.
+  it.skipIf(process.platform === 'win32')('writes owner-only', async () => {
     const store = new NodeSnapshotStore(root);
     await store.save(snapshot({ takenAt: '2026-01-01T09:00:00.000Z' }));
 

@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CLAIM_ANSWER,
@@ -101,11 +101,16 @@ describe("what each of an agent's own tools does, as a rule names it", () => {
     expect(
       toolCallOf(claude('Read', { file_path: '~/.ssh/id_ed25519' }), HOME)?.requests,
     ).toEqual([
-      { action: 'filesystem.read', target: `${HOME}/.ssh/id_ed25519`, class: 'read' },
+      {
+        action: 'filesystem.read',
+        target: join(HOME, '.ssh', 'id_ed25519'),
+        class: 'read',
+      },
     ]);
     expect(
       toolCallOf(claude('Read', { file_path: '.env' }), HOME)?.requests[0]?.target,
-    ).toBe(`${REPO}/.env`);
+      // Resolved as the call resolves it, which on Windows puts it on the current drive.
+    ).toBe(resolve(REPO, '.env'));
   });
 
   it('searches the working directory where Grep and Glob name no path', () => {
@@ -278,7 +283,15 @@ describe('the verdict, the mode, and what the agent is told', () => {
     const asked = await answerToolCall(fetch, context(true), seams);
     expect(asked?.reply?.stdout).toContain('"permissionDecision":"ask"');
 
-    const unattended = await answerToolCall(fetch, context(false), seams);
+    // A home under a file, where no question can be written down to wait for an answer, which
+    // a writable one would do instead of refusing, and on Windows even /Users/dev is writable.
+    const blocked = join(await mkdtemp(join(tmpdir(), 'memnox-tool-hook-')), 'file');
+    await writeFile(blocked, '');
+    const unattended = await answerToolCall(
+      fetch,
+      { ...context(false), home: join(blocked, 'home') },
+      seams,
+    );
     expect(unattended?.reply?.stdout).toContain('"permissionDecision":"deny"');
     expect(unattended?.reply?.stdout).toContain(NO_WAY_TO_ASK);
   });

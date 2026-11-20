@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { MEMNOX_HOME } from '../config/config';
 import { DECISION_EFFECT } from '../constants/decision.constants';
+import { slashed } from '../domain/separators';
 import type { MemnoxEvent } from '../event/event';
 import {
   describeSpan,
@@ -186,8 +187,10 @@ export function withWorkersOf(
 
 /** `src/billing` holds `src/billing/a.ts` and not `src/billing-legacy`, the sibling prefix trap. */
 function isInside(path: string, root: string): boolean {
-  const base = root.replace(/\/+$/, '');
-  return path === base || path.startsWith(`${base}/`);
+  // Compared with `/`, so a Windows folder joins its mission as surely as any other.
+  const spelled = slashed(path);
+  const base = slashed(root).replace(/\/+$/, '');
+  return spelled === base || spelled.startsWith(`${base}/`);
 }
 
 /** A mission added up from the ledger, over every session it holds. Counts, never a score. */

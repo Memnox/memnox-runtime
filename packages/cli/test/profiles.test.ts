@@ -199,7 +199,10 @@ describe('profiles', () => {
     await mergeRules(file, scopedRules(proposal.change.rules, scope), at.home);
 
     expect(file).toBe(machinePolicyPath(at.home));
-    expect(await readFile(file, 'utf8')).toContain(at.project);
+    // As TOML writes it, which doubles a Windows path's backslashes.
+    expect(await readFile(file, 'utf8')).toContain(
+      JSON.stringify(at.project).slice(1, -1),
+    );
     expect(await readFile(theirs, 'utf8')).toBe(before);
   });
 

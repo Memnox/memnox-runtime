@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { discover } from '../src/discovery/discover';
 import type { McpLister } from '../src/discovery/ports';
 import type { MachineReader } from '../src/discovery/ports';
+import { FakeMachine } from './fake-machine';
 
 const HOME = '/home/dev';
 
@@ -16,13 +17,7 @@ const CONFIG = JSON.stringify({
 });
 
 function reader(): MachineReader {
-  return {
-    exists: async (path) => path === `${HOME}/.claude.json`,
-    read: async (path) => (path === `${HOME}/.claude.json` ? CONFIG : null),
-    list: async () => [],
-    homeDir: () => HOME,
-    userName: () => 'dev',
-  };
+  return FakeMachine.from({ [`${HOME}/.claude.json`]: CONFIG }, HOME);
 }
 
 const PROBE_MS = 300;

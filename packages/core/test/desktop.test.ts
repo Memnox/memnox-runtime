@@ -5,6 +5,7 @@ import { SURFACE_KIND } from '../src/discovery/discovery.constants';
 import type { McpLister } from '../src/discovery/ports';
 import type { McpTool, Surface } from '../src/discovery/surface';
 import { FakeMachine } from './fake-machine';
+import { slashed } from '../src/domain/separators';
 
 const NOW = '2026-10-13T09:00:00.000Z';
 
@@ -97,7 +98,9 @@ describe('the desktop in a scan', () => {
     const report = await discover(machine(), { now: NOW, lister });
     const desktop = report.surfaces.filter((each) => each.kind === SURFACE_KIND.DESKTOP);
 
-    expect(desktop).toEqual([
+    expect(
+      desktop.map((each) => ({ ...each, detectedFrom: slashed(each.detectedFrom) })),
+    ).toEqual([
       {
         agentId: 'agt_claude-code',
         kind: SURFACE_KIND.DESKTOP,
