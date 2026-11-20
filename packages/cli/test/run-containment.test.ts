@@ -487,6 +487,7 @@ describe('memnox status', () => {
     const out = new RecordedOutput();
     const program = new Command().exitOverride().configureOutput({ writeErr: () => {} });
     registerStatusCommand(program, new CliContext(out, plainStyle), {
+      withdrawn: async () => null,
       home: () => '/nowhere',
       project: () => '/nowhere',
       read: async () => ({

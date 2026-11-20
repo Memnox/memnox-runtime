@@ -126,7 +126,8 @@ describe('memnox mcp repair', () => {
       pages: proxied('pages', OPEN),
     });
 
-    const checked = await checkRemotes(home, { fetch: fetcher });
+    // An injected store, because the machine's own starts PowerShell per lookup on Windows and reads a real keychain elsewhere.
+    const checked = await checkRemotes(home, { fetch: fetcher, secrets: memory() });
 
     expect(checked.map((each) => [each.name, each.verdict, each.agents])).toEqual([
       ['videos', REMOTE_VERDICT.SIGN_IN, [CLAUDE]],

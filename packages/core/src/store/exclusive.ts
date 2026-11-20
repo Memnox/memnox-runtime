@@ -1,5 +1,6 @@
 import { mkdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { codeOf, WINDOWS_BUSY_CODES } from './atomic-file';
 
 /**
  * One writer at a time across processes, for a store that reads a file, changes it and writes
@@ -21,7 +22,7 @@ export async function exclusively<T>(dir: string, work: () => Promise<T>): Promi
     try {
       await mkdir(lock);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (!isHeld(error)) throw error;
       await reclaimStale(lock);
       await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
       continue;
@@ -33,6 +34,13 @@ export async function exclusively<T>(dir: string, work: () => Promise<T>): Promi
     }
   }
   throw new Error(`could not take the lock on ${dir}; run "memnox doctor"`);
+}
+
+/** Another writer has it, or on Windows is still letting it go: a removed lock answers EPERM until its delete completes. */
+function isHeld(error: unknown): boolean {
+  const code = codeOf(error);
+  if (code === 'EEXIST') return true;
+  return process.platform === 'win32' && WINDOWS_BUSY_CODES.includes(code);
 }
 
 async function reclaimStale(lock: string): Promise<void> {
