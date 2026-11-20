@@ -472,6 +472,8 @@ print(json.dumps({
       });
       expect(JSON.stringify(asked)).not.toContain('secret');
     },
+    // Python starts Node three times here, which a Windows runner can take longer than the default ten seconds for.
+    60_000,
   );
 });
 
