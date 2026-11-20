@@ -112,27 +112,35 @@ export function registerStatusCommand(
     .description('Where this machine stands: what is held, and what happened today')
     .option('--json', 'machine-readable output')
     .action(async (options: { json?: boolean }) => {
-      const version = deps.installed();
-      const [status, reason] = await Promise.all([
-        deps.read(deps.home(), deps.project()),
-        deps.withdrawn(version).catch(() => null),
-      ]);
-      const ahead = status.setUp
-        ? await deps.ahead(deps.home()).catch((): Ahead => ({ working: [] }))
-        : { working: [] };
-      const withdrawn = reason === null ? undefined : { version, reason };
-      if (options.json === true) {
-        context.out.json({
-          ...status,
-          ...ahead,
-          ...(withdrawn === undefined ? {} : { withdrawn }),
-        });
-        return;
-      }
-      renderStatus(context, status, ahead, withdrawn);
-      if (withdrawn !== undefined)
-        context.flow.hint('"memnox update" moves to the fixed version.');
+      await runStatus(context, deps, options.json === true);
     });
+}
+
+async function runStatus(
+  context: CliContext,
+  deps: StatusDeps,
+  json: boolean,
+): Promise<void> {
+  const version = deps.installed();
+  const [status, reason] = await Promise.all([
+    deps.read(deps.home(), deps.project()),
+    deps.withdrawn(version).catch(() => null),
+  ]);
+  const ahead = status.setUp
+    ? await deps.ahead(deps.home()).catch((): Ahead => ({ working: [] }))
+    : { working: [] };
+  const withdrawn = reason === null ? undefined : { version, reason };
+  if (json) {
+    context.out.json({
+      ...status,
+      ...ahead,
+      ...(withdrawn === undefined ? {} : { withdrawn }),
+    });
+    return;
+  }
+  renderStatus(context, status, ahead, withdrawn);
+  if (withdrawn !== undefined)
+    context.flow.hint('"memnox update" moves to the fixed version.');
 }
 
 /** Reads the machine: the kept boundary, the health doctor reads, the ledger since midnight. */
