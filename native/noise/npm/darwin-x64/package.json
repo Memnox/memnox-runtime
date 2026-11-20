@@ -1,6 +1,6 @@
 {
   "name": "@memnox/noise-darwin-x64",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The Noise addon for Memnox, prebuilt for darwin-x64.",
   "license": "Apache-2.0",
   "main": "memnox-noise.darwin-x64.node",

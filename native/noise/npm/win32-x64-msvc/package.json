@@ -1,6 +1,6 @@
 {
   "name": "@memnox/noise-win32-x64-msvc",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The Noise addon for Memnox, prebuilt for win32-x64-msvc.",
   "license": "Apache-2.0",
   "main": "memnox-noise.win32-x64-msvc.node",

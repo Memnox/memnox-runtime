@@ -1,5 +1,70 @@
 # @memnox/proxy
 
+## 0.15.1
+
+### Patch Changes
+
+- e94bf1b: Profiles are kept apart from connections. Every agent found here answers to a default profile until a person binds one with `memnox profile bind <profile> <agent>`, or the daemon's `profile-bind` and `profile-unbind`; the binding is kept in `~/.memnox/agents/connections.json` and the agent keeps its `agt_<kind>` ledger key. Each profile now lists the connections it works through, and a session of a bound agent is matched under the profile's role unless `--role` or `MEMNOX_AGENT_ROLE` names another. `memnox profile new` and `memnox profile show` write and read profiles from the terminal.
+- e94bf1b: A profile names one responsible person in place of owners: the account signed in on this machine, else the person at it. Asks for that agent go to them, and the agent never holds their authority.
+- e94bf1b: A profile is now the agent's job as well as its bundle: purpose, role, responsibilities, instructions, owners, projects and the template it came from, all optional. Profiles kept as version 1 load unchanged and are written back as version 2.
+- e94bf1b: An agent reads and reports on the work its person pointed it at through `memnox-session`: `my_work`, `report_progress`, `mark_blocked` and `request_handoff`. None of them starts, assigns, stops or closes work, and an agent can claim done but never close. The voice gains `start_agent_work`, which waits for a yes read back, `show_agent_work` and `answer_handoff`, each acting only for the person it speaks for.
+- e94bf1b: Agent work: a person points the agent under a profile at an issue in Linear, Jira, GitHub or Asana with `memnox work start <profile> <LIN-123|link>`, and stops or closes it with `memnox work stop|close`. Memnox keeps a reference to the issue and never a copy, under `~/.memnox/work/` or the project's `.memnox/work/`. A session of that agent on a branch named for the issue, or started with `memnox run --work <id>`, joins it and takes it as its task, so drift is still measured. An agent may ask to hand its work on, and only a person answers with `memnox handoff accept|decline <id>`. The daemon answers `agent-work`, `work-start`, `work-stop`, `work-close` and `handoff-answer`, and sends `work` events to a subscriber that asks with `subscribeWork`.
+- e94bf1b: A bare issue key such as `LIN-123` no longer assumes Linear: `memnox work start` asks which tracker with `--tracker`, or takes the issue link.
+- e94bf1b: A budget can carry a warning line. `memnox budget set <name> --warn-at <n>` tells the person once, through the waiting feed, when a budget passes that line and again when it runs out, so a stop is never the first they hear of it. The warning never holds anything, and `memnox budget` prints the line beside the spend.
+- e94bf1b: Every connection, profile and agent card now says how sure Memnox is of each capability: context, instructions, tools, activity, coordination, approval, and enforcement per seam (shell, files, git, network, browser, MCP). A seam reads enforced only where `memnox doctor --prove` saw it refuse; held without a test is mediated, an MCP report is advisory, and anything else is observed or outside Memnox. A profile shows the weakest of its connections.
+- e94bf1b: `@memnox/guard` names the agent's profile on every record: `profileId` on `createGuard` (or `MEMNOX_PROFILE`) and on `wrapTool`. `guard.myWork()`, `guard.reportProgress({ workId, note, state, refs })` and `guard.requestHandoff(...)` read and report the work a person pointed the agent at, over the cloud's MCP tools `memnox_my_work`, `memnox_report_progress` and `memnox_request_handoff`.
+- e94bf1b: The Python guard now does what the TypeScript one does after a call: a tool answer written to steer the model taints the session so its sends and losses ask a person, the same call failing the same way five times or eight failures in a row pauses the session until a person resumes it, and progress notes, handoff reasons and questions leave with credentials masked.
+- e94bf1b: `@memnox/guard` and `memnox_guard` take `workRefs` on the guard or per call and say once per session which issues it is for, by key, number or link.
+- e94bf1b: A held call carried up on the heartbeat now names the session that asked, so the workspace can put it under that session rather than guessing from the agent.
+- e94bf1b: A hook session now matches rules under the role of the profile bound to its agent, as `memnox run` already did, so Claude Code, Codex and Cursor opened from their own icons are held to the same `roles:` rules. `--role` and `MEMNOX_AGENT_ROLE` still win.
+- 11709b6: A remote MCP server that asks for a sign in no longer ends up disconnected behind the proxy, and nothing in Memnox signs a person out of a tool. `memnox mcp signin <server>` signs in through Memnox in the browser and keeps the sign in in the OS store, which the proxy sends and renews, so the server connects and its calls stay ruled on. Taking a remote server into the hub now asks it first and moves it behind the proxy only once it has answered there; one that wants a sign in, or did not answer, is left exactly as the person set it up. `memnox mcp repair` finds the servers already broken and hands them back to the agent as their own address, asking before it changes anything. `mcp unwrap` and `uninstall` now put remote servers back as well as local ones. A server that will not connect behind Memnox is told to the person once, on the waiting feed, on its hub card and in `memnox doctor --servers`, and the agent's own server list says why and what to run in place of a bare status code. A refused credential, a missing secret and a local server whose command did not start are each said as what they are. `memnox mcp repair` offers the sign in through Memnox first and hands back only what that did not mend. `memnox mcp signin` takes `--client-id` and `--port` for a server that registers no new app. The daemon answers `mcp-sign-in`, which opens the browser and writes what the sign in came to onto the server's card, and `mcp-hand-back`, which is a signed proposal; the hub view carries `trouble` so a screen offers both only where they apply. A sign in no longer hangs after the browser comes back: the loopback page closes the connections a browser leaves open, every sign in request is bounded, and the sign in is sealed in a file under the Memnox home with only its key in the OS store, so a long token never meets an OS store's limit. The browser shows a Memnox page with the outcome, and `repair` takes servers one at a time with Enter to skip.
+- e94bf1b: `memnox --help` now lists sessions, approvals, next, mission and budget beside setup and status. `memnox next` fits one screen: where you are, what is ready to hand over, and one command, with the week by week history behind `--detail`. `memnox setup` ends with one next step, which once everything is wired is a prompt to paste into an agent so the first ask arrives in minutes.
+- e94bf1b: The terminal card answers a held call with the same words, in the same order, as the console, the Mac app and the phone: Allow once, Allow for this session, Edit the command first, Deny. A decided call reads "denied" rather than "refused". Session statuses and their reasons have one vocabulary, kept in `docs/ux/contract.json`, which every surface checks itself against.
+- e94bf1b: A catalog of seven job descriptions ships with the runtime: Software Development, Code Review, Testing, Documentation, Research, Customer Support and Operations Assistant. `memnox profile templates` lists them and `memnox profile from-template <template>` copies one into a new profile, taking only the suggested skills named with `--skills`; suggested rules are shown as sentences and nothing applies on its own. The daemon answers `templates` and `profile-from-template`.
+- e94bf1b: A project's `agents` list in `.memnox/project.toml` takes profile ids beside agent kinds. A profile stands for every agent bound to it, so a project's instructions and skills reach only those agents; an empty list still means every agent seen working in the project.
+- e94bf1b: A capability reads `enforced` only while the enforcement path installed now is the one the last `memnox doctor --prove` ran against. Rewire a hook, wrap a config or move PATH and the proof stops counting, so the level drops to what the connection itself holds, `mediated` or `observed`, until the proof is run again.
+- d8793cb: `memnox update` now requires provenance from `github.com/Memnox/memnox-runtime`, the repository's name since it was renamed from `Memnox/memnox`, and every package names that repository, so a release published through trusted publishing verifies again. The Noise addons are published again with it, since `memnox update` holds every `@memnox/*` package it installs to provenance and the 0.1.1 ones carry none. A copy installed before this release still trusts the old name and refuses this one, so it updates once with `memnox update --skip-verify`, which says so on screen and writes `verified: false` to `~/.memnox/updates.jsonl`, and verifies every release after it.
+- e94bf1b: A Python guard, `packages/guard-py`, decides allow, ask or deny for a Python agent from the signed bundle, with wrappers for OpenAI Agents SDK function tools and LangGraph tools, and reads and reports the agent's work. `vectors/guard-decisions.json`, written by the TypeScript guard's tests, holds both guards to the same decisions.
+- e94bf1b: A run that a crash, a reboot or a closed laptop cut off now shows in `memnox sessions` as Stopped, Interrupted, resumable. `memnox resume <session>` asks first and then starts it again in the same folder, with the same task, role, person and mission. Claude Code and Codex pick their own conversation back up; any other agent starts fresh, and the screen says so.
+- e94bf1b: Every change to a rule file, and every grant or revoke the autopilot makes, now keeps a copy of what stood before it. `memnox policy history` lists the changes newest first and names the rules each one added, removed or changed (`--allowances` for what the autopilot granted). `memnox policy revert <n>` puts a file back as it was before change n, and keeps what stood first, so the revert can itself be undone. An agent can read the history and can never revert.
+- e94bf1b: `memnox sessions` lists every session from the last day in groups by what it needs from the person: Needs you, Stopped, Working, Finished and Idle, with what needs a person first and a count beside each group. These are the same statuses and reasons the apps show.
+
+  `memnox approvals` now lists everything waiting on the person, both here and what the workspace routed to them, and `memnox inbox` is another name for it rather than a second command.
+
+- e94bf1b: A `git commit` that would take files another agent in the same checkout is still changing now asks first, and names that agent and those files. Leases already kept two agents off one file at once; this covers one agent's `commit -a` sweeping up the other's unfinished work. It asks and never refuses, because it is coordination rather than a rule.
+- e94bf1b: A held call's card on the terminal now closes the moment the call is answered from the phone, the console or `memnox approve`, and says who answered. It used to keep counting down and leave "nobody answered, so refused" in the scrollback for a call that had been allowed.
+- 11709b6: On Windows, a rule naming a path with `/` now matches the `\` path Windows hands over, so a deny on `.ssh` or a credential file holds there as it does on macOS and Linux, and a task's declared paths no longer ask about every write inside them. Credential files are classed as credentials on Windows, a binary in Downloads or in the project is reported as unusual, a shell write takes its lease, a session's recorded paths and the code fingerprint name repository files with `/`, a repository root git reports as `C:/...` is used as `C:\...`, and `memnox lock` accepts a folder Windows names by its short form. A config backup on Windows is a plain file again rather than a hidden stream of a file named after the drive, and a write Windows briefly refuses because another program has the file open is tried again.
+- e94bf1b: Leases send the branch and the issue keys its branch name and head commit claim, so the workspace can match them exactly against its trackers. With `MEMNOX_PROMPT_CLAIMS=1` the issue a prompt names as the task is claimed too; the prompt itself never leaves the machine.
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [11709b6]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [d8793cb]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [e94bf1b]
+- Updated dependencies [11709b6]
+- Updated dependencies [e94bf1b]
+  - @memnox/core@0.15.1
+
 ## 0.15.0
 
 ### Patch Changes
