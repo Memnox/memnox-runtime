@@ -10,8 +10,8 @@ const OWNER_ONLY = 0o600;
 // Counted per write rather than per process, so two writers never share a scratch file.
 let writes = 0;
 
-/** What Windows answers while another handle has the file open, which passes once it is closed. */
-const BUSY_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
+/** What Windows answers while another handle has the path open or its delete is pending, which passes once it is closed. */
+export const WINDOWS_BUSY_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
 const RENAME_TRIES = 10;
 const RENAME_BACKOFF_MS = 15;
 
@@ -37,14 +37,16 @@ async function renameWhenFree(from: string, to: string): Promise<void> {
       await rename(from, to);
       return;
     } catch (err) {
-      const busy = process.platform === 'win32' && BUSY_CODES.includes(codeOf(err));
+      const busy =
+        process.platform === 'win32' && WINDOWS_BUSY_CODES.includes(codeOf(err));
       if (!busy || tried >= RENAME_TRIES) throw err;
       await sleep(RENAME_BACKOFF_MS * tried);
     }
   }
 }
 
-function codeOf(err: unknown): string {
+/** The errno code of a failed fs call, or empty when the error carries none. */
+export function codeOf(err: unknown): string {
   return typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : '';
 }
 
