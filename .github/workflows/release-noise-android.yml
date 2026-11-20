@@ -1,0 +1,43 @@
+name: Release the Android Noise library
+
+# The Android app packs libmemnox_noise.so, which git never holds, so every release tag attaches a built one to its
+# GitHub release and somebody working on memnox-mobile alone, on Windows, Linux or a Mac, downloads it there rather
+# than installing the NDK and Rust and cloning this repo. Run by hand for a tag made before this.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to build and attach to, such as v0.15.0
+        required: true
+
+# Writing the release is all this needs, and npm is left to release.yml.
+permissions:
+  contents: write
+
+jobs:
+  jnilibs:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      # The runner carries an NDK in ANDROID_NDK_LATEST_HOME, which build-android.sh reads when ANDROID_NDK_HOME is unset.
+      - run: sh native/noise/scripts/build-android.sh
+      # The archive holds jniLibs/<abi>/libmemnox_noise.so, the layout the app's Gradle build unpacks.
+      - name: Pack it with its checksum
+        working-directory: native/noise/build/android
+        run: |
+          zip -r MemnoxNoise-android.zip jniLibs
+          sha256sum MemnoxNoise-android.zip > MemnoxNoise-android.zip.sha256
+      # The release is made here when the tag has none yet, and an earlier upload is replaced, so a rerun is safe.
+      - name: Attach it to the release
+        working-directory: native/noise/build/android
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "memnox $TAG on npm, with the Noise libraries the phone and Mac apps link."
+          gh release upload "$TAG" MemnoxNoise-android.zip MemnoxNoise-android.zip.sha256 --clobber
