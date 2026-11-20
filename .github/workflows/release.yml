@@ -199,6 +199,9 @@ jobs:
       # past. `changeset publish` is the half that matters here: it skips anything
       # already on the registry and publishes the rest in dependency order, so
       # `@memnox/core` lands before the CLI that requires it.
-      - run: pnpm run release
+      # npm trusts this workflow to stage a release rather than publish it, so every new version waits on npmjs.com
+      # for a person to approve it with their second factor before anybody can install it. The tag is not a branch,
+      # so the git checks are off; versions already on npm are skipped.
+      - run: pnpm stage publish --recursive --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
