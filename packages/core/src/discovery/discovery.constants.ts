@@ -243,3 +243,6 @@ export type ChangeSubject = (typeof CHANGE_SUBJECT)[keyof typeof CHANGE_SUBJECT]
 
 /** Snapshots kept before the oldest is dropped: enough for "since last week". */
 export const SNAPSHOT_HISTORY_LIMIT = 30;
+
+/** Parents every program writes into, relative to home, so never worth watching whole. */
+export const SHARED_CONFIG_PARENTS: readonly string[] = ['.', '.config'];

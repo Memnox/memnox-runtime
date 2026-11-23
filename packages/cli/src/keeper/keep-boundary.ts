@@ -291,7 +291,10 @@ export class BoundaryKeeper {
     const watcher =
       this.options.watcher === undefined
         ? // The watch list too, so a repository a session just opened is wrapped in seconds.
-          watchConfigPaths([...watchablePaths(this.home), watchListPath(this.home)])
+          watchConfigPaths([
+            ...watchablePaths(this.home),
+            { path: watchListPath(this.home) },
+          ])
         : this.options.watcher();
     this.closeWatch = () => watcher.close();
     void this.loop((ms) => watcher.next(ms));

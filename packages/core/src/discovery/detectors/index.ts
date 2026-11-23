@@ -1,5 +1,9 @@
-import { dirname, join } from 'node:path';
-import { DISCOVERED_AGENT_KIND, SURFACE_KIND } from '../discovery.constants';
+import { basename, dirname, join } from 'node:path';
+import {
+  DISCOVERED_AGENT_KIND,
+  SHARED_CONFIG_PARENTS,
+  SURFACE_KIND,
+} from '../discovery.constants';
 import { ConfigDetector, type ConfigDetectorSpec } from './config-detector';
 import type { AgentDetector } from './detector';
 import { CodexDetector } from './codex-detector';
@@ -123,19 +127,43 @@ export const DEFAULT_DETECTORS: readonly AgentDetector[] = [
 ];
 
 /**
- * The directories whose change means an agent's reach may have changed. Directories,
- * because a config that does not exist yet cannot be watched and is the case worth catching.
+ * A directory whose change means an agent's reach may have changed. A directory rather
+ * than a file, because a config that does not exist yet is the arrival worth catching.
  */
-export function watchablePaths(home: string): string[] {
-  const paths = new Set<string>();
+export interface WatchTarget {
+  path: string;
+  /** Entries directly inside `path` worth waking for; absent watches all beneath it. */
+  only?: readonly string[];
+}
+
+/**
+ * What to watch for agent config changes. A parent every program shares is watched only
+ * for the entries named in it, because watching home or `~/.config` whole is every file
+ * the person owns, and on Linux it exhausts the inotify watch limit within minutes.
+ */
+export function watchablePaths(home: string): WatchTarget[] {
+  const deep = new Set<string>();
+  const shallow = new Map<string, Set<string>>();
   for (const spec of DETECTOR_SPECS) {
-    for (const relative of spec.configPaths) {
-      paths.add(relative.includes('/') ? dirname(join(home, relative)) : home);
+    for (const relative of [...spec.configPaths, ...(spec.mcpConfigPaths ?? [])]) {
+      const parent = dirname(relative);
+      if (!SHARED_CONFIG_PARENTS.includes(parent)) {
+        deep.add(join(home, parent));
+        continue;
+      }
+      const path = join(home, parent);
+      const names = shallow.get(path) ?? new Set<string>();
+      names.add(basename(relative));
+      shallow.set(path, names);
     }
   }
   // A product with its own parser is not in the spec list, so its directory is added here.
-  for (const relative of PARSED_CONFIG_DIRS) paths.add(join(home, relative));
-  return [...paths].sort();
+  for (const relative of PARSED_CONFIG_DIRS) deep.add(join(home, relative));
+  const targets: WatchTarget[] = [...deep].map((path) => ({ path }));
+  for (const [path, names] of shallow) {
+    if (!deep.has(path)) targets.push({ path, only: [...names].sort() });
+  }
+  return targets.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /**
