@@ -236,6 +236,7 @@
       "memory-search",
       "memory-facts",
       "memory-forget",
+      "memory-remember",
       "workspace-memory",
       "workspace-graph",
       "memory-layers",

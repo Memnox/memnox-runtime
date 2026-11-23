@@ -1,5 +1,8 @@
+import { isAbsolute } from 'node:path';
 import {
+  MEMORY_KIND,
   MEMORY_METHOD,
+  MEMORY_ORIGIN,
   MEMORY_SCOPE,
   MEMORY_STATUS,
   MEMORY_STATUSES,
@@ -33,6 +36,7 @@ import { itemsView, itemView, sourcesView } from '../memory/memory-views';
 import { rewatchMemory } from '../memory/memory-watch';
 import { embedderFor } from '../memory/ollama-embedding';
 import { noteSearchTime } from '../memory/search-times';
+import { projectMemoryKey } from '../projects/project-organization';
 import { readWorkspaceGraph, type WorkspaceGraphDeps } from '../sync/workspace-graph';
 import { isMemoryLayersMethod, memoryLayersAnswer } from './memory-layers-answer';
 
@@ -97,6 +101,8 @@ async function answerOf(
       return read(home, store, request.memorySourceId, deps);
     case MEMORY_METHOD.MEMORY_LEARN:
       return learn(home, store, request.memoryScope, deps.now);
+    case MEMORY_METHOD.MEMORY_REMEMBER:
+      return remember(home, store, request, deps.now);
     case MEMORY_METHOD.MEMORY_SEARCH:
     case MEMORY_METHOD.MEMORY_FACTS:
       return facts(home, store, request, deps);
@@ -144,6 +150,60 @@ async function workspace(home: string): Promise<Answered> {
   const memory = await readWorkspaceMemory(home);
   return memory === null ? { ok: true } : { ok: true, workspaceMemory: memory };
 }
+
+/** As long as a statement an agent suggests may be, so a person's is held to the same. */
+const MOST_REMEMBERED_CHARS = 500;
+/** As many facts as one press keeps, so a pasted document is not taken for a list of facts. */
+const MOST_REMEMBERED = 20;
+
+/**
+ * What a person typed for agents in a project to always know, each kept as a fact and confirmed
+ * at once by that person, in the memory the project keeps: its own, or its shared project's.
+ */
+async function remember(
+  home: string,
+  store: SqliteMemoryStore,
+  request: DaemonRequest,
+  now: Date,
+): Promise<Answered> {
+  const folder = request.memoryProject;
+  if (folder === undefined || !isAbsolute(folder)) return refused('Name the project by its folder, whole.');
+  const said = (request.memoryStatements ?? [])
+    .map((each) => each.trim())
+    .filter((each) => each !== '');
+  if (said.length === 0) return refused('Say what agents there should know.');
+  if (said.length > MOST_REMEMBERED) return refused(`At most ${MOST_REMEMBERED} at a time.`);
+  if (said.some((each) => each.length > MOST_REMEMBERED_CHARS))
+    return refused(`Each is at most ${MOST_REMEMBERED_CHARS} characters.`);
+  const place = await projectMemoryKey(home, folder);
+  if ('none' in place) return refused('This shared project keeps no memory, so nothing is kept.');
+  const at = now.toISOString();
+  for (const statement of said) {
+    const outcome = store.add(
+      {
+        kind: MEMORY_KIND.FACT,
+        statement,
+        subject: '',
+        scope: MEMORY_SCOPE.PROJECT,
+        project: place.key,
+        origin: MEMORY_ORIGIN.PERSON,
+        tainted: false,
+        evidence: [],
+      },
+      at,
+    );
+    // Rejected before is the person's own earlier answer, which saying it again now overrules.
+    const id = 'added' in outcome ? outcome.added.id : 'merged' in outcome ? outcome.merged : undefined;
+    if (id !== undefined) store.decide(id, MEMORY_STATUS.VERIFIED, { by: PERSON, at });
+  }
+  return {
+    ok: true,
+    memoryFacts: listed(store, { statuses: [MEMORY_STATUS.VERIFIED], scope: MEMORY_SCOPE.PROJECT }),
+  };
+}
+
+/** Who confirmed what a person typed themselves. */
+const PERSON = 'person';
 
 function refused(reason: string): Answered {
   return { ok: false, error: reason, reason };
