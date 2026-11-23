@@ -24,6 +24,11 @@ export const AGENTS_METHOD = {
    * screen draws it without asking the voice. A server never asked starts one full count behind the answer.
    */
   AGENTS_SCAN: 'agents-scan',
+  /**
+   * Where agents meet: the files each holds now, the files two are in at once, and the
+   * writes held lately because another agent had them. A read, so a card can say it.
+   */
+  AGENT_OVERLAPS: 'agent-overlaps',
 } as const;
 
 export const AGENT_STATUS = {
@@ -123,6 +128,37 @@ export interface AgentsScanView {
   capabilities: CapabilityTally;
 }
 
+/** A file or folder an agent holds now, so no other agent changes it under it. */
+export interface AgentHold {
+  /** The agent's kind, such as claude-code. */
+  agent: string;
+  path: string;
+  repository?: string;
+  until: string;
+}
+
+/** One file two or more agents are in at once, at least one of them writing. */
+export interface AgentsTogether {
+  target: string;
+  /** The agents' kinds, each once. */
+  agents: string[];
+  at: string;
+}
+
+/** A write held lately because another agent had it, said as the agent was told. */
+export interface AgentHeldBack {
+  agent: string;
+  what: string;
+  said: string;
+  at: string;
+}
+
+export interface AgentOverlapsView {
+  holds: AgentHold[];
+  together: AgentsTogether[];
+  heldBack: AgentHeldBack[];
+}
+
 export interface AgentsResponseFields {
   /** On AGENTS, and after a pause or a stop. */
   agentsView?: AgentView[];
@@ -130,4 +166,6 @@ export interface AgentsResponseFields {
   agentLaunched?: AgentLaunched;
   /** On AGENTS_SCAN. */
   agentsScan?: AgentsScanView;
+  /** On AGENT_OVERLAPS. */
+  agentOverlaps?: AgentOverlapsView;
 }
