@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from 'node:fs';
-import { MEMNOX_HOME } from '@memnox/core';
+import type { WatchTarget } from '@memnox/core';
 
 /**
  * Wakes the watcher when an agent's configuration changes, instead of making somebody
@@ -8,9 +8,6 @@ import { MEMNOX_HOME } from '@memnox/core';
 
 /** Enough for an editor's write-rename dance to finish, short enough to feel immediate. */
 const SETTLE_MS = 250;
-
-/** What this program writes itself, or the watcher wakes on its own snapshot and spins. */
-const OURS = MEMNOX_HOME;
 
 interface ConfigWatch {
   /** Resolves when something changed, or when the wait ran out. */
@@ -25,20 +22,20 @@ interface ConfigWatchSeams {
 }
 
 /**
- * A path under our own directory, however the platform spelled it. A watcher that
- * reports no filename reports a change, because an unnamed one may be anybody's.
+ * Whether a change is one the target asked about. A watcher that reports no filename
+ * reports a change, because an unnamed one may be anybody's.
  */
-function isOurs(name: string | Buffer | null | undefined): boolean {
-  if (name === null || name === undefined) return false;
+function wanted(target: WatchTarget, name: string | Buffer | null | undefined): boolean {
+  if (target.only === undefined || name === null || name === undefined) return true;
   const text = typeof name === 'string' ? name : name.toString('utf8');
-  return text === OURS || text.startsWith(`${OURS}/`) || text.startsWith(`${OURS}\\`);
+  return target.only.includes(text);
 }
 
 export function watchConfigPaths(
-  paths: readonly string[],
+  targets: readonly WatchTarget[],
   seams: ConfigWatchSeams = {},
 ): ConfigWatch {
-  return new DirectoryWatch(paths, {
+  return new DirectoryWatch(targets, {
     watch: seams.watch ?? watch,
     setTimer: seams.setTimer ?? setTimeout,
     clearTimer: seams.clearTimer ?? clearTimeout,
@@ -51,13 +48,19 @@ class DirectoryWatch implements ConfigWatch {
   private readonly watchers: FSWatcher[] = [];
 
   constructor(
-    paths: readonly string[],
+    targets: readonly WatchTarget[],
     private readonly seams: Required<ConfigWatchSeams>,
   ) {
-    for (const path of paths) {
+    for (const target of targets) {
       try {
         this.watchers.push(
-          seams.watch(path, { recursive: true }, (_event, name) => this.touched(name)),
+          seams.watch(
+            target.path,
+            { recursive: target.only === undefined },
+            (_event, name) => {
+              if (wanted(target, name)) this.touched();
+            },
+          ),
         );
       } catch {
         // A directory nobody has created yet is nothing to watch, and not a failure.
@@ -84,8 +87,7 @@ class DirectoryWatch implements ConfigWatch {
     for (const watcher of this.watchers) watcher.close();
   }
 
-  private touched(name: string | Buffer | null | undefined): void {
-    if (isOurs(name)) return;
+  private touched(): void {
     this.pending = true;
     if (this.wake !== null) {
       const resume = this.wake;
