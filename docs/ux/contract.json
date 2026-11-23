@@ -93,6 +93,34 @@
             "web"
           ]
         }
+      ],
+      "views": [
+        {
+          "id": "waiting",
+          "label": "Waiting for you",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        },
+        {
+          "id": "decided",
+          "label": "Decided today",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "id": "team-rule-changes",
+          "label": "Team rule changes",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        }
       ]
     },
     {

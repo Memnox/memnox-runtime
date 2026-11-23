@@ -32,7 +32,12 @@ interface Contract {
     labels: Record<string, string>;
     reasons: Record<string, string>;
   };
-  pages: { id: string; tabs?: { id: string; label: string }[] }[];
+  pages: {
+    id: string;
+    tabs?: { id: string; label: string }[];
+    views?: { id: string; label: string }[];
+    sections?: { id: string; label: string }[];
+  }[];
   onboarding: { id: string; title: string; platforms?: string[] }[];
   careful: {
     order: string[];
@@ -119,9 +124,9 @@ describe('the words every surface shares', () => {
     expect(Object.keys(contract().modes).sort()).toEqual(['enforce', 'observe']);
   });
 
-  it('keeps plumbing words out of every page and tab label', () => {
+  it('keeps plumbing words out of every page, tab, view and section label', () => {
     const labels = contract().pages.flatMap((page) =>
-      (page.tabs ?? []).map((tab) => tab.label),
+      [...(page.tabs ?? []), ...(page.views ?? []), ...(page.sections ?? [])].map((each) => each.label),
     );
     for (const label of labels)
       for (const word of PLUMBING_WORDS)
