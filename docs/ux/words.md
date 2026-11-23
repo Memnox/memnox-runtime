@@ -58,8 +58,8 @@ Quiet and Thinking.
 The sidebar is the list of `pages` in the contract, in the order given:
 
 - **Top, with no heading:** Home, Needs you, Sessions, Agents and Projects.
-- **Govern:** Rules and Activity. Rules holds what agents may do, what they could be let do next,
-  their spending limits and the history of every change.
+- **Govern:** Rules and Activity. Rules holds what agents may do, what they could be let do next
+  and the history of every change.
 - **Knowledge:** Memory and Connectors.
 - **Foot:** Machines, People and Settings.
 

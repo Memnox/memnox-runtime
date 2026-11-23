@@ -169,13 +169,6 @@
           "label": "Let them do more"
         },
         {
-          "id": "budgets",
-          "label": "Spending limits",
-          "platforms": [
-            "web"
-          ]
-        },
-        {
           "id": "reached",
           "label": "Where they reached",
           "platforms": [
