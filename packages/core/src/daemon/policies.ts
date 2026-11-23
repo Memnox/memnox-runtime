@@ -195,6 +195,10 @@ export interface PolicyRequestFields {
   ruleTest?: RuleTestInput;
   /** On RULE_PACK_IMPORT: the pack as TOML text. */
   rulePack?: string;
+  /** On RULE_PACK_IMPORT: a repository, absolute, so the pack's rules hold only inside it; absent is everywhere. */
+  rulePackProject?: string;
+  /** On RULE_PACK_IMPORT: one agent, by kind, so the pack's rules hold only for it; absent is every agent. */
+  rulePackAgent?: string;
   /** On AUTOPILOT_REVOKE: the grant, by id. */
   grantId?: string;
 }

@@ -123,12 +123,14 @@ export async function importPack(
   toml: string,
   at: string,
   repository?: string,
+  agent?: string,
 ): Promise<Changed<{ proposed: string[] }>> {
   const read = rulesOfPack(toml);
   if ('problems' in read)
     return { refused: `The pack would not load: ${read.problems.join('; ')}` };
   const proposed: string[] = [];
-  for (const rule of read.rules) {
+  for (const packed of read.rules) {
+    const rule = agent === undefined ? packed : forAgent(packed, agent);
     // Never offered to the team: a pack is somebody else's rules, taken onto this machine only.
     const summary = sentenceOfRule(rule);
     proposed.push(
@@ -141,6 +143,18 @@ export async function importPack(
     );
   }
   return { proposed };
+}
+
+/**
+ * One agent's copy of a pack rule, named after it so the same pack can start two agents differently and the general
+ * copy, if any, stays as it is.
+ */
+function forAgent(rule: Policy, agent: string): Policy {
+  return {
+    ...rule,
+    name: `${rule.name}-for-${agent}`,
+    match: { ...rule.match, agents: [agent] },
+  };
 }
 
 interface Proposing {

@@ -55,4 +55,48 @@ describe('the shipped rule packs', () => {
     expect(first?.change.kind).toBe(PROPOSAL_KIND.RULES);
     expect(remoteCapabilityFor(DAEMON_METHOD.RULE_PACKS)).toBe(REMOTE_CAPABILITY.SEE);
   });
+
+  it('starts one agent or one project on a pack without touching the general rules', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-packs-'));
+    const packs = await shippedRulePacks();
+    const strict = packs.find((pack) => pack.id === 'read-only-agents');
+    if (strict === undefined) throw new Error('read-only agents is not shipped');
+    const forAgent = await policiesAnswer(
+      home,
+      {
+        id: 1,
+        method: DAEMON_METHOD.RULE_PACK_IMPORT,
+        rulePack: strict.toml,
+        rulePackAgent: 'cursor',
+      },
+      { now: NOW, env: {} },
+    );
+    const proposal = await new Proposals(home).read(forAgent.packProposed?.[0] ?? '');
+    const change = proposal?.change;
+    if (change?.kind !== PROPOSAL_KIND.RULES) throw new Error('not a rules proposal');
+    expect(change.rules[0]?.match.agents).toEqual(['cursor']);
+    expect(change.rules[0]?.name.endsWith('-for-cursor')).toBe(true);
+    const refused = await policiesAnswer(
+      home,
+      {
+        id: 2,
+        method: DAEMON_METHOD.RULE_PACK_IMPORT,
+        rulePack: strict.toml,
+        rulePackProject: 'relative/path',
+      },
+      { now: NOW, env: {} },
+    );
+    expect(refused.ok).toBe(false);
+    const nobody = await policiesAnswer(
+      home,
+      {
+        id: 3,
+        method: DAEMON_METHOD.RULE_PACK_IMPORT,
+        rulePack: strict.toml,
+        rulePackAgent: 'not an agent',
+      },
+      { now: NOW, env: {} },
+    );
+    expect(nobody.ok).toBe(false);
+  });
 });
