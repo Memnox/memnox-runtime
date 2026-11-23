@@ -23,11 +23,7 @@ import {
  */
 
 const DAEMON_DIR = fileURLToPath(new URL('../src/daemon', import.meta.url));
-const PROPOSAL_FIELDS = new Set([
-  'proposed',
-  'packProposed',
-  'profileApplied',
-]);
+const PROPOSAL_FIELDS = new Set(['proposed', 'packProposed', 'profileApplied']);
 const METHODS: Readonly<Record<string, string>> = DAEMON_METHOD;
 const GROUPS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   AGENTS_METHOD,

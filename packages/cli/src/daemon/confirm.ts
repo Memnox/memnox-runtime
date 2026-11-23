@@ -338,8 +338,7 @@ async function apply(
     (await applyPersonal(home, proposal)) ??
     (await applyStudioProposal(home, change, new Date(at))) ??
     (await applyProjectProposal(home, change, new Date(at))) ??
-    (await applyLanProposal(home, change)) ??
-    {
+    (await applyLanProposal(home, change)) ?? {
       ok: false,
       error: `${proposal.id} is nothing to apply`,
     }
