@@ -22,10 +22,8 @@ import { ACTIVITY_METHOD } from './activity';
 import { AGENTS_METHOD } from './agents-view';
 import { SKILLS_METHOD } from './skills-hub';
 import { PROJECTS_METHOD } from './projects';
-import { BACKUP_METHOD } from './backup';
 import { MEMORY_METHOD } from './memory';
 import { LAN_METHOD } from './lan';
-import { PERSONAL_SYNC_METHOD } from './personal-sync';
 import { PROFILES_METHOD } from './profiles';
 import { WORK_METHOD } from './work';
 import { REMOTE_METHOD } from './remote';
@@ -126,10 +124,8 @@ export const DAEMON_METHOD = {
   ...AGENTS_METHOD,
   ...SKILLS_METHOD,
   ...PROJECTS_METHOD,
-  ...BACKUP_METHOD,
   ...MEMORY_METHOD,
   ...LAN_METHOD,
-  ...PERSONAL_SYNC_METHOD,
   ...PROFILES_METHOD,
   ...WORK_METHOD,
 } as const;

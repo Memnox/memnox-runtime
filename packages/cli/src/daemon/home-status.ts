@@ -7,18 +7,10 @@ import { isMcpHubMethod, mcpHubAnswer } from './mcp-hub-answer';
 import { isPolicyMethod, policiesAnswer } from './policies-answer';
 import { isSkillsMethod, skillsHubAnswer } from './skills-hub-answer';
 import { isProjectsMethod, projectsAnswer } from './projects-answer';
-import { backupAnswer, isBackupMethod } from './backup-answer';
 import { isMemoryMethod, memoryAnswer } from './memory-answer';
 import { isLanMethod, lanAnswer } from './lan-answer';
 import { isProfilesMethod, profilesAnswer } from './profiles-answer';
 import { isWorkMethod, workAnswer } from './work-answer';
-import {
-  changesSyncedItems,
-  isPersonalSyncMethod,
-  noteLocalChange,
-  personalSyncAnswer,
-  syncDepsFor,
-} from './personal-sync-answer';
 import type { SessionViews } from './session-view';
 
 /**
@@ -33,10 +25,8 @@ export function isScreenMethod(method: string): boolean {
     isMcpHubMethod(method) ||
     isSkillsMethod(method) ||
     isProjectsMethod(method) ||
-    isBackupMethod(method) ||
     isMemoryMethod(method) ||
     isLanMethod(method) ||
-    isPersonalSyncMethod(method) ||
     isProfilesMethod(method) ||
     isWorkMethod(method) ||
     isStudioMethod(method)
@@ -55,10 +45,7 @@ export async function answerHome(
   views: SessionViews,
   remote = false,
 ): Promise<DaemonResponse> {
-  const answered = await answerScreen(home, request, views, remote);
-  // What this machine carries changed, so the person's other machines hear of it on its next sync.
-  if (answered.ok && changesSyncedItems(request.method)) noteLocalChange(home);
-  return answered;
+  return answerScreen(home, request, views, remote);
 }
 
 function answerScreen(
@@ -71,12 +58,9 @@ function answerScreen(
     return mcpHubAnswer(home, request, { now: new Date(), remote });
   if (isSkillsMethod(request.method)) return skillsHubAnswer(home, request, new Date());
   if (isProjectsMethod(request.method)) return projectsAnswer(home, request, new Date());
-  if (isBackupMethod(request.method)) return backupAnswer(home, request, new Date());
   if (isMemoryMethod(request.method))
     return memoryAnswer(home, request, { now: new Date() });
   if (isLanMethod(request.method)) return lanAnswer(home, request, new Date());
-  if (isPersonalSyncMethod(request.method))
-    return personalSyncAnswer(request, syncDepsFor(home));
   if (isProfilesMethod(request.method))
     return profilesAnswer(home, request, new Date(), {
       cards: () => views.list(),

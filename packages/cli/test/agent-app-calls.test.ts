@@ -14,7 +14,6 @@ import {
   Proposals,
   SqliteEventStore,
   SqliteMemoryStore,
-  SYNC_KIND,
   WORK_ACCOUNT_CHECK,
   writePolicyDocumentFile,
   type MemnoxEvent,
@@ -32,8 +31,6 @@ import { itemsView } from '../src/memory/memory-views';
 import { WaitingFeed } from '../src/daemon/waiting-feed';
 import { usesOf, withUses } from '../src/daemon/app-uses';
 import { answerConnections } from '../src/daemon/connection-calls';
-import { localSyncItems } from '../src/personal-sync/local-items';
-import { confirmItem } from '../src/memory/memory-learn';
 
 const NOW = new Date('2026-10-31T09:00:00.000Z');
 const AGENT = 'claude-code';
@@ -215,38 +212,6 @@ describe("an agent's connected apps through Memnox", () => {
     } finally {
       store.close();
     }
-  });
-
-  it('never carries what an agent read into personal sync, even once the person confirms it', async () => {
-    const deps = await depsAt({ ran: [] });
-    await appRunTool(deps, { tool: LIST, arguments: ARGS });
-    const store = await readCalls(deps.home);
-    try {
-      const [item] = store.items({});
-      await confirmItem(deps.home, store, item?.id ?? '', NOW);
-      store.add(
-        {
-          kind: 'fact',
-          statement: 'The person prefers short commits.',
-          subject: 'commits',
-          scope: MEMORY_SCOPE.PERSONAL,
-          origin: 'person',
-          tainted: false,
-          evidence: [],
-        },
-        NOW.toISOString(),
-      );
-      const own = store.items({ statuses: [MEMORY_STATUS.CANDIDATE] })[0];
-      await confirmItem(deps.home, store, own?.id ?? '', NOW);
-    } finally {
-      store.close();
-    }
-    const synced = (await localSyncItems(deps.home)).filter(
-      (each) => each.kind === SYNC_KIND.MEMORY,
-    );
-    const said = JSON.stringify(synced);
-    expect(said).toContain('short commits');
-    expect(said).not.toContain('Thursdays');
   });
 
   it('puts a write on the Mac for Send and Touch ID by default, and runs nothing', async () => {

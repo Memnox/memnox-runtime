@@ -5,8 +5,6 @@ import type { Command } from 'commander';
 import { readAccount } from '@memnox/core';
 
 import type { CliContext } from '../cli-context';
-import { registerSyncPair } from './sync-pair';
-import { socketDial, type DaemonDial } from '../remote/daemon-dial';
 import { PULL_OUTCOME, type PullResult } from '../sync/bundle';
 import { onePass, type Pass } from '../sync/heartbeat';
 import { PUSH_OUTCOME, type PushResult } from '../sync/push';
@@ -19,7 +17,6 @@ export function registerSyncCommand(
   program: Command,
   context: CliContext,
   home: () => string = homedir,
-  dial: (home: string) => DaemonDial = socketDial,
 ): void {
   const sync = program
     .command('sync')
@@ -30,8 +27,6 @@ export function registerSyncCommand(
     .description('Do a pass now rather than waiting for the next heartbeat')
     .option('--json', 'machine-readable output')
     .action(async (options: SyncOptions) => runSync(context, home, options));
-
-  registerSyncPair(sync, context, { home, dial });
 }
 
 interface SyncOptions {
