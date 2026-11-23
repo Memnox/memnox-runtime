@@ -1,11 +1,11 @@
 import type { ProfileRulePack } from '../daemon/profiles';
 
 /**
- * An agent profile: the job an agent does, kept apart from the harness and the machine it runs
- * on, so two Claude Code sessions can hold two jobs and one job can move to another product.
+ * An agent profile: who an agent is to Memnox, kept apart from the harness and the machine it runs
+ * on, with who answers for it, the role rules match and what it is given.
  */
 
-/** Version 1 files had no job fields; they read as version 2 with none set. */
+/** Version 1 files had no role or responsible person; they read as version 2 with none set. */
 export const AGENT_PROFILE_VERSION = 2;
 
 /** What a profile computed for a detected agent with nothing bound is called, before its kind. */
@@ -17,27 +17,20 @@ export interface AgentProfile {
   id: string;
   name: string;
   description?: string;
-  /** The job in a sentence, as a person wrote it. */
-  purpose?: string;
   /** Matched by a rule's `roles:` when a session runs under this profile and names no role itself. */
   role?: string;
-  responsibilities: string[];
-  /** Standing words handed to every session under this profile, never a rule. */
-  instructions?: string;
   /** Skills Hub skills, by name. */
   skills: string[];
   /** MCP Hub servers, by name. */
   mcpServers: string[];
   rulePack?: ProfileRulePack;
   /**
-   * The one person who answers for this job: the signed in account, else the person at this
+   * The one person who answers for this agent: the signed in account, else the person at this
    * machine. Asks go to them; the agent never holds their authority, and the gate never reads it.
    */
   responsiblePerson?: string;
-  /** Projects this job works in, by id or root; empty is not narrowed by project. */
+  /** Projects it works in, by id or root; empty is not narrowed by project. */
   projects: string[];
-  /** The catalog template it was copied from, which grants nothing and is only a label. */
-  templateOf?: string;
   updatedAt: string;
 }
 

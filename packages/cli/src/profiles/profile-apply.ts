@@ -139,15 +139,11 @@ async function proposePack(
 
 /** The job fields as a screen shows them, absent ones left out rather than sent empty. */
 function jobOf(profile: StoredProfile): ProfileJob {
-  const { purpose, role, instructions, responsiblePerson, templateOf } = profile;
+  const { role, responsiblePerson } = profile;
   return {
-    ...(purpose === undefined ? {} : { purpose }),
     ...(role === undefined ? {} : { role }),
-    responsibilities: profile.responsibilities,
-    ...(instructions === undefined ? {} : { instructions }),
     ...(responsiblePerson === undefined ? {} : { responsiblePerson }),
     projects: profile.projects,
-    ...(templateOf === undefined ? {} : { templateOf }),
   };
 }
 

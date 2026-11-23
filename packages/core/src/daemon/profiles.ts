@@ -1,5 +1,4 @@
 import type { AgentConnection } from '../agents/agent-connection';
-import type { ProfileTemplate } from '../agents/templates';
 import type { CapabilityLevels } from '../discovery/capability-levels';
 
 /**
@@ -21,10 +20,6 @@ export const PROFILES_METHOD = {
   PROFILE_BIND: 'profile-bind',
   /** Takes a binding off, which puts the agent back on its default profile. */
   PROFILE_UNBIND: 'profile-unbind',
-  /** The catalog of job descriptions, none with an agent behind it. */
-  TEMPLATES: 'templates',
-  /** Copies a template's job into a new profile, with only the suggested skills a person took. */
-  PROFILE_FROM_TEMPLATE: 'profile-from-template',
 } as const;
 
 /** A rule pack as a profile carries it: its name and its TOML, imported as any pack is. */
@@ -42,26 +37,18 @@ export interface ProfileDraft {
   /** MCP Hub servers, by name. */
   mcpServers?: string[];
   rulePack?: ProfileRulePack;
-  /** The job, each field optional so a version 1 form still fills a profile in. */
-  purpose?: string;
+  /** Each optional, so a version 1 form still fills a profile in. */
   role?: string;
-  responsibilities?: string[];
-  instructions?: string;
   responsiblePerson?: string;
   projects?: string[];
-  templateOf?: string;
 }
 
-/** The job fields a profile shows beside what it bundles. */
+/** Who answers for a profile and where it works, shown beside what it bundles. */
 export interface ProfileJob {
-  purpose?: string;
   role?: string;
-  responsibilities: string[];
-  instructions?: string;
   /** Who answers for it; on a view, the person at this machine when none was named. */
   responsiblePerson?: string;
   projects: string[];
-  templateOf?: string;
 }
 
 export interface ProfileView extends ProfileJob {
@@ -104,10 +91,6 @@ export interface ProfilesRequestFields {
   profileName?: string;
   /** On PROFILE_APPLY: the agent, by kind. */
   profileAgent?: string;
-  /** On PROFILE_FROM_TEMPLATE: the template, by id or name; `profileName` names the copy. */
-  templateId?: string;
-  /** On PROFILE_FROM_TEMPLATE: the suggested skills the person took; the rest stay off. */
-  templateSkills?: string[];
   /** On PROFILE_BIND and PROFILE_UNBIND: the agent, by id, kind or the name it goes by. */
   agentId?: string;
   /** On PROFILE_APPLY: the repository its skills are written into and its rules hold in, as an absolute path; absent is the home folder and the whole machine. */
@@ -117,8 +100,6 @@ export interface ProfilesRequestFields {
 export interface ProfilesResponseFields {
   /** On every profile method, so a screen redraws from one answer. */
   profiles?: ProfileView[];
-  /** On TEMPLATES. */
-  templates?: ProfileTemplate[];
   /** On PROFILE_APPLY, and on AGENT_LAUNCH with a profile. */
   profileApplied?: ProfileApplied;
 }

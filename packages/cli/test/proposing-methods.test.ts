@@ -92,11 +92,9 @@ const NEVER_PROPOSES: readonly string[] = [
   DAEMON_METHOD.MEMORY_FORGET,
   DAEMON_METHOD.PROFILE_PUT,
   DAEMON_METHOD.PROFILE_REMOVE,
-  // Which job an agent works under is a person's choice and grants nothing on its own.
+  // Which profile an agent works under is a person's choice and grants nothing on its own.
   DAEMON_METHOD.PROFILE_BIND,
   DAEMON_METHOD.PROFILE_UNBIND,
-  DAEMON_METHOD.TEMPLATES,
-  DAEMON_METHOD.PROFILE_FROM_TEMPLATE,
   DAEMON_METHOD.AGENT_PAUSE,
   DAEMON_METHOD.SESSION_STOP,
   DAEMON_METHOD.AUTOPILOT_REVOKE,

@@ -23,8 +23,6 @@ const MOST_DESCRIPTION_CHARS = 500;
 /** Past what any one person bundles, so a hand written file cannot make a screen draw for ever. */
 const MOST_NAMES = 100;
 const MOST_ID_CHARS = 64;
-/** Room for a page of standing words, past which they belong in a skill. */
-const MOST_INSTRUCTIONS_CHARS = 4000;
 const ROLE_PATTERN = new RegExp(`^[A-Za-z0-9._-]{1,${MOST_ID_CHARS}}$`);
 
 /** A version 1 file reads as this with no job set, and is written back as version 2. */
@@ -79,34 +77,22 @@ export function profileFrom(
   };
 }
 
-/** The job fields, each optional, so a version 1 file reads whole with none of them. */
+/** Who answers and where it works, each optional; job text an older file holds is left unread. */
 function profileJobOf(
   raw: Partial<Record<keyof ProfileDraft, unknown>>,
   problems: string[],
 ): ProfileJob {
-  const purpose = textOf(raw.purpose, MOST_DESCRIPTION_CHARS, 'purpose', problems);
-  const instructions = textOf(
-    raw.instructions,
-    MOST_INSTRUCTIONS_CHARS,
-    'instructions',
-    problems,
-  );
   const responsiblePerson = textOf(
     raw.responsiblePerson,
     MOST_NAME_CHARS,
     'responsiblePerson',
     problems,
   );
-  const templateOf = textOf(raw.templateOf, MOST_ID_CHARS, 'templateOf', problems);
   const role = roleOf(raw.role, problems);
   return {
-    ...(purpose === undefined ? {} : { purpose }),
     ...(role === undefined ? {} : { role }),
-    responsibilities: namesOf(raw.responsibilities, 'responsibilities', problems),
-    ...(instructions === undefined ? {} : { instructions }),
     ...(responsiblePerson === undefined ? {} : { responsiblePerson }),
     projects: namesOf(raw.projects, 'projects', problems),
-    ...(templateOf === undefined ? {} : { templateOf }),
   };
 }
 
