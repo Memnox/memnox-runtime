@@ -57,10 +57,19 @@ Quiet and Thinking.
 
 The sidebar is the list of `pages` in the contract, in the order given:
 
-- **Top, with no heading:** Home, Needs you, Sessions, Agents, Projects and Work.
-- **Govern:** Rules, Hand over and Activity.
+- **Top, with no heading:** Home, Needs you, Sessions, Agents and Projects.
+- **Govern:** Rules and Activity. Rules holds what agents may do, what they could be let do next,
+  their spending limits and the history of every change.
 - **Knowledge:** Memory and Connectors.
 - **Foot:** Machines, People and Settings.
+
+**Every page answers one of four questions a person has about their agents.** What happened is
+Activity. What needs me is Needs you. Who is doing what is Sessions and Agents. What can I let go
+of is Rules and Home. A page that answers none of them does not belong in the sidebar.
+
+**A label is a word anybody uses.** No page or tab is called after the plumbing behind it, so
+there is no profile, job, MCP, hook, daemon, runtime, verdict or enforce in a label, and the
+contract test checks that. The two modes are said as `Watching only` and `Protecting`.
 
 **A page or tab marked for some platforms appears only on those.** A page that is not in the
 contract is not in the sidebar. The command palette and the keyboard shortcuts use the same
@@ -68,28 +77,42 @@ labels, because a second name for a page is a second page as far as a person can
 
 ## Home
 
-Home shows the same blocks in the same order everywhere:
+Home opens on one sentence of how things stand, then shows the same blocks in the same order
+everywhere:
 
 1. the greeting and mode;
-2. one "Do this next" card;
+2. one "Get set up" card, with three steps at most;
 3. Needs you;
 4. Working now;
-5. Ready to hand over;
-6. Budgets and missions;
-7. Today.
+5. You could let go of;
+6. Today.
 
 **Each block shows its count in its own header rather than in a row of tiles above it.** The
-"Do this next" card goes once every step is done.
+"Get set up" card goes once every step is done.
 
 ## Onboarding
 
-Onboarding has five steps and an end on every shell:
+Onboarding teaches what Memnox is for before anything about how it works. Every shell opens
+with the same line: *Your AI agents do real work. Memnox shows you what they did, asks you
+before anything risky, and keeps them from getting in each other's way.*
 
-1. who it is for;
-2. which agents;
-3. connect this machine;
-4. where Memnox asks you;
-5. the starting rules.
+On a computer it is three screens and nothing typed:
 
-The end is "You're set", with one prompt to paste into the agent, so the first ask arrives in
-minutes. Setup can be run again from Settings.
+1. **Welcome**, and what to call you.
+2. **Your agents.** The scan runs by itself and each agent found says, in one line, whether
+   Memnox can stop it or can only watch it. Permissions a voice feature needs are asked the
+   first time that feature is used, never here.
+3. **How careful should Memnox be?** Three choices, from `careful` in the contract: Just watch,
+   Ask me before risky things (the one recommended) and Ask me about almost everything. Each
+   names the mode and the shipped rule pack it starts, and each rule still arrives as a
+   proposal the person signs. Pairing a phone is one optional button here.
+
+In the console the steps are who it is for, where the agents run, where Memnox asks you and how
+careful to be. Where the agents run is answered in plain choices: on my computer, which offers
+the app download and no terminal; in an automation tool, which gives one link to paste; inside
+an app, which adds Memnox as a connector; and in my own code, which leads to the developer
+docs.
+
+The end is "You're set", which says the first time an agent wants to do something risky it
+will wait for the person right there. The prompt to paste into an agent stays for developers.
+Setup can be run again from Settings.
