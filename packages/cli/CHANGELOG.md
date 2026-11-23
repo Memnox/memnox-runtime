@@ -1,5 +1,15 @@
 # memnox
 
+## 0.15.3
+
+### Patch Changes
+
+- 9f4df5b: The config watcher no longer watches your home folder or `~/.config` whole, which on Linux ran out of file watchers and stopped the daemon within minutes; it now wakes only for the agent configs named in them.
+- Updated dependencies [9f4df5b]
+  - @memnox/core@0.15.3
+  - @memnox/proxy@0.15.3
+  - @memnox/interceptors@0.15.3
+
 ## 0.15.2
 
 ### Patch Changes
