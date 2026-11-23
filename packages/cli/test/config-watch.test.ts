@@ -7,6 +7,8 @@ import { watchablePaths } from '@memnox/core';
 import { watchConfigPaths } from '../src/config-watch';
 
 describe('the directories worth watching', () => {
+  // Built with join, so the same assertions hold where the separator is a backslash.
+  const HOME = join('/home/me');
   const deep = (home: string): string[] =>
     watchablePaths(home)
       .filter((target) => target.only === undefined)
@@ -15,26 +17,26 @@ describe('the directories worth watching', () => {
   /* A config that does not exist yet cannot be watched, and a newly added MCP config
      is exactly the arrival worth catching, so it is the directory that is watched. */
   it('watches the directory that holds each agent config', () => {
-    const paths = deep('/home/me');
+    const paths = deep(HOME);
 
-    expect(paths).toContain(join('/home/me', '.claude'));
-    expect(paths).toContain(join('/home/me', '.cursor'));
-    expect(paths).toContain(join('/home/me', '.config', 'devin'));
+    expect(paths).toContain(join(HOME, '.claude'));
+    expect(paths).toContain(join(HOME, '.cursor'));
+    expect(paths).toContain(join(HOME, '.config', 'devin'));
   });
 
   /* Watched whole, home and ~/.config are every file the person owns, and on Linux the
      inotify watch limit runs out within minutes and takes the daemon with it. */
   it('never watches home or ~/.config whole', () => {
-    const paths = deep('/home/me');
+    const paths = deep(HOME);
 
-    expect(paths).not.toContain('/home/me');
-    expect(paths).not.toContain(join('/home/me', '.config'));
+    expect(paths).not.toContain(HOME);
+    expect(paths).not.toContain(join(HOME, '.config'));
   });
 
   it('watches a shared parent only for the agent entries named in it', () => {
-    const targets = watchablePaths('/home/me');
-    const home = targets.find((target) => target.path === '/home/me');
-    const config = targets.find((target) => target.path === join('/home/me', '.config'));
+    const targets = watchablePaths(HOME);
+    const home = targets.find((target) => target.path === HOME);
+    const config = targets.find((target) => target.path === join(HOME, '.config'));
 
     expect(home?.only).toContain('.claude.json');
     expect(home?.only).toContain('.cursor');
@@ -44,11 +46,11 @@ describe('the directories worth watching', () => {
   /* A definition installed into an agent's own directory changes what that agent may
      do and touches no config at all, so the directory it lands in is watched too. */
   it('watches the directories definitions are installed into', () => {
-    const paths = deep('/home/me');
+    const paths = deep(HOME);
 
-    expect(paths).toContain(join('/home/me', '.qwen', 'agents'));
-    expect(paths).toContain(join('/home/me', '.github', 'agents'));
-    expect(paths).toContain(join('/home/me', '.config', 'opencode', 'agents'));
+    expect(paths).toContain(join(HOME, '.qwen', 'agents'));
+    expect(paths).toContain(join(HOME, '.github', 'agents'));
+    expect(paths).toContain(join(HOME, '.config', 'opencode', 'agents'));
   });
 });
 
