@@ -71,7 +71,8 @@ of is Rules and Home. A page that answers none of them does not belong in the si
 there is no profile, job, MCP, hook, daemon, runtime, verdict or enforce in a label, and the
 contract test checks that. The two modes are said as `Watching only` and `Protecting`.
 
-**A page or tab marked for some platforms appears only on those.** A page that is not in the
+**A page or tab marked for some platforms appears only on those**, and a tab is only marked for a
+platform that draws something of its own under it, so no tab strip ever shows the same page twice. A page that is not in the
 contract is not in the sidebar. The command palette and the keyboard shortcuts use the same
 labels, because a second name for a page is a second page as far as a person can tell.
 
