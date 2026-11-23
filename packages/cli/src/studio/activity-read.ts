@@ -7,6 +7,7 @@ import {
   isPastCursor,
   LEDGER_LOOKUP_LIMIT,
   matchesActivity,
+  sessionsInside,
   MOST_ACTIVITY_ROWS,
   readCursor,
   generateKeys,
@@ -46,8 +47,13 @@ export async function readActivityPage(
   );
   const names = await readNames(home);
   const cursor = ask.cursor === undefined ? null : readCursor(ask.cursor);
-  const found = await withEvents(home, (store) =>
-    pageOf(store, { filter: ask.filter, cursor, limit }),
+  const found = await withEvents(home, async (store) =>
+    pageOf(store, {
+      filter: ask.filter,
+      cursor,
+      limit,
+      inProject: await projectSessions(store, ask.filter),
+    }),
   );
   const rows = found.events.map((event) =>
     activityRowOf(event, nameOf(names, event.agent)),
@@ -65,6 +71,7 @@ export function nameOf(names: AgentNames, agent: string): string {
 
 interface Paging {
   filter: ActivityFilter;
+  inProject: ReadonlySet<string>;
   cursor: { at: string; id: string } | null;
   limit: number;
 }
@@ -74,7 +81,7 @@ type Mark = { at: string; id: string };
 /** Newest first, a batch at a time, until the page is full or the bound is reached. */
 async function pageOf(
   store: SqliteEventStore,
-  { filter, cursor, limit }: Paging,
+  { filter, cursor, limit, inProject }: Paging,
 ): Promise<{ events: MemnoxEvent[]; next?: Mark }> {
   const kept: MemnoxEvent[] = [];
   let edge = cursor;
@@ -84,7 +91,7 @@ async function pageOf(
     const fresh =
       bound === null ? batch : batch.filter((event) => isPastCursor(event, bound));
     for (const event of fresh) {
-      if (!matchesActivity(event, filter)) continue;
+      if (!matchesActivity(event, filter, inProject)) continue;
       const last = kept[kept.length - 1];
       if (kept.length === limit && last !== undefined)
         return { events: kept, next: last };
@@ -96,6 +103,23 @@ async function pageOf(
   }
   // Bounded: what was read is answered, and the cursor lets the screen read on from there.
   return edge === null ? { events: kept } : { events: kept, next: edge };
+}
+
+/**
+ * The sessions that touched the filter's project in the period it asks about, read once and
+ * bounded like any lookup, so a page can keep their commands, which name no folder.
+ */
+async function projectSessions(
+  store: SqliteEventStore,
+  filter: ActivityFilter,
+): Promise<ReadonlySet<string>> {
+  if (filter.project === undefined) return new Set();
+  const events = await store.query({
+    ...(filter.since === undefined ? {} : { since: filter.since }),
+    ...(filter.until === undefined ? {} : { until: filter.until }),
+    limit: LEDGER_LOOKUP_LIMIT,
+  });
+  return sessionsInside(events, filter.project);
 }
 
 function queryOf(filter: ActivityFilter, edge: { at: string } | null): EventQuery {
@@ -115,10 +139,11 @@ export async function exportActivity(
   filter: ActivityFilter,
   now: Date,
 ): Promise<string> {
-  const events = await withEvents(home, (store) =>
-    store.query({ ...queryOf(filter, null), limit: LEDGER_LOOKUP_LIMIT }),
-  );
-  const kept = events.filter((event) => matchesActivity(event, filter));
+  const { events, inProject } = await withEvents(home, async (store) => ({
+    events: await store.query({ ...queryOf(filter, null), limit: LEDGER_LOOKUP_LIMIT }),
+    inProject: await projectSessions(store, filter),
+  }));
+  const kept = events.filter((event) => matchesActivity(event, filter, inProject));
   const { header, body } = buildBundle({
     events: kept,
     range: {
@@ -148,5 +173,8 @@ function excludedBy(filter: ActivityFilter, read: number): string[] {
     ...(filter.text === undefined
       ? []
       : [`only events naming "${filter.text}" were asked for`]),
+    ...(filter.project === undefined
+      ? []
+      : [`only sessions that touched ${filter.project} were asked for`]),
   ];
 }
