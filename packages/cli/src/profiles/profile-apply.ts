@@ -132,7 +132,12 @@ async function proposePack(
 ): Promise<void> {
   const pack = profile.rulePack;
   if (pack === undefined) return;
-  const imported = await importPack(home, pack.toml, now.toISOString(), project);
+  const imported = await importPack(
+    home,
+    pack.toml,
+    now.toISOString(),
+    project === undefined ? {} : { repository: project },
+  );
   if ('refused' in imported) applied.skipped.push(`${pack.name}: ${imported.refused}`);
   else applied.proposed.push(...imported.proposed);
 }

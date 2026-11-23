@@ -295,6 +295,7 @@ export class WaitingFeed {
       ...typedAsks(task),
       ...(host?.cwd === undefined ? {} : { place: basename(host.cwd) }),
       ...(request.withinSession === true ? { withinSession: true } : {}),
+      ...(held.parkedAt === undefined ? {} : { parkedAt: held.parkedAt }),
       // What a v4 yes signs, so the answer covers this exact call and no later edit of it.
       actionDigest: actionDigestOf(request),
       ...answerOnOf(answeringPhone(devices, REMOTE_CAPABILITY.ANSWER)),

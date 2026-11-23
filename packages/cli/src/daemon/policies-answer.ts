@@ -17,6 +17,7 @@ import {
   proposeRuleDraft,
   removeRule,
 } from '../studio/rule-changes';
+import { readRuleHistory } from '../studio/rule-history';
 import { shippedRulePacks } from '../studio/rule-packs';
 import { testRule } from '../studio/rule-test';
 import { readRulesView } from '../studio/rules-in-force';
@@ -89,6 +90,8 @@ async function answerOf(
       return importOne(home, request, at);
     case POLICY_METHOD.RULE_PACKS:
       return { ok: true, rulePacks: await shippedRulePacks() };
+    case POLICY_METHOD.RULE_HISTORY:
+      return { ok: true, ruleHistory: await readRuleHistory(home, deps.now) };
     case POLICY_METHOD.PROGRESS:
       return { ok: true, progress: await readProgress(home, deps.now) };
     case POLICY_METHOD.AUTOPILOT_REVOKE:
@@ -148,7 +151,10 @@ async function importOne(
   const agent = request.rulePackAgent;
   if (agent !== undefined && !AGENT_KINDS.includes(agent))
     return refused('Name the agent by its kind.');
-  const imported = await importPack(home, toml, at, project, agent);
+  const imported = await importPack(home, toml, at, {
+    ...(project === undefined ? {} : { repository: project }),
+    ...(agent === undefined ? {} : { agent }),
+  });
   if ('refused' in imported) return refused(imported.refused);
   return { ok: true, packProposed: imported.proposed };
 }

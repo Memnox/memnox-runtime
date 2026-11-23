@@ -26,7 +26,30 @@ export const POLICY_METHOD = {
   PROGRESS: 'progress',
   /** Takes one autopilot grant back at once, since that only narrows. */
   AUTOPILOT_REVOKE: 'autopilot-revoke',
+  /** The rule changes a person answered on this machine, newest first. Read only. */
+  RULE_HISTORY: 'rule-history',
 } as const;
+
+/** What a rule change did. */
+export const RULE_CHANGE_KIND = {
+  ADDED: 'added',
+  REMOVED: 'removed',
+} as const;
+
+export type RuleChangeKind = (typeof RULE_CHANGE_KIND)[keyof typeof RULE_CHANGE_KIND];
+
+/** One rule change a person answered here, said the way Rules says a rule. */
+export interface RuleHistoryRow {
+  id: string;
+  kind: RuleChangeKind;
+  /** Each rule in one plain sentence, or the name of the rule taken out. */
+  rules: string[];
+  /** Confirmed puts it in force; declined left the rules as they were. */
+  answer: 'confirmed' | 'declined';
+  answeredAt: string;
+  answeredBy?: string;
+  proposedBy: string;
+}
 
 /** Where a rule in force came from. */
 export const RULE_SOURCE = {
@@ -218,4 +241,6 @@ export interface PolicyResponseFields {
   progress?: ProgressView;
   /** On RULE_PACKS. */
   rulePacks?: RulePackView[];
+  /** On RULE_HISTORY. */
+  ruleHistory?: RuleHistoryRow[];
 }

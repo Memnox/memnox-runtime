@@ -114,6 +114,12 @@ export async function exportRules(home: string): Promise<string> {
   return rulePackToml(await editableRules(home));
 }
 
+/** Where a pack's rules hold: one repository, one agent kind, or both; absent is everywhere and every agent. */
+interface PackReach {
+  repository?: string;
+  agent?: string;
+}
+
 /**
  * Every rule in the pack as its own proposal, so each is read and signed and none arrives silently.
  * Given a repository, each holds only inside it, kept in this Mac's own file so the checkout stays clean.
@@ -122,8 +128,7 @@ export async function importPack(
   home: string,
   toml: string,
   at: string,
-  repository?: string,
-  agent?: string,
+  { repository, agent }: PackReach = {},
 ): Promise<Changed<{ proposed: string[] }>> {
   const read = rulesOfPack(toml);
   if ('problems' in read)

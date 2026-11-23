@@ -65,6 +65,8 @@ const NEVER_PROPOSES: readonly string[] = [
   DAEMON_METHOD.SESSION_COST,
   DAEMON_METHOD.SKILL_STATS,
   DAEMON_METHOD.SKILL_CALIBRATE,
+  DAEMON_METHOD.AGENT_OVERLAPS,
+  DAEMON_METHOD.RULE_HISTORY,
   // Writes that only narrow, or keep a copy, so they are done at once with nothing to sign.
   DAEMON_METHOD.SERVER_REMOVE,
   DAEMON_METHOD.IMPORT,
@@ -86,6 +88,8 @@ const NEVER_PROPOSES: readonly string[] = [
   DAEMON_METHOD.MEMORY_REJECT,
   DAEMON_METHOD.MEMORY_EDIT,
   DAEMON_METHOD.MEMORY_FORGET,
+  // What the person typed themselves, kept as facts they already confirmed, so there is nothing to sign.
+  DAEMON_METHOD.MEMORY_REMEMBER,
   DAEMON_METHOD.PROFILE_PUT,
   DAEMON_METHOD.PROFILE_REMOVE,
   // Which profile an agent works under is a person's choice and grants nothing on its own.

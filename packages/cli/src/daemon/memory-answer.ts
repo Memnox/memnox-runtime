@@ -168,13 +168,8 @@ async function remember(
 ): Promise<Answered> {
   const folder = request.memoryProject;
   if (folder === undefined || !isAbsolute(folder)) return refused('Name the project by its folder, whole.');
-  const said = (request.memoryStatements ?? [])
-    .map((each) => each.trim())
-    .filter((each) => each !== '');
-  if (said.length === 0) return refused('Say what agents there should know.');
-  if (said.length > MOST_REMEMBERED) return refused(`At most ${MOST_REMEMBERED} at a time.`);
-  if (said.some((each) => each.length > MOST_REMEMBERED_CHARS))
-    return refused(`Each is at most ${MOST_REMEMBERED_CHARS} characters.`);
+  const said = statementsOf(request.memoryStatements);
+  if (typeof said === 'string') return refused(said);
   const place = await projectMemoryKey(home, folder);
   if ('none' in place) return refused('This shared project keeps no memory, so nothing is kept.');
   const at = now.toISOString();
@@ -200,6 +195,16 @@ async function remember(
     ok: true,
     memoryFacts: listed(store, { statuses: [MEMORY_STATUS.VERIFIED], scope: MEMORY_SCOPE.PROJECT }),
   };
+}
+
+/** What a person typed, one statement a line and none empty, or why it is refused. */
+function statementsOf(raw: readonly string[] | undefined): string[] | string {
+  const said = (raw ?? []).map((each) => each.trim()).filter((each) => each !== '');
+  if (said.length === 0) return 'Say what agents there should know.';
+  if (said.length > MOST_REMEMBERED) return `At most ${MOST_REMEMBERED} at a time.`;
+  if (said.some((each) => each.length > MOST_REMEMBERED_CHARS))
+    return `Each is at most ${MOST_REMEMBERED_CHARS} characters.`;
+  return said;
 }
 
 /** Who confirmed what a person typed themselves. */

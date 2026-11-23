@@ -375,6 +375,11 @@ export interface DaemonEvent extends ExtensionEventFields {
    * so a yes goes without Touch ID. Absent asks for it, which is every call that reaches further.
    */
   withinSession?: true;
+  /**
+   * On HELD, when nobody answered in time and it was kept for later: the agent carries on without
+   * it, so it waits with less hurry than a call an agent is blocked on.
+   */
+  parkedAt?: string;
 }
 
 /** A trace drawn as a waterfall: each step's place on the clock, how deep it sits, how it ended. */

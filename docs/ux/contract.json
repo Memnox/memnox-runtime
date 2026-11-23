@@ -104,6 +104,14 @@
           ]
         },
         {
+          "id": "kept",
+          "label": "Kept for later",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        },
+        {
           "id": "decided",
           "label": "Decided today",
           "platforms": [
@@ -208,6 +216,16 @@
           "label": "History",
           "platforms": [
             "web"
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "id": "history",
+          "label": "History",
+          "platforms": [
+            "mac",
+            "desktop"
           ]
         }
       ]

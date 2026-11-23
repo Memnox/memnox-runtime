@@ -77,7 +77,7 @@ contract is not in the sidebar. The command palette and the keyboard shortcuts u
 labels, because a second name for a page is a second page as far as a person can tell.
 
 **A page can also list `views` and `sections`.** A view is a filter drawn on the page rather than a
-tab, such as Needs you's "Waiting for you" and "Decided today" on the desktop apps. A section is a
+tab, such as Needs you's "Waiting for you", "Kept for later" and "Decided today" on the desktop apps. A section is a
 block the page holds, such as "Team rule changes", which the desktop lists and opens in Memnox Cloud
 because a second person approves it there. Each is marked for its platforms the way a tab is.
 
