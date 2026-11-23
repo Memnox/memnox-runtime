@@ -22,7 +22,7 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
       # The runner carries an NDK in ANDROID_NDK_LATEST_HOME, which build-android.sh reads when ANDROID_NDK_HOME is unset.
