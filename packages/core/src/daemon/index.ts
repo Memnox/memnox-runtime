@@ -34,6 +34,5 @@ export * from './lan';
 export * from './personal-sync';
 export * from './profiles';
 export * from './work';
-export * from './community-index';
 export * from './proposing';
 export * from './vectors';

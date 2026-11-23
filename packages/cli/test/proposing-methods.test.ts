@@ -8,7 +8,6 @@ import {
   BACKUP_METHOD,
   DAEMON_METHOD,
   HOME_METHOD,
-  INDEX_METHOD,
   LAN_METHOD,
   MCP_HUB_METHOD,
   MEMORY_METHOD,
@@ -30,14 +29,12 @@ const PROPOSAL_FIELDS = new Set([
   'proposed',
   'packProposed',
   'profileApplied',
-  'indexInstalled',
 ]);
 const METHODS: Readonly<Record<string, string>> = DAEMON_METHOD;
 const GROUPS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   AGENTS_METHOD,
   BACKUP_METHOD,
   HOME_METHOD,
-  INDEX_METHOD,
   LAN_METHOD,
   MCP_HUB_METHOD,
   MEMORY_METHOD,
@@ -71,7 +68,6 @@ const NEVER_PROPOSES: readonly string[] = [
   DAEMON_METHOD.PERSONAL_SYNC_CONFLICTS,
   DAEMON_METHOD.PROFILES,
   DAEMON_METHOD.PROJECTS,
-  DAEMON_METHOD.INDEX_LIST,
   DAEMON_METHOD.AGENTS,
   DAEMON_METHOD.AGENTS_SCAN,
   DAEMON_METHOD.MEMORY_LAYERS,

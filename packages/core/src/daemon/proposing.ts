@@ -1,6 +1,5 @@
 import { AGENTS_METHOD } from './agents-view';
 import { BACKUP_METHOD } from './backup';
-import { INDEX_METHOD } from './community-index';
 import { HOME_METHOD } from './home';
 import { LAN_METHOD } from './lan';
 import { MCP_HUB_METHOD } from './mcp-hub';
@@ -41,6 +40,4 @@ export const PROPOSING_METHODS: readonly string[] = [
   PERSONAL_SYNC_METHOD.PERSONAL_SYNC_KEY_OFFER,
   PERSONAL_SYNC_METHOD.PERSONAL_SYNC_KEY_ACCEPT,
   PROFILES_METHOD.PROFILE_APPLY,
-  INDEX_METHOD.INDEX_INSTALL,
-  INDEX_METHOD.INDEX_SOURCE_SET,
 ];

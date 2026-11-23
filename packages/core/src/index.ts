@@ -35,7 +35,6 @@ export * from './distribute/index';
 export * from './skills/index';
 export * from './projects/index';
 export * from './personal-sync/index';
-export * from './marketplace/index';
 export * from './memory/index';
 export * from './memory-sources/index';
 export * from './backup/index';

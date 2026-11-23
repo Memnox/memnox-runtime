@@ -27,7 +27,6 @@ import type {
   AgentWorkRequestFields,
   AgentWorkResponseFields,
 } from './work';
-import type { IndexRequestFields, IndexResponseFields } from './community-index';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -127,8 +126,7 @@ export interface ExtensionRequestFields
     LanRequestFields,
     PersonalSyncRequestFields,
     ProfilesRequestFields,
-    AgentWorkRequestFields,
-    IndexRequestFields {}
+    AgentWorkRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -150,8 +148,7 @@ export interface ExtensionResponseFields
     LanResponseFields,
     PersonalSyncResponseFields,
     ProfilesResponseFields,
-    AgentWorkResponseFields,
-    IndexResponseFields {}
+    AgentWorkResponseFields {}
 
 export interface ExtensionEventFields
   extends
