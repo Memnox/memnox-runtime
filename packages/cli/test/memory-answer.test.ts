@@ -172,7 +172,11 @@ describe('the memory methods', () => {
     const kept = await at.ask({
       method: DAEMON_METHOD.MEMORY_REMEMBER,
       memoryProject: folder,
-      memoryStatements: [' Refunds over 500 dollars go to finance. ', '', 'We never email customers on Sunday.'],
+      memoryStatements: [
+        ' Refunds over 500 dollars go to finance. ',
+        '',
+        'We never email customers on Sunday.',
+      ],
     });
     expect(kept.ok).toBe(true);
     const facts = kept.memoryFacts?.items ?? [];
@@ -183,13 +187,31 @@ describe('the memory methods', () => {
     expect(facts.every((each) => each.status === 'verified')).toBe(true);
     const learn = await at.ask({ method: DAEMON_METHOD.MEMORY_LEARN });
     expect(learn.memoryLearn?.items ?? []).toHaveLength(0);
-    expect(remoteCapabilityFor(DAEMON_METHOD.MEMORY_REMEMBER)).toBe(REMOTE_CAPABILITY.ASK);
+    expect(remoteCapabilityFor(DAEMON_METHOD.MEMORY_REMEMBER)).toBe(
+      REMOTE_CAPABILITY.ASK,
+    );
   });
 
   it('refuses to remember without a whole folder or without words', async () => {
     const at = await fixture();
-    expect((await at.ask({ method: DAEMON_METHOD.MEMORY_REMEMBER, memoryProject: 'site', memoryStatements: ['x'] })).ok).toBe(false);
-    expect((await at.ask({ method: DAEMON_METHOD.MEMORY_REMEMBER, memoryProject: at.home, memoryStatements: [' '] })).ok).toBe(false);
+    expect(
+      (
+        await at.ask({
+          method: DAEMON_METHOD.MEMORY_REMEMBER,
+          memoryProject: 'site',
+          memoryStatements: ['x'],
+        })
+      ).ok,
+    ).toBe(false);
+    expect(
+      (
+        await at.ask({
+          method: DAEMON_METHOD.MEMORY_REMEMBER,
+          memoryProject: at.home,
+          memoryStatements: [' '],
+        })
+      ).ok,
+    ).toBe(false);
   });
 
   it('reads a vault into Learn with evidence, numbered passages and dropped citations counted', async () => {

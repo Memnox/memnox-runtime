@@ -32,7 +32,9 @@ describe('the waiting list', () => {
     const kept = await approvals.raise(call('bbb222'), NOW, MINUTE);
     await approvals.park(kept.id, LATER, DAY);
 
-    const held = (await new WaitingFeed(home).current(LATER)).filter((each) => each.kind === DAEMON_EVENT.HELD);
+    const held = (await new WaitingFeed(home).current(LATER)).filter(
+      (each) => each.kind === DAEMON_EVENT.HELD,
+    );
     expect(held.find((each) => each.subject === kept.id)?.parkedAt).toBe(LATER);
     expect(held.find((each) => each.subject === blocked.id)?.parkedAt).toBeUndefined();
   });

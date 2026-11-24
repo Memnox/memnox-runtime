@@ -167,11 +167,13 @@ async function remember(
   now: Date,
 ): Promise<Answered> {
   const folder = request.memoryProject;
-  if (folder === undefined || !isAbsolute(folder)) return refused('Name the project by its folder, whole.');
+  if (folder === undefined || !isAbsolute(folder))
+    return refused('Name the project by its folder, whole.');
   const said = statementsOf(request.memoryStatements);
   if (typeof said === 'string') return refused(said);
   const place = await projectMemoryKey(home, folder);
-  if ('none' in place) return refused('This shared project keeps no memory, so nothing is kept.');
+  if ('none' in place)
+    return refused('This shared project keeps no memory, so nothing is kept.');
   const at = now.toISOString();
   for (const statement of said) {
     const outcome = store.add(
@@ -188,12 +190,20 @@ async function remember(
       at,
     );
     // Rejected before is the person's own earlier answer, which saying it again now overrules.
-    const id = 'added' in outcome ? outcome.added.id : 'merged' in outcome ? outcome.merged : undefined;
+    const id =
+      'added' in outcome
+        ? outcome.added.id
+        : 'merged' in outcome
+          ? outcome.merged
+          : undefined;
     if (id !== undefined) store.decide(id, MEMORY_STATUS.VERIFIED, { by: PERSON, at });
   }
   return {
     ok: true,
-    memoryFacts: listed(store, { statuses: [MEMORY_STATUS.VERIFIED], scope: MEMORY_SCOPE.PROJECT }),
+    memoryFacts: listed(store, {
+      statuses: [MEMORY_STATUS.VERIFIED],
+      scope: MEMORY_SCOPE.PROJECT,
+    }),
   };
 }
 

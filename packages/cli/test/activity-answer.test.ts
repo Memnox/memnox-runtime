@@ -94,15 +94,30 @@ describe('the activity methods', () => {
 
   it('narrows to one project, keeping the commands of sessions that touched it', async () => {
     const home = await seeded([
-      row('in', minutesIn(1), { sessionId: 'site', surface: 'filesystem', operation: 'write', target: '/work/site/index.html' }),
+      row('in', minutesIn(1), {
+        sessionId: 'site',
+        surface: 'filesystem',
+        operation: 'write',
+        target: '/work/site/index.html',
+      }),
       row('cmd', minutesIn(2), { sessionId: 'site' }),
-      row('sibling', minutesIn(3), { sessionId: 'other', surface: 'filesystem', operation: 'write', target: '/work/site-old/a.ts' }),
+      row('sibling', minutesIn(3), {
+        sessionId: 'other',
+        surface: 'filesystem',
+        operation: 'write',
+        target: '/work/site-old/a.ts',
+      }),
       row('away', minutesIn(4), { sessionId: 'other' }),
     ]);
     const here = await ask(home, { activityFilter: { project: '/work/site' } });
     expect(here.activity?.rows.map((each) => each.id)).toEqual(['cmd', 'in']);
-    const bundle = await ask(home, { method: DAEMON_METHOD.ACTIVITY_EXPORT, activityFilter: { project: '/work/site' } });
-    expect(bundle.activityBundle).toContain('only sessions that touched /work/site were asked for');
+    const bundle = await ask(home, {
+      method: DAEMON_METHOD.ACTIVITY_EXPORT,
+      activityFilter: { project: '/work/site' },
+    });
+    expect(bundle.activityBundle).toContain(
+      'only sessions that touched /work/site were asked for',
+    );
   });
 
   it('refuses a project that is not a whole folder', async () => {

@@ -178,6 +178,13 @@ function targetInside(target: string | undefined, folder: string): boolean {
 }
 
 /** The sessions with any event inside the folder, so their other actions count as the project's too. */
-export function sessionsInside(events: readonly MemnoxEvent[], folder: string): Set<string> {
-  return new Set(events.filter((event) => targetInside(event.target, folder)).map((event) => event.sessionId));
+export function sessionsInside(
+  events: readonly MemnoxEvent[],
+  folder: string,
+): Set<string> {
+  return new Set(
+    events
+      .filter((event) => targetInside(event.target, folder))
+      .map((event) => event.sessionId),
+  );
 }

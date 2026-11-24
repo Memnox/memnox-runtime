@@ -126,7 +126,9 @@ describe('the words every surface shares', () => {
 
   it('keeps plumbing words out of every page, tab, view and section label', () => {
     const labels = contract().pages.flatMap((page) =>
-      [...(page.tabs ?? []), ...(page.views ?? []), ...(page.sections ?? [])].map((each) => each.label),
+      [...(page.tabs ?? []), ...(page.views ?? []), ...(page.sections ?? [])].map(
+        (each) => each.label,
+      ),
     );
     for (const label of labels)
       for (const word of PLUMBING_WORDS)

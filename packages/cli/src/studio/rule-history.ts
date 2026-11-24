@@ -17,7 +17,10 @@ const HISTORY_ROWS = 50;
  * The rule changes a person answered on this machine, newest first: rules added through a signed
  * proposal and rules taken out, confirmed or declined. One still waiting is on Needs you instead.
  */
-export async function readRuleHistory(home: string, now: Date): Promise<RuleHistoryRow[]> {
+export async function readRuleHistory(
+  home: string,
+  now: Date,
+): Promise<RuleHistoryRow[]> {
   const since = new Date(now.getTime() - HISTORY_DAYS * DAY_MS).toISOString();
   const raised = await new Proposals(home).since(since).catch((): Proposal[] => []);
   return raised
@@ -37,7 +40,13 @@ function rowOf(proposal: Proposal): RuleHistoryRow[] {
     ...(proposal.answeredBy === undefined ? {} : { answeredBy: proposal.answeredBy }),
   };
   if (change.kind === PROPOSAL_KIND.RULES)
-    return [{ ...shared, kind: RULE_CHANGE_KIND.ADDED, rules: change.rules.map(sentenceOfRule) }];
+    return [
+      {
+        ...shared,
+        kind: RULE_CHANGE_KIND.ADDED,
+        rules: change.rules.map(sentenceOfRule),
+      },
+    ];
   if (change.kind === PROPOSAL_KIND.RULE_REMOVE)
     return [{ ...shared, kind: RULE_CHANGE_KIND.REMOVED, rules: [change.rule] }];
   return [];
