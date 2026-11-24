@@ -175,29 +175,7 @@ async function remember(
   if ('none' in place)
     return refused('This shared project keeps no memory, so nothing is kept.');
   const at = now.toISOString();
-  for (const statement of said) {
-    const outcome = store.add(
-      {
-        kind: MEMORY_KIND.FACT,
-        statement,
-        subject: '',
-        scope: MEMORY_SCOPE.PROJECT,
-        project: place.key,
-        origin: MEMORY_ORIGIN.PERSON,
-        tainted: false,
-        evidence: [],
-      },
-      at,
-    );
-    // Rejected before is the person's own earlier answer, which saying it again now overrules.
-    const id =
-      'added' in outcome
-        ? outcome.added.id
-        : 'merged' in outcome
-          ? outcome.merged
-          : undefined;
-    if (id !== undefined) store.decide(id, MEMORY_STATUS.VERIFIED, { by: PERSON, at });
-  }
+  for (const statement of said) keepVerified(store, statement, place.key, at);
   return {
     ok: true,
     memoryFacts: listed(store, {
@@ -205,6 +183,36 @@ async function remember(
       scope: MEMORY_SCOPE.PROJECT,
     }),
   };
+}
+
+/** One statement kept as a fact the person verified. */
+function keepVerified(
+  store: SqliteMemoryStore,
+  statement: string,
+  project: string,
+  at: string,
+): void {
+  const outcome = store.add(
+    {
+      kind: MEMORY_KIND.FACT,
+      statement,
+      subject: '',
+      scope: MEMORY_SCOPE.PROJECT,
+      project,
+      origin: MEMORY_ORIGIN.PERSON,
+      tainted: false,
+      evidence: [],
+    },
+    at,
+  );
+  // Rejected before is the person's own earlier answer, which saying it again now overrules.
+  const id =
+    'added' in outcome
+      ? outcome.added.id
+      : 'merged' in outcome
+        ? outcome.merged
+        : undefined;
+  if (id !== undefined) store.decide(id, MEMORY_STATUS.VERIFIED, { by: PERSON, at });
 }
 
 /** What a person typed, one statement a line and none empty, or why it is refused. */

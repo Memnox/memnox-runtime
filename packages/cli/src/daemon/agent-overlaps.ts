@@ -35,13 +35,7 @@ export async function readAgentOverlaps(
       .since(new Date(now.getTime() - HELD_BACK_MS).toISOString(), at)
       .catch(() => []),
   ]);
-  const together = concurrentWork(workObservationsOf(events), { now: at }).map(
-    (collision) => ({
-      target: collision.target,
-      agents: [...new Set(collision.agents.map((agent) => agent.agentName))],
-      at: collision.agents.at(-1)?.at ?? at,
-    }),
-  );
+  const together = togetherOf(events, at);
   return {
     holds: leases.slice(-MOST_SHOWN).map((lease) => ({
       agent: lease.holder.agent,
@@ -54,11 +48,15 @@ export async function readAgentOverlaps(
     heldBack: clashes
       .slice(-MOST_SHOWN)
       .reverse()
-      .map((clash) => ({
-        agent: clash.agent,
-        what: clash.what,
-        said: clash.said,
-        at: clash.at,
-      })),
+      .map(({ agent, what, said, at: when }) => ({ agent, what, said, at: when })),
   };
+}
+
+/** Each file several agents touched inside the window, with who and when last. */
+function togetherOf(events: Parameters<typeof workObservationsOf>[0], at: string) {
+  return concurrentWork(workObservationsOf(events), { now: at }).map((collision) => ({
+    target: collision.target,
+    agents: [...new Set(collision.agents.map((agent) => agent.agentName))],
+    at: collision.agents.at(-1)?.at ?? at,
+  }));
 }
