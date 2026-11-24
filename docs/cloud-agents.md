@@ -2,7 +2,7 @@
 
 How Memnox governs an agent that runs where nobody can install the runtime: a support bot on a server, a fix agent in CI, an incident bot with production credentials, a long running Hermes or OpenClaw box. This document explains what was built, across all five repositories, why each piece is shaped the way it is, and what is still unverified.
 
-It answers to `VISION.md` sections 10 (the agent workforce), 13 (progressive autonomy), 15 (the circuit breaker), 18 (the black box), 24 (one unified agent layer) and 25 (Memnox Cloud).
+It answers to `VISION.md` sections 10 (the agent workforce: who answers for each agent and how far it may go), 13 (progressive autonomy), 15 (the circuit breaker), 18 (the black box), 24 (one unified agent layer) and 25 (Memnox Cloud).
 
 ---
 

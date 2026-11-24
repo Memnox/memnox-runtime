@@ -1,6 +1,6 @@
 /**
- * `memnox mission`: one goal across many sessions. A run joins by `--mission`, its children
- * on their own, and an orchestrator's workers by working in the mission's repository.
+ * `memnox goal`: one goal the person gave their agents, which Memnox keeps but never sets.
+ * A run joins by `--goal`, its children on their own, and workers by working in its repository.
  */
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -28,7 +28,7 @@ import {
 import type { CliContext } from '../cli-context';
 import { WaitingFeed } from '../daemon/waiting-feed';
 
-/** Enough history for a long mission without reading a month of the ledger. */
+/** Enough history for a long goal without reading a month of the ledger. */
 const MISSION_EVENTS = 20_000;
 
 interface JsonOption {
@@ -40,19 +40,26 @@ interface StartOptions {
   repo?: string;
 }
 
+/** The name a person types, and `mission`, the old one, still answered but never listed. */
+const GOAL_COMMAND = 'goal';
+const OLD_GOAL_COMMAND = 'mission';
+
 export function registerMissionCommand(
   program: Command,
   context: CliContext,
   home: () => string = homedir,
 ): void {
-  const mission = program
-    .command('mission')
-    .description(
-      'One goal worked on across many sessions, and where each of them stands',
-    );
+  registerGoal(program.command(GOAL_COMMAND), context, home);
+  registerGoal(program.command(OLD_GOAL_COMMAND, { hidden: true }), context, home);
+}
+
+function registerGoal(mission: Command, context: CliContext, home: () => string): void {
+  mission.description(
+    'One goal you gave your agents, and the sessions that worked on it',
+  );
   mission
     .command('start <statement>')
-    .description('Start one; join sessions to it with memnox run --mission <id>')
+    .description('Start one; join sessions to it with memnox run --goal <id>')
     .option('--ref <reference>', 'what it answers to, such as an incident or a ticket')
     .option('--repo <path>', 'the repository its agents work in (default: this one)')
     .action(async (statement: string, options: StartOptions) =>
@@ -79,7 +86,7 @@ function registerReading(
 ): void {
   mission
     .command('list')
-    .description('Every mission on this machine, newest first')
+    .description('Every goal on this machine, newest first')
     .option('--json', 'machine-readable output')
     .action(async (options: JsonOption) => runList(context, home(), options));
   mission
@@ -100,7 +107,7 @@ async function runStart(
   options: StartOptions,
 ): Promise<void> {
   const { flow } = context;
-  flow.open('memnox mission start');
+  flow.open('memnox goal start');
   const root = repositoryAt(resolve(options.repo ?? process.cwd()));
   const mission = await new Missions(home).start(statement, {
     now: new Date().toISOString(),
@@ -108,7 +115,7 @@ async function runStart(
     ...(root === null ? {} : { root }),
   });
   flow.rows('Started', [
-    { label: 'mission', value: mission.id },
+    { label: 'goal', value: mission.id },
     { label: 'asked for', value: mission.statement },
     ...(mission.reference === undefined
       ? []
@@ -122,7 +129,7 @@ async function runStart(
       ? 'No session has joined it yet.'
       : 'Every agent that works in this repository from now on is part of it.',
   );
-  flow.hint(`memnox run --mission ${mission.id} -- <agent>`);
+  flow.hint(`memnox run --goal ${mission.id} -- <agent>`);
 }
 
 async function runList(
@@ -136,14 +143,14 @@ async function runList(
     return;
   }
   const { flow } = context;
-  flow.open('memnox mission list');
+  flow.open('memnox goal list');
   if (missions.length === 0) {
-    flow.close('No mission on this machine.');
-    flow.hint('memnox mission start "<what the agents are here to do>"');
+    flow.close('No goal on this machine.');
+    flow.hint('memnox goal start "<what you asked your agents to do>"');
     return;
   }
   flow.list(
-    'Missions',
+    'Goals',
     missions.map((mission) => ({
       text: `${mission.id}  ${mission.statement}`,
       detail: [
@@ -151,7 +158,7 @@ async function runList(
       ],
     })),
   );
-  flow.close(`${missions.length} mission(s).`);
+  flow.close(`${missions.length} goal(s).`);
 }
 
 /** The screen for coming back: where each session stands, and what is waiting on you. */
@@ -172,7 +179,7 @@ async function runShow(
     return;
   }
   const { flow } = context;
-  flow.open('memnox mission show');
+  flow.open('memnox goal show');
   const [heading, ...rest] = describeMission(summary);
   flow.box(
     heading ?? mission.id,
@@ -196,8 +203,8 @@ async function missionNamed(home: string, id: string | undefined): Promise<Missi
   if (mission !== null) return mission;
   throw new Error(
     id === undefined
-      ? 'no open mission; "memnox mission start" begins one'
-      : `no mission ${id}; "memnox mission list" shows them`,
+      ? 'no open goal; "memnox goal start" begins one'
+      : `no goal ${id}; "memnox goal list" shows them`,
   );
 }
 
@@ -210,7 +217,7 @@ function waitingItem(event: DaemonEvent): { text: string; detail: string[] } {
   return { text: event.summary, detail: [] };
 }
 
-/** The sessions found in the mission's repository and worktrees, added to those that joined. */
+/** The sessions found in the goal's repository and worktrees, added to those that joined. */
 async function withWorkers(home: string, mission: Mission): Promise<Mission> {
   if (mission.root === undefined) return mission;
   const places = await new SessionHosts(home).all().catch(() => []);
@@ -247,7 +254,7 @@ function git(dir: string, args: readonly string[]): string | null {
   }
 }
 
-/** The ledger, the questions still open and the pauses holding, read once for the whole mission. */
+/** The ledger, the questions still open and the pauses holding, read once for the whole goal. */
 async function summaryOf(home: string, mission: Mission): Promise<MissionSummary> {
   const now = new Date().toISOString();
   const store = SqliteEventStore.forHome(home);
@@ -280,7 +287,7 @@ async function runAttach(
   id: string,
   session: string,
 ): Promise<void> {
-  context.flow.open('memnox mission attach');
+  context.flow.open('memnox goal attach');
   const mission = await new Missions(home).attach(id, session);
   context.flow.close(
     `${session} is part of "${mission.statement}", one of ${mission.sessions.length} session(s).`,
@@ -288,7 +295,7 @@ async function runAttach(
 }
 
 async function runClose(context: CliContext, home: string, id: string): Promise<void> {
-  context.flow.open('memnox mission close');
+  context.flow.open('memnox goal close');
   const mission = await new Missions(home).close(id, new Date().toISOString());
   context.flow.close(
     `"${mission.statement}" is closed, after ${mission.sessions.length} session(s).`,

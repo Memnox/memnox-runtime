@@ -108,7 +108,7 @@ const RULE_PREFIXES: readonly { prefix: string; domain: ContextDomain; said: str
     {
       prefix: CONTEXT_SIGNAL_PREFIX.AGENT,
       domain: CONTEXT_DOMAIN.AGENT,
-      said: 'on this agent or its job',
+      said: 'on this agent or its role',
     },
     {
       prefix: CONTEXT_SIGNAL_PREFIX.INTENT,

@@ -53,11 +53,14 @@ export function configureShortHelp(program: Command, short: readonly string[]): 
  * flags. What the voice reads to know everything it can run, so nothing has to be listed twice.
  */
 export function commandTree(program: Command, prefix: readonly string[] = []): string[] {
-  return program.commands
+  // Only what help shows, so an old name kept as a hidden alias is never read out twice.
+  return new Help()
+    .visibleCommands(program)
     .filter((each) => each.name() !== HELP_COMMAND)
     .flatMap((each) => {
       const words = [...prefix, each.name()];
       const flags = each.options
+        .filter((option) => !option.hidden)
         .map((option) => option.long ?? option.short ?? '')
         .filter((flag) => flag !== '' && flag !== '--json' && flag !== '--help');
       const args = each.registeredArguments.map((arg) =>

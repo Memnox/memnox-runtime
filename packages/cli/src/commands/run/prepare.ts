@@ -110,6 +110,9 @@ export interface RunOptions {
   brief?: string;
   investigate?: boolean;
   holdCredentials?: boolean;
+  /** The goal to join, as `--goal` names it; folded into `mission` before the run starts. */
+  goal?: string;
+  /** The goal to join, by the id `memnox goal start` gave. */
   mission?: string;
   /** Agent work a person started for this agent's profile, joined as the session's task. */
   work?: string;

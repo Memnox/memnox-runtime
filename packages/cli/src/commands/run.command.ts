@@ -1,7 +1,7 @@
 /** `memnox run`: starts an agent with the interceptors, the shell wrapper, a session and a milestone in place. */
 
 import { rm } from 'node:fs/promises';
-import type { Command } from 'commander';
+import { Option, type Command } from 'commander';
 import {
   BROKER_VAR,
   holdCredentials,
@@ -86,21 +86,29 @@ export function registerRunCommand(
       '--investigate',
       'the task is an investigation: nothing outside this machine changes',
     )
-    .option('--role <name>', 'the job this agent is enrolled under, matched by roles:')
+    .option('--role <name>', 'the role this agent is enrolled under, matched by roles:')
     .option('--for <person>', 'the person this agent works for, matched by principals:')
     .option(
       '--brief <id>',
       'a workspace brief the voice gathered, handed to the agent before its first turn',
     )
-    .option('--mission <id>', 'join this session to a mission, from memnox mission start')
+    .option('--goal <id>', 'join this session to a goal you gave, from memnox goal start')
+    // The old name for --goal, still answered so a saved command keeps working.
+    .addOption(new Option('--mission <id>').hideHelp())
     .option('--work <id>', 'carry agent work a person started, from memnox work start')
     .option(
       '--hold-credentials',
       'keep tokens out of the agent environment and hand each only to the CLI that uses it',
     )
     .action(async (command: readonly string[], options: RunOptions) =>
-      runAgent(context, deps, command, options),
+      runAgent(context, deps, command, withGoal(options)),
     );
+}
+
+/** `--goal` read as the goal the run joins, the same as the old `--mission` it replaced. */
+function withGoal(options: RunOptions): RunOptions {
+  const { goal, ...rest } = options;
+  return goal === undefined ? rest : { ...rest, mission: goal };
 }
 
 /**
@@ -195,12 +203,12 @@ function renderStart(
   if (run.hint !== null) context.flow.hint(run.hint);
 }
 
-/** What the session is here to do: the mission it is one run of, and its own task. */
+/** What the session is here to do: the goal it is one run of, and its own task. */
 function askedRows(run: PreparedRun): FlowRow[] {
   const rows: FlowRow[] = [];
   if (run.mission !== null) {
     rows.push({
-      label: 'mission',
+      label: 'goal',
       value: `"${run.mission.statement}", session ${run.mission.sessions.length}`,
     });
   }
