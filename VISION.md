@@ -55,12 +55,12 @@ The result:
 
 > **Agents don't just have access to your systems. They understand the environment they're operating in.**
 
-So Memnox is the workspace where the agents people already use are given a job, the context to do it and the authority to do it safely, and where they can be given more because what they do can be seen and governed. It is agent agnostic: an agent on a laptop, one hosted on a server, one inside a SaaS product, one built in a no code tool and one written from scratch all arrive at the same place.
+So Memnox is the workspace where the agents people already use are given the authority to act safely and the context of what was decided, and where they can be given more because what they do can be seen and governed. It is agent agnostic: an agent on a laptop, one hosted on a server, one inside a SaaS product, one built in a no code tool and one written from scratch all arrive at the same place.
 
 Three things hold it together, and each depends on the one before:
 
 * **Context** tells an agent what it needs to know, and no more than it may know.
-* **Coordination** gives it a job, a project, a task a person wrote, and a way to hand that task on.
+* **Coordination** gives it a project, a task a person wrote, and a way to hand that task on.
 * **Authority** decides what it may do, deterministically wherever Memnox sits in the path of the action, and says plainly where it does not.
 
 ---
@@ -417,12 +417,10 @@ Each agent has:
 
 ```text
 IDENTITY
-ROLE
-MISSION
-CONTEXT
-CAPABILITIES
+ANSWERS TO
 AUTHORITY
-CURRENT TASK
+CONTEXT
+CURRENT WORK
 TRUST LEVEL
 BUDGET
 HISTORY
@@ -431,10 +429,10 @@ HISTORY
 For example:
 
 ```text
-CODING AGENT
+SOFIA'S CLAUDE CODE
 
-Mission:
-Implement backend features.
+Answers to:
+Sofia
 
 Can:
 ✓ read repository
@@ -451,11 +449,13 @@ Cannot:
 
 The important difference is that Memnox doesn't just define what an agent **can technically access**.
 
-It understands what the agent is **supposed to accomplish**.
+It knows **who answers for the agent and how far it may go alone**.
+
+**Purpose comes from the person, never from Memnox.** The person tells their agent what to do, in the agent itself or through Memnox by text or voice, and Memnox carries those words to the agent whole, without adding a mission, a job or a purpose of its own and without storing one on the agent. Current work is what the person or their tracker gave the agent, read rather than written.
 
 **Every agent has a person who answers for it.** An agent is represented by the person responsible for it, the way a colleague is in Linear or Jira: Alice answers for her Claude Code, decides what work it is given, what it is told and what it may reach, and watches what it does. A manager can give an issue to Alice and Alice can give part of it to her agent, so the person who assigned the work and the person who answers for the agent need not be the same. The agent does not inherit Alice's authority, and when Alice leaves, the organization hands her agents to somebody else rather than leaving them answering to nobody.
 
-**A profile is the job; a connection is how it reaches us.** The identity, role, mission and responsibilities belong to an agent profile, which no harness and no machine owns. The same profile can be reached through a hook on a laptop, a gateway in front of a hosted agent and an MCP door inside a SaaS product, and two agents of the same harness can hold two different jobs. A profile can exist before anything is connected to it, which is what a template is: a job description waiting for a real agent, never an agent pretending to run.
+**A profile is the agent's standing: who answers for it and what it may do.** A connection is how it reaches us. The identity, the person who answers for it and its authority belong to an agent profile, which no harness and no machine owns. The same profile can be reached through a hook on a laptop, a gateway in front of a hosted agent and an MCP door inside a SaaS product, and two agents of the same harness can hold two different standings. A profile can exist before anything is connected to it, and a preset is only a set of starter rules waiting for a real agent, never an agent pretending to run.
 
 What Memnox can do for an agent is read off its connections and never declared by them. Each capability is enforced, checked, reported by the agent, only seen, or outside Memnox, and a profile is shown at the weakest level its live connections reach.
 
@@ -611,7 +611,7 @@ Example:
 ```text
 OPENCLAW AUTOPILOT
 
-Mission:
+Your mission:
 Generate qualified sales leads.
 
 Can:
@@ -1068,7 +1068,7 @@ Trust
 
 That is the platform.
 
-The primitives hang off the profile, so they follow the job rather than the harness. Local coding agents, local agents that do other work, hosted agents, agents inside SaaS products, agents built in no code tools and custom agents each connect in the way their platform allows, and the screens say which way that is. Wherever the connection sits in the path of an action, the decision is deterministic; wherever it does not, Memnox says it only sees.
+The primitives hang off the profile, so they follow the agent rather than the harness. Local coding agents, local agents that do other work, hosted agents, agents inside SaaS products, agents built in no code tools and custom agents each connect in the way their platform allows, and the screens say which way that is. Wherever the connection sits in the path of an action, the decision is deterministic; wherever it does not, Memnox says it only sees.
 
 ---
 
