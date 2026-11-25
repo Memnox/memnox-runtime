@@ -264,7 +264,7 @@ export function assignmentBlockFrom(value: unknown): AssignmentBlock | null {
   return { version, leaseSeconds, assignments };
 }
 
-const ID_PATTERN = /^[A-Za-z0-9._:@-]{1,128}$/;
+const ID_PATTERN = /^[\w.:@-]{1,128}$/;
 const ROLE_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
 function assignmentFrom(value: unknown): AgentAssignment | null {

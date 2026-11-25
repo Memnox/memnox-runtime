@@ -468,6 +468,22 @@ describe('moving an install between agents', () => {
 });
 
 describe('reading a block from the network', () => {
+  it('reads the agent ids Memnox Cloud makes, underscores included', () => {
+    const read = assignmentBlockFrom({
+      version: 1,
+      leaseSeconds: 600,
+      assignments: [
+        {
+          id: 'agent:agt_claude-code',
+          scope: 'agent',
+          names: ['agt_claude-code'],
+          profile: 'prf_3f2a',
+        },
+      ],
+    });
+    expect(read?.assignments[0]?.profile).toBe('prf_3f2a');
+  });
+
   it('refuses the whole block when one entry does not read', () => {
     expect(
       assignmentBlockFrom({
