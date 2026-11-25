@@ -28,6 +28,11 @@ export interface EvaluationContext {
   agentName: string;
   /** The job the acting agent was enrolled under; what `roles` patterns match. */
   agentRole?: string;
+  /**
+   * Further roles the install holds, such as `agent:<id>` for the agent Memnox Cloud says it
+   * belongs to. A rule's `roles` matches when any of these or `agentRole` does.
+   */
+  agentRoles?: readonly string[];
   /** Supplied by the caller so a verdict stays reproducible on replay. */
   now?: Date;
   /**
@@ -178,7 +183,7 @@ export class PolicyEngine {
       ) &&
       matchesAny(policy.match.environments, request.environment) &&
       matchesAny(policy.match.agents, context.agentName) &&
-      matchesAny(policy.match.roles, context.agentRole) &&
+      matchesAnyOf(policy.match.roles, rolesOf(context)) &&
       matchesAny(policy.match.principals, request.principal) &&
       matchesAny(policy.match.models, request.model) &&
       matchesAny(policy.match.providers, request.provider) &&
@@ -203,6 +208,14 @@ export class PolicyEngine {
       !carvedOut(policy.match.unless, request, context)
     );
   }
+}
+
+/** Every role the acting install holds, the enrolled one first; none matches no `roles` rule. */
+function rolesOf(context: EvaluationContext): string[] {
+  return [
+    ...(context.agentRole === undefined ? [] : [context.agentRole]),
+    ...(context.agentRoles ?? []),
+  ];
 }
 
 /**

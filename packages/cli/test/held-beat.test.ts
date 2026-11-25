@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  ASSIGNMENT_SCOPE,
+  assignmentStandingOn,
+  confirmAssignments,
+  STANDING,
+} from '@memnox/core';
 import {
   isBeatFrame,
+  isPullFrame,
+  pullBeat,
   RelayLink,
   type OpenRelay,
   type RelaySocket,
@@ -264,5 +275,65 @@ describe('the relay link hearing a beat', () => {
     expect(isBeatFrame('{"type":"beat","call":"x"}')).toBe(true);
     expect(isBeatFrame('null')).toBe(false);
     expect(isBeatFrame('"beat"')).toBe(false);
+  });
+});
+
+describe('a beat that says a pull is due', () => {
+  it('tells a pull beat from one that only says an answer waits', () => {
+    expect(isPullFrame('{"type":"beat","pull":true}')).toBe(true);
+    expect(isPullFrame('{"type":"beat"}')).toBe(false);
+    expect(isPullFrame('{"type":"other","pull":true}')).toBe(false);
+  });
+
+  it('marks assignments stale before it beats, so the pull is the last word', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-pull-beat-'));
+    try {
+      await confirmAssignments(home, {
+        version: 1,
+        leaseSeconds: 600,
+        assignments: [
+          {
+            id: 'a',
+            scope: ASSIGNMENT_SCOPE.AGENT,
+            names: ['claude-code'],
+            profile: 'p',
+          },
+        ],
+      });
+      const standings: string[] = [];
+      const beats = {
+        beat: () => {
+          void assignmentStandingOn(home, 'claude-code').then((each) =>
+            standings.push(each.state),
+          );
+        },
+      } as unknown as HeartbeatBeats;
+      const onBeat = pullBeat(
+        home,
+        () => beats,
+        () => undefined,
+      );
+      onBeat(true);
+      await vi.waitFor(() => expect(standings).toEqual([STANDING.STALE]));
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves assignments alone on a beat that only says an answer waits', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-pull-beat-'));
+    try {
+      await confirmAssignments(home, { version: 1, leaseSeconds: 600, assignments: [] });
+      const beat = vi.fn();
+      pullBeat(
+        home,
+        () => ({ beat }) as unknown as HeartbeatBeats,
+        () => undefined,
+      )(false);
+      expect(beat).toHaveBeenCalledTimes(1);
+      expect((await assignmentStandingOn(home, 'claude-code')).state).toBe(STANDING.NONE);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });

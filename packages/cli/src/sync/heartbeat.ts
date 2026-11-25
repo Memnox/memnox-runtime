@@ -36,6 +36,8 @@ import { currentSeamDigest, readProofRecord } from '../verify/proof-file';
 import { runningMode } from './running-mode';
 import { kindOf, listRecords, sponsoredBy } from '../agents/onboarding';
 import { orgPolicyPath, PULL_OUTCOME, pullBundle, type PullResult } from './bundle';
+import { assignmentReport } from './assignment-report';
+import { RUNTIME_CAPABILITIES } from './capabilities';
 import { notEnforcedIn, type RuleNotEnforced } from './bundle-document';
 import { callCloud, CloudUnreachable } from './client';
 import {
@@ -376,6 +378,10 @@ async function heartbeatBody(
   return {
     // Every beat, so the fleet page shows what runs now rather than what was installed.
     runtimeVersion: CLI_VERSION,
+    // What this runtime can enforce, so the workspace never counts a machine as governed by a rule it cannot apply.
+    capabilities: [...RUNTIME_CAPABILITIES],
+    // Which agent assignments this machine validated and applied, and how fresh, as its own evidence.
+    ...(await assignmentReport(home)),
     ...(state.applied === undefined ? {} : { bundleHashApplied: state.applied }),
     // The mode applied here, which somebody at this box may have changed from the workspace's.
     mode: state.running,
