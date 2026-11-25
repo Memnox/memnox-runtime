@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import {
   ACTIVITY_KIND,
   ACTIVITY_METHOD,
@@ -17,7 +18,7 @@ import { readDecision } from '../studio/decision-read';
 const ACTIVITY_METHODS: readonly string[] = Object.values(ACTIVITY_METHOD);
 const EFFECTS: readonly string[] = Object.values(DECISION_EFFECT);
 const KINDS: readonly string[] = Object.values(ACTIVITY_KIND);
-const TEXT_FIELDS = ['agent', 'text', 'since', 'until'] as const;
+const TEXT_FIELDS = ['agent', 'text', 'since', 'until', 'project'] as const;
 
 export function isActivityMethod(method: string): boolean {
   return ACTIVITY_METHODS.includes(method);
@@ -90,5 +91,7 @@ function filterFrom(value: unknown): ActivityFilter | null {
     if (typeof text !== 'string') return null;
     filter[field] = text;
   }
+  // A project is a folder named whole, so a relative one would match wherever the daemon stands.
+  if (filter.project !== undefined && !isAbsolute(filter.project)) return null;
   return filter;
 }

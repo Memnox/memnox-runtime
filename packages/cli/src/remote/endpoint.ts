@@ -37,7 +37,7 @@ import { loadNoise, type Noise } from './noise';
 import { LocalNetwork, type LanSeams } from './local-network';
 import { PairingBook, refused } from './pairings';
 import { keepVoice, readVoice, runtimeNoiseKey } from './remote-files';
-import { RelayLink, relayUrl, type OpenRelay } from './relay-link';
+import { pullBeat, RelayLink, relayUrl, type OpenRelay } from './relay-link';
 import { RemoteSession } from './remote-session';
 import type { VoiceHold } from './voice-hold';
 import { PhoneWakes } from './wake';
@@ -352,7 +352,7 @@ export class RemoteEndpoint {
       url: relayUrl(),
       token: account.token,
       onFrame: (mailbox, payload) => this.receive(mailbox, payload),
-      onBeat: () => this.deps.beats?.beat(),
+      onBeat: pullBeat(this.deps.home, () => this.deps.beats, this.deps.log),
       onDown: () => this.relayDown(),
       log: this.deps.log,
       ...(this.deps.openRelay === undefined ? {} : { open: this.deps.openRelay }),

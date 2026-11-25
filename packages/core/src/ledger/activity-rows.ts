@@ -1,3 +1,5 @@
+import { isAbsolute } from 'node:path';
+import { isInside } from '../gate/containment';
 import {
   ACTIVITY_KIND,
   ANSWERED_HOW,
@@ -73,9 +75,22 @@ export function activityRowOf(event: MemnoxEvent, agentName: string): ActivityRo
   };
 }
 
-/** The filters the ledger's own query cannot apply: the kind, and text in the names. */
-export function matchesActivity(event: MemnoxEvent, filter: ActivityFilter): boolean {
+/**
+ * The filters the ledger's own query cannot apply: the kind, text in the names, and the project,
+ * met by an event inside the folder or by one of `inProject`, the sessions that touched it.
+ */
+export function matchesActivity(
+  event: MemnoxEvent,
+  filter: ActivityFilter,
+  inProject: ReadonlySet<string> = new Set(),
+): boolean {
   if (filter.kind !== undefined && activityKindOf(event.surface) !== filter.kind)
+    return false;
+  if (
+    filter.project !== undefined &&
+    !targetInside(event.target, filter.project) &&
+    !inProject.has(event.sessionId)
+  )
     return false;
   const text = filter.text?.trim().toLowerCase() ?? '';
   if (text === '') return true;
@@ -155,4 +170,21 @@ export function activityEventOf(
     activityRows: newest.map(liveActivityOf),
     ...(missed === 0 ? {} : { activityMissed: missed }),
   };
+}
+
+/** Whether a target is a path in the folder; a command or a website names no folder, so it is not. */
+function targetInside(target: string | undefined, folder: string): boolean {
+  return target !== undefined && isAbsolute(target) && isInside(folder, target);
+}
+
+/** The sessions with any event inside the folder, so their other actions count as the project's too. */
+export function sessionsInside(
+  events: readonly MemnoxEvent[],
+  folder: string,
+): Set<string> {
+  return new Set(
+    events
+      .filter((event) => targetInside(event.target, folder))
+      .map((event) => event.sessionId),
+  );
 }

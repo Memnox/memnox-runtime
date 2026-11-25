@@ -8,6 +8,12 @@ So the console has to carry the whole promise on its own: show what is waiting, 
 answer it with a signed yes or a free no, and show which actions the record has earned the
 right to stop asking about.
 
+**Since 2026-11-23 the product is arranged around four questions a person has about their agents**
+(what happened, what needs me, who is doing what, what can I let go of), as `docs/ux/words.md`
+says. Jobs and job templates are gone, so is the community index, and Hand over and budgets are
+tabs of Rules. Onboarding is three plain screens on a computer and four in the console. Where a
+page below still shows any of those, the contract is what the apps show.
+
 Every entry below follows `docs/ux/TEMPLATE.md`. Labels in quotes are taken from the working
 tree of `memnox-client` as of 2026-10-07, uncommitted files included. **Today** is what the code
 does now; anything new is written under **Improved** only. The people are the ones in

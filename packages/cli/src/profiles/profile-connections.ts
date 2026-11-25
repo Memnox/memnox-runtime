@@ -143,7 +143,6 @@ function defaultProfileViews(
         {
           id: connection.profileId,
           name: agent.name,
-          responsibilities: [],
           responsiblePerson,
           projects: [],
           skills: agent.view === undefined ? [] : agent.view.skills,

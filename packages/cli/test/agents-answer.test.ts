@@ -218,3 +218,42 @@ async function desktop(servers: Record<string, unknown>) {
   if (card === undefined) throw new Error('no card for Claude Desktop');
   return card;
 }
+
+describe('where agents meet', () => {
+  it('says the files two agents are in at once, and only where both are different agents', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'memnox-overlaps-'));
+    const store = SqliteEventStore.forHome(home);
+    const write = (
+      id: string,
+      sessionId: string,
+      agent: string,
+      target: string,
+    ): MemnoxEvent =>
+      ({
+        ...event(id, 'allow'),
+        sessionId,
+        agent,
+        surface: 'filesystem',
+        operation: 'file.write',
+        target,
+        class: 'write',
+      }) as MemnoxEvent;
+    await store.append(write('w1', 's1', 'claude-code', '/work/site/prices.json'));
+    await store.append(write('w2', 's2', 'codex', '/work/site/prices.json'));
+    await store.append(write('w3', 's3', 'claude-code', '/work/site/a.ts'));
+    await store.append(write('w4', 's4', 'claude-code', '/work/site/a.ts'));
+    store.close();
+    const answer = await ask(home, { method: DAEMON_METHOD.AGENT_OVERLAPS });
+    expect(answer.ok).toBe(true);
+    expect(answer.agentOverlaps?.together.map((each) => each.target)).toEqual([
+      '/work/site/prices.json',
+    ]);
+    expect(answer.agentOverlaps?.together[0]?.agents.sort()).toEqual([
+      'claude-code',
+      'codex',
+    ]);
+    expect(answer.agentOverlaps?.holds).toEqual([]);
+    expect(answer.agentOverlaps?.heldBack).toEqual([]);
+    expect(remoteCapabilityFor(DAEMON_METHOD.AGENT_OVERLAPS)).toBe(REMOTE_CAPABILITY.SEE);
+  });
+});

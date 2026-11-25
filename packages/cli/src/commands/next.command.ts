@@ -72,8 +72,8 @@ export function registerNextCommand(
       '--agent <name>',
       'what that one agent would do on its own, and what it would ask',
     )
-    .option('--role <name>', 'the same for a job rather than for a product')
-    .option('--roles', 'every job the rules name, and what each may do')
+    .option('--role <name>', 'the same for a role rather than for a product')
+    .option('--roles', 'every role the rules name, and what each may do')
     .option('-f, --file <path>', 'policy file to read the boundary from')
     .option(
       '--hand-over',

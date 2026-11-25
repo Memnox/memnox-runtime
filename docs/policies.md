@@ -56,7 +56,7 @@ denied — it is never invented.
 | `environments` | `production`, `staging`, whatever you name |
 | `classes` | what the action does: `read`, `write`, `destructive`, `communication`, `unknown` |
 | `arguments` | a named argument, e.g. `method = ["POST", "DELETE"]` on `http.request` |
-| `roles` | the job the agent was enrolled under, from `memnox run --role` |
+| `roles` | the role the agent was enrolled under, from `memnox run --role` |
 | `principals` | the person the agent works for, from `memnox run --for` |
 
 Patterns take `*`. A pattern starting with `!` takes matches back out, and `{workspace}`

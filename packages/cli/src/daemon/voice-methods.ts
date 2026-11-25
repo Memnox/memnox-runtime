@@ -6,13 +6,10 @@ import { isMcpHubMethod } from './mcp-hub-answer';
 import { isPolicyMethod } from './policies-answer';
 import { isSkillsMethod } from './skills-hub-answer';
 import { isProjectsMethod } from './projects-answer';
-import { isBackupMethod } from './backup-answer';
 import { isMemoryMethod } from './memory-answer';
 import { isLanMethod } from './lan-answer';
-import { isPersonalSyncMethod } from './personal-sync-answer';
 import { isProfilesMethod } from './profiles-answer';
 import { isWorkMethod } from './work-answer';
-import { isIndexMethod } from './community-index-answer';
 
 /** What the Mac app and a paired phone may ask the daemon, as against what an interceptor asks. */
 const VOICE_METHODS: readonly string[] = [
@@ -59,13 +56,10 @@ export function isVoiceMethod(method: string): boolean {
     isMcpHubMethod(method) ||
     isSkillsMethod(method) ||
     isProjectsMethod(method) ||
-    isBackupMethod(method) ||
     isMemoryMethod(method) ||
     isLanMethod(method) ||
-    isPersonalSyncMethod(method) ||
     isProfilesMethod(method) ||
     isWorkMethod(method) ||
-    isIndexMethod(method) ||
     isPolicyMethod(method) ||
     isActivityMethod(method) ||
     isAgentsMethod(method)

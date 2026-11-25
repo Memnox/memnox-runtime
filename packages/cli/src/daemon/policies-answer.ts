@@ -1,5 +1,8 @@
+import { isAbsolute } from 'node:path';
+
 import {
   DECISION_EFFECT,
+  DISCOVERED_AGENT_KIND,
   POLICY_METHOD,
   type DaemonRequest,
   type DaemonResponse,
@@ -14,6 +17,7 @@ import {
   proposeRuleDraft,
   removeRule,
 } from '../studio/rule-changes';
+import { readRuleHistory } from '../studio/rule-history';
 import { shippedRulePacks } from '../studio/rule-packs';
 import { testRule } from '../studio/rule-test';
 import { readRulesView } from '../studio/rules-in-force';
@@ -83,9 +87,11 @@ async function answerOf(
     case POLICY_METHOD.RULES_EXPORT:
       return { ok: true, rulesToml: await exportRules(home) };
     case POLICY_METHOD.RULE_PACK_IMPORT:
-      return importOne(home, request.rulePack, at);
+      return importOne(home, request, at);
     case POLICY_METHOD.RULE_PACKS:
       return { ok: true, rulePacks: await shippedRulePacks() };
+    case POLICY_METHOD.RULE_HISTORY:
+      return { ok: true, ruleHistory: await readRuleHistory(home, deps.now) };
     case POLICY_METHOD.PROGRESS:
       return { ok: true, progress: await readProgress(home, deps.now) };
     case POLICY_METHOD.AUTOPILOT_REVOKE:
@@ -127,14 +133,28 @@ async function test(home: string, value: unknown, deps: PolicyDeps): Promise<Ans
   return { ok: true, ruleVerdict: await testRule(home, input, deps) };
 }
 
+/** The agents a pack can be started for, by the kinds the scan finds. */
+const AGENT_KINDS: readonly string[] = Object.values(DISCOVERED_AGENT_KIND);
+
+/** A pack's rules proposed one by one, everywhere, inside one repository, or for one agent. */
 async function importOne(
   home: string,
-  toml: string | undefined,
+  request: DaemonRequest,
   at: string,
 ): Promise<Answered> {
+  const toml = request.rulePack;
   if (toml === undefined || toml.trim() === '')
     return refused('Send the pack as TOML text.');
-  const imported = await importPack(home, toml, at);
+  const project = request.rulePackProject;
+  if (project !== undefined && !isAbsolute(project))
+    return refused('Name the project by its folder, as an absolute path.');
+  const agent = request.rulePackAgent;
+  if (agent !== undefined && !AGENT_KINDS.includes(agent))
+    return refused('Name the agent by its kind.');
+  const imported = await importPack(home, toml, at, {
+    ...(project === undefined ? {} : { repository: project }),
+    ...(agent === undefined ? {} : { agent }),
+  });
   if ('refused' in imported) return refused(imported.refused);
   return { ok: true, packProposed: imported.proposed };
 }

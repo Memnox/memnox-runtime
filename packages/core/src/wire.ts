@@ -23,11 +23,8 @@ export * from './daemon/skills-hub';
 export * from './daemon/held-action';
 export * from './daemon/projects';
 export * from './daemon/memory';
-export * from './daemon/backup';
 export * from './daemon/lan';
-export * from './daemon/personal-sync';
 export * from './daemon/profiles';
-export * from './daemon/community-index';
 export * from './daemon/proposing';
 export {
   MOST_PRESSED_KEYS,

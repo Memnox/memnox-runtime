@@ -41,7 +41,7 @@ function ask(home: string, request: Partial<DaemonRequest>): Promise<DaemonRespo
 }
 
 describe('agent profiles kept on this machine', () => {
-  it('load a version 1 file unchanged, as version 2 with no job set', async () => {
+  it('load a version 1 file unchanged, as version 2 with no role or person set', async () => {
     const home = await homeWithV1();
     const [profile] = await readProfiles(home);
     expect(profile).toEqual({
@@ -49,7 +49,6 @@ describe('agent profiles kept on this machine', () => {
       id: 'backend',
       name: 'Backend',
       description: 'What a backend change needs',
-      responsibilities: [],
       projects: [],
       skills: ['review'],
       mcpServers: ['linear'],
@@ -57,32 +56,27 @@ describe('agent profiles kept on this machine', () => {
     });
   });
 
-  it('keep the job a form sends and show it back', async () => {
+  it('keep who answers, the role and the projects a form sends, and leave job text unread', async () => {
     const home = await homeWithV1();
     const put = await ask(home, {
       method: DAEMON_METHOD.PROFILE_PUT,
       profileDraft: {
         name: 'Reviewer',
-        purpose: 'Reviews every change before it is pushed',
         role: 'reviewer',
-        responsibilities: ['read the diff', 'say what is risky'],
-        instructions: 'Never push.',
         responsiblePerson: 'ana',
         projects: ['prj_0123456789ab'],
-        templateOf: 'code-review',
+        // Cast is safe: an older screen still sends job text, which is now left unread.
+        ...({ purpose: 'Reviews every change' } as object),
       },
     });
     expect(put.ok).toBe(true);
     const reviewer = (put.profiles ?? []).find((each) => each.id === 'reviewer');
     expect(reviewer).toMatchObject({
-      purpose: 'Reviews every change before it is pushed',
       role: 'reviewer',
-      responsibilities: ['read the diff', 'say what is risky'],
-      instructions: 'Never push.',
       responsiblePerson: 'ana',
       projects: ['prj_0123456789ab'],
-      templateOf: 'code-review',
     });
+    expect(reviewer).not.toHaveProperty('purpose');
   });
 
   it('names the person at this machine as responsible when the form names nobody', async () => {
@@ -103,29 +97,5 @@ describe('agent profiles kept on this machine', () => {
     });
     expect(put.ok).toBe(false);
     expect(put.error).toContain('"role" is one word');
-  });
-});
-
-describe('a profile from a template', () => {
-  it('is a copy with no agent connected and no skill taken unless named', async () => {
-    const home = await homeWithV1();
-    const listed = await ask(home, { method: DAEMON_METHOD.TEMPLATES });
-    expect(listed.templates?.length).toBe(7);
-    const made = await ask(home, {
-      method: DAEMON_METHOD.PROFILE_FROM_TEMPLATE,
-      templateId: 'testing',
-      profileName: 'Checkout tester',
-    });
-    expect(made.ok).toBe(true);
-    const copy = (made.profiles ?? []).find((each) => each.id === 'checkout-tester');
-    expect(copy).toMatchObject({ templateOf: 'testing', role: 'tester', skills: [] });
-    expect(copy?.connections).toEqual([]);
-    expect(copy?.levels.enforcement.shell).toBe('none');
-    const again = await ask(home, {
-      method: DAEMON_METHOD.PROFILE_FROM_TEMPLATE,
-      templateId: 'testing',
-      profileName: 'Checkout tester',
-    });
-    expect(again.ok).toBe(false);
   });
 });

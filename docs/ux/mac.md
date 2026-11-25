@@ -17,6 +17,12 @@ it is built from.
 what the app shows: Needs you, Sessions and Rules, for example, where this document says Needs
 your attention, Today and Protection settings.
 
+**Since 2026-11-23 the product is arranged around four questions a person has about their agents**
+(what happened, what needs me, who is doing what, what can I let go of), as `docs/ux/words.md`
+says. Jobs and job templates are gone, so is the community index, and Hand over and budgets are
+tabs of Rules. Onboarding is three plain screens on a computer and four in the console. Where a
+page below still shows any of those, the contract is what the apps show.
+
 The people are the ones in `docs/user-flows.md`. Maya is solo with a Mac and an iPhone, runs
 Claude Code and Cursor, and answers from the island, the phone and her voice. Ana is a team
 admin whose teammates' calls reach her island through the workspace. Sam pairs his Mac with a

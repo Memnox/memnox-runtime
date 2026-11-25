@@ -77,19 +77,57 @@
       "tabs": [
         {
           "id": "decide-now",
-          "label": "Decide now"
-        },
-        {
-          "id": "kept",
-          "label": "Kept for later"
+          "label": "Waiting for you"
         },
         {
           "id": "decided",
-          "label": "Decided"
+          "label": "Decided",
+          "platforms": [
+            "web"
+          ]
         },
         {
           "id": "rule-changes",
-          "label": "Rule changes"
+          "label": "Rule changes",
+          "platforms": [
+            "web"
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "waiting",
+          "label": "Waiting for you",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        },
+        {
+          "id": "kept",
+          "label": "Kept for later",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        },
+        {
+          "id": "decided",
+          "label": "Decided today",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "id": "team-rule-changes",
+          "label": "Team rule changes",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
         }
       ]
     },
@@ -124,22 +162,10 @@
           "label": "Agents"
         },
         {
-          "id": "jobs",
-          "label": "Jobs"
-        },
-        {
           "id": "cloud",
           "label": "Cloud agents",
           "platforms": [
             "web"
-          ]
-        },
-        {
-          "id": "this-computer",
-          "label": "On this computer",
-          "platforms": [
-            "mac",
-            "desktop"
           ]
         }
       ]
@@ -175,6 +201,10 @@
           "label": "Rules"
         },
         {
+          "id": "hand-over",
+          "label": "Let them do more"
+        },
+        {
           "id": "reached",
           "label": "Where they reached",
           "platforms": [
@@ -183,34 +213,20 @@
         },
         {
           "id": "history",
-          "label": "History"
+          "label": "History",
+          "platforms": [
+            "web"
+          ]
         }
-      ]
-    },
-    {
-      "id": "hand-over",
-      "label": "Hand over",
-      "group": "govern",
-      "sf": "gauge.with.dots.needle.67percent",
-      "lucide": "Gauge",
-      "route": "/autonomy",
-      "platforms": [
-        "web",
-        "mac",
-        "desktop"
       ],
-      "tabs": [
+      "sections": [
         {
-          "id": "ready",
-          "label": "Ready to hand over"
-        },
-        {
-          "id": "budgets",
-          "label": "Budgets"
-        },
-        {
-          "id": "autopilot",
-          "label": "Autopilot"
+          "id": "history",
+          "label": "History",
+          "platforms": [
+            "mac",
+            "desktop"
+          ]
         }
       ]
     },
@@ -229,11 +245,14 @@
       "tabs": [
         {
           "id": "timeline",
-          "label": "Timeline"
+          "label": "What happened"
         },
         {
           "id": "caught",
-          "label": "What was caught"
+          "label": "What was stopped",
+          "platforms": [
+            "web"
+          ]
         }
       ]
     },
@@ -287,7 +306,7 @@
       "tabs": [
         {
           "id": "systems",
-          "label": "Systems"
+          "label": "Apps"
         },
         {
           "id": "files",
@@ -302,7 +321,7 @@
         },
         {
           "id": "mcp",
-          "label": "MCP servers"
+          "label": "Tool servers"
         }
       ]
     },
@@ -353,7 +372,7 @@
     },
     {
       "id": "next-step",
-      "title": "Do this next"
+      "title": "Get set up"
     },
     {
       "id": "needs-you",
@@ -367,38 +386,44 @@
     },
     {
       "id": "hand-over",
-      "title": "Ready to hand over"
-    },
-    {
-      "id": "budgets",
-      "title": "Budgets and missions"
+      "title": "You could let go of"
     },
     {
       "id": "today",
       "title": "Today"
     }
   ],
-  "homeLine": "What your agents can do on their own, and what still needs you.",
+  "homeLine": "What your agents are doing, what needs you, and what you can safely let them do next.",
   "onboarding": [
     {
+      "id": "welcome",
+      "title": "Welcome to Memnox",
+      "platforms": [
+        "mac",
+        "desktop"
+      ]
+    },
+    {
       "id": "who",
-      "title": "Who is Memnox for?"
+      "title": "Just you, or a team?",
+      "platforms": [
+        "web"
+      ]
     },
     {
       "id": "agents",
-      "title": "Which agents do you run?"
-    },
-    {
-      "id": "connect",
-      "title": "Connect this machine"
+      "title": "Your agents"
     },
     {
       "id": "ask-where",
-      "title": "Where should Memnox ask you?"
+      "title": "Where should Memnox ask you?",
+      "platforms": [
+        "web"
+      ]
     },
     {
-      "id": "rules",
-      "title": "Your starting rules"
+      "id": "careful",
+      "title": "How careful should Memnox be?"
     },
     {
       "id": "done",
@@ -406,5 +431,37 @@
     }
   ],
   "install": "npm install -g memnox && memnox setup",
-  "tryPrompt": "Make a folder called memnox-try, then delete it with rm -rf memnox-try."
+  "tryPrompt": "Make a folder called memnox-try, then delete it with rm -rf memnox-try.",
+  "onboardingLine": "Your AI agents do real work. Memnox shows you what they did, asks you before anything risky, and keeps them from getting in each other's way.",
+  "careful": {
+    "order": [
+      "watch",
+      "ask",
+      "strict"
+    ],
+    "recommended": "ask",
+    "levels": {
+      "watch": {
+        "label": "Just watch",
+        "line": "Memnox writes down what your agents do and stops nothing.",
+        "mode": "observe"
+      },
+      "ask": {
+        "label": "Ask me before risky things",
+        "line": "Agents work freely and wait for you before they delete, publish or change somebody else's system.",
+        "mode": "enforce",
+        "pack": "safe-defaults"
+      },
+      "strict": {
+        "label": "Ask me about almost everything",
+        "line": "Agents read and explain freely and wait for you before they change anything.",
+        "mode": "enforce",
+        "pack": "read-only-agents"
+      }
+    }
+  },
+  "modes": {
+    "observe": "Watching only",
+    "enforce": "Protecting"
+  }
 }

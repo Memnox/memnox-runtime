@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 
 import {
+  assignmentStandingOn,
   agentIdFor,
   boundRoleOf,
   CODE_FINGERPRINT_FILE,
@@ -62,6 +63,11 @@ export async function loadHookGate(
   }
   const overlays = await overlaysInForce(home);
   const agentRole = await roleFor(config, home);
+  // Read at every hook call, so the lease is checked before each action this gate decides.
+  const assignment = await assignmentStandingOn(
+    home,
+    config.agentName ?? DEFAULT_AGENT_NAME,
+  );
 
   // A registered file that is gone stopped every command on the machine, git included,
   // so it is skipped out loud and the rules that are still there stay in force.
@@ -82,6 +88,7 @@ export async function loadHookGate(
     {
       agentName: config.agentName ?? DEFAULT_AGENT_NAME,
       ...(agentRole === undefined ? {} : { agentRole }),
+      assignment,
       ...(config.principal === undefined ? {} : { principal: config.principal }),
       task,
       stateFacts: stateLabelsOf(overlays, now()),

@@ -205,7 +205,7 @@ that writes anywhere else says so and takes a backup first.
 | `~/.memnox/transcripts/` | what an agent printed, when `run --transcript` asked for it |
 | `~/.memnox/pending/` | held calls waiting for a person, and those parked for one who was away |
 | `~/.memnox/posts/` | a session struggling, kept for a person away until it recovers |
-| `~/.memnox/missions/` | one goal and the sessions that worked on it |
+| `~/.memnox/missions/` | one goal the person gave their agents, from `memnox goal`, and the sessions that worked on it |
 | `~/.memnox/turns/` | when a person last prompted each session and when it handed back |
 | `~/.memnox/overlays.json` | freezes and anything else true only for a while |
 | `~/.memnox/devices.json` | the paired devices: the Mac's own key and each phone, with what it may do |

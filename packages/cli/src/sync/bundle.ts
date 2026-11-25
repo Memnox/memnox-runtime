@@ -3,6 +3,10 @@ import { platform } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
+  assignmentBlockFrom,
+  confirmAssignments,
+  readHeldAssignments,
+  renewAssignments,
   conditionsForMachine,
   detectMachineClass,
   loadPoliciesFromFile,
@@ -97,6 +101,8 @@ export interface Bundle {
   skills?: unknown[];
   /** The repositories the organization shares with this machine's owner, each read only over its clone. */
   projects?: unknown[];
+  /** Which agent each install on this machine belongs to, sent to a runtime that names `agent-roles`. */
+  assignments?: unknown;
 }
 
 export const PULL_OUTCOME = {
@@ -122,6 +128,8 @@ export interface PullResult {
   notEnforced?: RuleNotEnforced[];
   /** Why a bundle was refused, in the words `doctor` prints. */
   because?: string;
+  /** The assignment version this pull applied, which the heartbeat reports as received. */
+  assignmentVersion?: number;
 }
 
 export function orgPolicyPath(home: string): string {
@@ -153,6 +161,9 @@ export async function pullBundle(
   if (answer.status === HTTP.NOT_MODIFIED) {
     // Hearing from the plane moves the horizon, or an unedited workspace freeze would lapse.
     await touchOrgConditions(home, now());
+    // Unchanged covers this machine's assignments too, since they are part of what was tagged.
+    const held = await readHeldAssignments(home);
+    if (held !== null) await renewAssignments(home, held.block.version);
     return { outcome: PULL_OUTCOME.UNCHANGED };
   }
   if (isCredentialRefused(answer.status)) {
@@ -206,8 +217,24 @@ export async function applyBundle(
     };
   }
 
+  // Read before anything moves: a block that does not parse refuses the whole bundle, so the
+  // rules and the agents they are written for never come from two different pulls.
+  const assignments =
+    bundle.assignments === undefined
+      ? undefined
+      : assignmentBlockFrom(bundle.assignments);
+  if (assignments === null) {
+    await rm(staging, { force: true });
+    return {
+      outcome: PULL_OUTCOME.REFUSED,
+      hash: bundle.hash,
+      because: 'its agent assignments did not read',
+    };
+  }
+
   // Renamed, which is atomic on one filesystem, so no reader sees half a rule set.
   await rename(staging, path);
+  if (assignments !== undefined) await confirmAssignments(home, assignments);
   await registerPolicyFile(home, path);
   await keepConditions(home, bundle, now(), machineId);
   await keepOrgMcpServers(home, bundle.mcpServers);
@@ -221,6 +248,7 @@ export async function applyBundle(
     rules: bundle.rules.length,
     conditions: bundle.conditions.length,
     notEnforced: notEnforcedIn(document),
+    ...(assignments === undefined ? {} : { assignmentVersion: assignments.version }),
   };
 }
 

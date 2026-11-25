@@ -5,14 +5,11 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import {
   AGENTS_METHOD,
-  BACKUP_METHOD,
   DAEMON_METHOD,
   HOME_METHOD,
-  INDEX_METHOD,
   LAN_METHOD,
   MCP_HUB_METHOD,
   MEMORY_METHOD,
-  PERSONAL_SYNC_METHOD,
   POLICY_METHOD,
   PROFILES_METHOD,
   PROJECTS_METHOD,
@@ -26,22 +23,14 @@ import {
  */
 
 const DAEMON_DIR = fileURLToPath(new URL('../src/daemon', import.meta.url));
-const PROPOSAL_FIELDS = new Set([
-  'proposed',
-  'packProposed',
-  'profileApplied',
-  'indexInstalled',
-]);
+const PROPOSAL_FIELDS = new Set(['proposed', 'packProposed', 'profileApplied']);
 const METHODS: Readonly<Record<string, string>> = DAEMON_METHOD;
 const GROUPS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   AGENTS_METHOD,
-  BACKUP_METHOD,
   HOME_METHOD,
-  INDEX_METHOD,
   LAN_METHOD,
   MCP_HUB_METHOD,
   MEMORY_METHOD,
-  PERSONAL_SYNC_METHOD,
   POLICY_METHOD,
   PROFILES_METHOD,
   PROJECTS_METHOD,
@@ -67,11 +56,8 @@ const NEVER_PROPOSES: readonly string[] = [
   DAEMON_METHOD.WORKSPACE_MEMORY,
   DAEMON_METHOD.WORKSPACE_GRAPH,
   DAEMON_METHOD.LAN_STATUS,
-  DAEMON_METHOD.PERSONAL_SYNC_STATUS,
-  DAEMON_METHOD.PERSONAL_SYNC_CONFLICTS,
   DAEMON_METHOD.PROFILES,
   DAEMON_METHOD.PROJECTS,
-  DAEMON_METHOD.INDEX_LIST,
   DAEMON_METHOD.AGENTS,
   DAEMON_METHOD.AGENTS_SCAN,
   DAEMON_METHOD.MEMORY_LAYERS,
@@ -79,8 +65,9 @@ const NEVER_PROPOSES: readonly string[] = [
   DAEMON_METHOD.SESSION_COST,
   DAEMON_METHOD.SKILL_STATS,
   DAEMON_METHOD.SKILL_CALIBRATE,
+  DAEMON_METHOD.AGENT_OVERLAPS,
+  DAEMON_METHOD.RULE_HISTORY,
   // Writes that only narrow, or keep a copy, so they are done at once with nothing to sign.
-  DAEMON_METHOD.BACKUP_CREATE,
   DAEMON_METHOD.SERVER_REMOVE,
   DAEMON_METHOD.IMPORT,
   DAEMON_METHOD.SYNC,
@@ -101,15 +88,13 @@ const NEVER_PROPOSES: readonly string[] = [
   DAEMON_METHOD.MEMORY_REJECT,
   DAEMON_METHOD.MEMORY_EDIT,
   DAEMON_METHOD.MEMORY_FORGET,
-  DAEMON_METHOD.PERSONAL_SYNC_NOW,
-  DAEMON_METHOD.PERSONAL_SYNC_RESOLVE,
+  // What the person typed themselves, kept as facts they already confirmed, so there is nothing to sign.
+  DAEMON_METHOD.MEMORY_REMEMBER,
   DAEMON_METHOD.PROFILE_PUT,
   DAEMON_METHOD.PROFILE_REMOVE,
-  // Which job an agent works under is a person's choice and grants nothing on its own.
+  // Which profile an agent works under is a person's choice and grants nothing on its own.
   DAEMON_METHOD.PROFILE_BIND,
   DAEMON_METHOD.PROFILE_UNBIND,
-  DAEMON_METHOD.TEMPLATES,
-  DAEMON_METHOD.PROFILE_FROM_TEMPLATE,
   DAEMON_METHOD.AGENT_PAUSE,
   DAEMON_METHOD.SESSION_STOP,
   DAEMON_METHOD.AUTOPILOT_REVOKE,

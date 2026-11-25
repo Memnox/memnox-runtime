@@ -1,4 +1,5 @@
 import {
+  assignmentStandingNow,
   FileAllowances,
   parentAgentsOf,
   ENV_AGENT_NAME,
@@ -74,8 +75,11 @@ export interface GateScene {
 export function gateOver(policies: readonly Policy[], scene: GateScene): LocalGate {
   const { environment, serverName, home, stateFacts } = scene;
   const allowances = new FileAllowances(home);
+  const agentName = agentServed(environment, serverName);
   return new LocalGate(policies, {
-    agentName: agentServed(environment, serverName),
+    agentName,
+    // The agent Memnox Cloud says this install belongs to, checked before each call it gates.
+    assignment: assignmentStandingNow(home, agentName),
     allowances: () => allowances.inForceNow(new Date().toISOString()),
     ...(environment.agentRole === undefined ? {} : { agentRole: environment.agentRole }),
     ...(environment.principal === undefined ? {} : { principal: environment.principal }),

@@ -114,6 +114,12 @@ export async function exportRules(home: string): Promise<string> {
   return rulePackToml(await editableRules(home));
 }
 
+/** Where a pack's rules hold: one repository, one agent kind, or both; absent is everywhere and every agent. */
+interface PackReach {
+  repository?: string;
+  agent?: string;
+}
+
 /**
  * Every rule in the pack as its own proposal, so each is read and signed and none arrives silently.
  * Given a repository, each holds only inside it, kept in this Mac's own file so the checkout stays clean.
@@ -122,13 +128,14 @@ export async function importPack(
   home: string,
   toml: string,
   at: string,
-  repository?: string,
+  { repository, agent }: PackReach = {},
 ): Promise<Changed<{ proposed: string[] }>> {
   const read = rulesOfPack(toml);
   if ('problems' in read)
     return { refused: `The pack would not load: ${read.problems.join('; ')}` };
   const proposed: string[] = [];
-  for (const rule of read.rules) {
+  for (const packed of read.rules) {
+    const rule = agent === undefined ? packed : forAgent(packed, agent);
     // Never offered to the team: a pack is somebody else's rules, taken onto this machine only.
     const summary = sentenceOfRule(rule);
     proposed.push(
@@ -141,6 +148,18 @@ export async function importPack(
     );
   }
   return { proposed };
+}
+
+/**
+ * One agent's copy of a pack rule, named after it so the same pack can start two agents differently and the general
+ * copy, if any, stays as it is.
+ */
+function forAgent(rule: Policy, agent: string): Policy {
+  return {
+    ...rule,
+    name: `${rule.name}-for-${agent}`,
+    match: { ...rule.match, agents: [agent] },
+  };
 }
 
 interface Proposing {

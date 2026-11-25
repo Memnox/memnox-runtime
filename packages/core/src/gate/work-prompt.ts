@@ -73,5 +73,5 @@ export function ledgerWork(home: string): WorkReader {
 function missionLine(mission: Mission, sessionId: string): string {
   const reference = mission.reference === undefined ? '' : ` (${mission.reference})`;
   const at = mission.sessions.indexOf(sessionId) + 1;
-  return `mission: "${mission.statement}"${reference}, session ${at} of ${mission.sessions.length}`;
+  return `goal: "${mission.statement}"${reference}, session ${at} of ${mission.sessions.length}`;
 }

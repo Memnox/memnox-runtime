@@ -1,3 +1,6 @@
+import { markAssignmentsPending } from '@memnox/core';
+
+import type { HeartbeatBeats } from '../sync/beat';
 import { MAILBOX_BYTES, MOST_RELAY_MESSAGE } from './framing';
 
 /**
@@ -41,6 +44,24 @@ export function isBeatFrame(text: string): boolean {
   }
 }
 
+/**
+ * Whether a beat says what this machine pulls changed, a rule or which agent an install
+ * belongs to, rather than only that an answer waits. Such a beat makes held assignments stale.
+ */
+export function isPullFrame(text: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return (
+      isBeatFrame(text) &&
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      (parsed as { pull?: unknown }).pull === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 export type OpenRelay = (url: string, token: string) => RelaySocket;
 
 interface RelayLinkDeps {
@@ -49,7 +70,7 @@ interface RelayLinkDeps {
   token: string;
   onFrame: (mailbox: string, payload: Buffer) => void;
   /** The control plane says an answer waits for this machine, so the heartbeat should run now. */
-  onBeat?: () => void;
+  onBeat?: (pull: boolean) => void;
   /** The socket dropped, so every session through it is gone. */
   onDown: () => void;
   log: (message: string) => void;
@@ -131,7 +152,8 @@ export class RelayLink {
     });
     socket.on('message', (data) => this.receive(data));
     socket.on('text', (data) => {
-      if (isBeatFrame(data.toString('utf8'))) this.deps.onBeat?.();
+      const text = data.toString('utf8');
+      if (isBeatFrame(text)) this.deps.onBeat?.(isPullFrame(text));
     });
     socket.on('close', () => this.dropped(socket));
   }
@@ -191,5 +213,25 @@ function openWebSocket(url: string, token: string): RelaySocket {
         if (message.data instanceof ArrayBuffer) listener(Buffer.from(message.data));
       });
     },
+  };
+}
+
+/**
+ * What a beat from the relay does. One that says a pull is due marks this machine's agent
+ * assignments stale first, and beats only after, so the pull's confirmation is the last word.
+ */
+export function pullBeat(
+  home: string,
+  beats: () => HeartbeatBeats | undefined,
+  log: (message: string) => void,
+): (pull: boolean) => void {
+  return (pull) => {
+    if (!pull) {
+      beats()?.beat();
+      return;
+    }
+    void markAssignmentsPending(home)
+      .catch((err: unknown) => log(`assignments not marked stale: ${String(err)}`))
+      .finally(() => beats()?.beat());
   };
 }

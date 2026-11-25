@@ -15,19 +15,13 @@ import type { SkillsRequestFields, SkillsResponseFields } from './skills-hub';
 import type { HeldActionEventFields, HeldActionRequestFields } from './held-action';
 import type { ProjectsRequestFields, ProjectsResponseFields } from './projects';
 import type { MemoryRequestFields, MemoryResponseFields } from './memory';
-import type { BackupRequestFields, BackupResponseFields } from './backup';
 import type { LanRequestFields, LanResponseFields } from './lan';
-import type {
-  PersonalSyncRequestFields,
-  PersonalSyncResponseFields,
-} from './personal-sync';
 import type { ProfilesRequestFields, ProfilesResponseFields } from './profiles';
 import type {
   AgentWorkEventFields,
   AgentWorkRequestFields,
   AgentWorkResponseFields,
 } from './work';
-import type { IndexRequestFields, IndexResponseFields } from './community-index';
 import type {
   RemoteEventFields,
   RemoteRequestFields,
@@ -122,13 +116,10 @@ export interface ExtensionRequestFields
     SkillsRequestFields,
     HeldActionRequestFields,
     ProjectsRequestFields,
-    BackupRequestFields,
     MemoryRequestFields,
     LanRequestFields,
-    PersonalSyncRequestFields,
     ProfilesRequestFields,
-    AgentWorkRequestFields,
-    IndexRequestFields {}
+    AgentWorkRequestFields {}
 
 export interface ExtensionResponseFields
   extends
@@ -145,13 +136,10 @@ export interface ExtensionResponseFields
     AgentsResponseFields,
     SkillsResponseFields,
     ProjectsResponseFields,
-    BackupResponseFields,
     MemoryResponseFields,
     LanResponseFields,
-    PersonalSyncResponseFields,
     ProfilesResponseFields,
-    AgentWorkResponseFields,
-    IndexResponseFields {}
+    AgentWorkResponseFields {}
 
 export interface ExtensionEventFields
   extends

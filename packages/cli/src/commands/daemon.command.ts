@@ -5,6 +5,8 @@ import type { Command } from 'commander';
 import {
   LEDGER_SCAN_LIMIT,
   LocalGate,
+  type Policy,
+  STANDING,
   projectLookup,
   readAccount,
   readBudgets,
@@ -312,6 +314,20 @@ async function spendingOf(
   };
 }
 
+/**
+ * It serves every agent on this computer and cannot tell them apart, so nothing an agent's
+ * own rule says is trusted here: what such a rule covers waits for a person.
+ */
+function daemonGate(policies: readonly Policy[]): LocalGate {
+  return new LocalGate(policies, {
+    agentName: 'agent',
+    assignment: {
+      state: STANDING.UNCONFIRMED,
+      reason: 'this gate serves every agent on this computer and cannot tell them apart',
+    },
+  });
+}
+
 async function buildLoop(
   context: CliContext,
   home: string,
@@ -320,8 +336,7 @@ async function buildLoop(
   // The registry rather than the working directory, which is `/` under launchd and systemd.
   const set = await policySetInForce(home, options.file);
   const files = set.loaded.map((each) => each.file);
-  const gate =
-    files.length === 0 ? undefined : new LocalGate(set.policies, { agentName: 'agent' });
+  const gate = files.length === 0 ? undefined : daemonGate(set.policies);
   const budgets = await readBudgets(home);
   const spending = await spendingOf(home, budgets);
   const beats = new HeartbeatBeats();

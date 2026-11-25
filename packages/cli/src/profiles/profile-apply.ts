@@ -132,22 +132,23 @@ async function proposePack(
 ): Promise<void> {
   const pack = profile.rulePack;
   if (pack === undefined) return;
-  const imported = await importPack(home, pack.toml, now.toISOString(), project);
+  const imported = await importPack(
+    home,
+    pack.toml,
+    now.toISOString(),
+    project === undefined ? {} : { repository: project },
+  );
   if ('refused' in imported) applied.skipped.push(`${pack.name}: ${imported.refused}`);
   else applied.proposed.push(...imported.proposed);
 }
 
 /** The job fields as a screen shows them, absent ones left out rather than sent empty. */
 function jobOf(profile: StoredProfile): ProfileJob {
-  const { purpose, role, instructions, responsiblePerson, templateOf } = profile;
+  const { role, responsiblePerson } = profile;
   return {
-    ...(purpose === undefined ? {} : { purpose }),
     ...(role === undefined ? {} : { role }),
-    responsibilities: profile.responsibilities,
-    ...(instructions === undefined ? {} : { instructions }),
     ...(responsiblePerson === undefined ? {} : { responsiblePerson }),
     projects: profile.projects,
-    ...(templateOf === undefined ? {} : { templateOf }),
   };
 }
 

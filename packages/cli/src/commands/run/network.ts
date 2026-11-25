@@ -2,7 +2,7 @@
  * Where a run's agent sends its HTTP: through a relay to the daemon's egress proxy when one
  * runs, else a proxy of its own. An untrusted session always gets its own, decided for it.
  */
-import { desktopNotice, LocalGate } from '@memnox/core';
+import { assignmentStandingNow, desktopNotice, LocalGate } from '@memnox/core';
 import {
   EgressKeys,
   log,
@@ -122,7 +122,11 @@ async function keyedEgress(input: KeyedEgressInput): Promise<SessionEgress> {
   const gate =
     set.policies.length === 0
       ? undefined
-      : new LocalGate(set.policies, { agentName: caller.agent });
+      : new LocalGate(set.policies, {
+          agentName: caller.agent,
+          // The run's own egress is held to the agent this install belongs to, checked per call.
+          assignment: assignmentStandingNow(home, caller.agent),
+        });
   const seam = egressSeamFor({
     home,
     log,

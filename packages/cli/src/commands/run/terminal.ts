@@ -46,7 +46,7 @@ const RELAUNCH_FLAGS: readonly (readonly [keyof RunOptions, string])[] = [
   ['expect', '--expect'],
   ['role', '--role'],
   ['for', '--for'],
-  ['mission', '--mission'],
+  ['mission', '--goal'],
 ];
 
 function relaunchOptions(options: RunOptions): string[] {

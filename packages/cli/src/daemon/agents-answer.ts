@@ -18,6 +18,7 @@ import { launchAgent, launchable } from '../agents/agent-launch';
 import { applyProfile } from '../profiles/profile-apply';
 import { withProfiles } from '../profiles/profile-connections';
 import { readAgentsView } from '../studio/agents-read';
+import { readAgentOverlaps } from './agent-overlaps';
 import { readAgentsScan } from '../session-tools/agents-tool';
 import type { SessionToolDeps } from '../session-tools/read-tools';
 
@@ -57,6 +58,12 @@ export async function agentsAnswer(
 ): Promise<DaemonResponse> {
   // A read of its own, so it answers without the cards, which it has no use for.
   if (request.method === AGENTS_METHOD.AGENTS_SCAN) return scanAnswer(request, deps);
+  if (request.method === AGENTS_METHOD.AGENT_OVERLAPS)
+    return {
+      id: request.id,
+      ok: true,
+      agentOverlaps: await readAgentOverlaps(home, deps.now),
+    };
   const answered = await answerOf(home, request, deps).catch((err: unknown): Answered =>
     refused(err instanceof Error ? err.message : String(err)),
   );

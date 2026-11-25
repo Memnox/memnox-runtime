@@ -16,6 +16,13 @@ import { allowanceFor, describeAllowance, type Allowance } from './allowances';
 import { selfProtection } from './self-protection';
 import type { NoticePort } from '../notice/unusual-notice';
 import { loadPolicyFiles, type OptionalPolicySources } from './policy-file';
+import {
+  agentScopeRolesIn,
+  isAgentScoped,
+  isTrusted,
+  STANDING,
+  type AssignmentStanding,
+} from '../agents/agent-assignment';
 
 /**
  * The rules this machine holds, asked one action at a time by the seams. Nothing on this
@@ -29,6 +36,12 @@ export interface LocalGateOptions {
   agentName: string;
   /** The job this agent was enrolled under, so a rule's `roles` has something to match. */
   agentRole?: string;
+  /**
+   * Which agent Memnox Cloud says this install belongs to, and whether that is fresh. When it
+   * is not, nothing an agent's own rule says is trusted: what such a rule covers waits for a
+   * person. Absent on a gate that never reads assignments, which then applies no agent's rules.
+   */
+  assignment?: AssignmentStanding | (() => AssignmentStanding);
   /**
    * The person the agent works for. Stamped on every request over whatever the caller
    * said, since an agent naming who it acts for would name whoever may do the most.
@@ -76,6 +89,12 @@ export class LocalGate {
   private readonly engine: PolicyEngine;
   private notice: NoticePort | null = null;
 
+  /** Only the rules written for one agent, asked when this install's agent cannot be trusted. */
+  private readonly agentRules: PolicyEngine;
+  private readonly agentScopes: string[];
+  /** The standing this decision is made under, read fresh by `ruled`. */
+  private standing: AssignmentStanding | undefined;
+
   constructor(
     policies: readonly Policy[],
     private readonly options: LocalGateOptions,
@@ -83,6 +102,11 @@ export class LocalGate {
     this.engine = new PolicyEngine([...policies], {
       defaultEffect: options.defaultEffect ?? DECISION_EFFECT.ALLOW,
     });
+    const scoped = policies.filter(isAgentScoped);
+    this.agentRules = new PolicyEngine([...scoped], {
+      defaultEffect: DECISION_EFFECT.ALLOW,
+    });
+    this.agentScopes = agentScopeRolesIn(scoped);
   }
 
   /** Loads the same policy files the runtime reads, from this machine's disk. */
@@ -125,27 +149,34 @@ export class LocalGate {
 
   private ruled(request: ActionRequest): LocalVerdict {
     const at = this.options.now ?? new Date();
+    this.standing = standingNow(this.options.assignment);
     const drift = scopeOf(this.options.task ?? null, request, (patterns, value) =>
       matchesAny([...patterns], value),
     );
     const evaluation = this.evaluated(request, at, drift);
-    // First: nothing a rule or an allowance says lets an agent change what governs it.
-    const contained =
-      selfProtection(request) ??
-      hiddenCode(request) ??
-      offIntent(this.options.task ?? null, request, evaluation.effect) ??
-      underStrain(this.options.strain, request, evaluation.effect) ??
-      this.contained(request, evaluation.effect);
-    const effect = effectUnder(evaluation.effect, contained);
-    const allowed = this.allowedWithin(
-      request,
-      { effect, matchedPolicies: evaluation.matchedPolicies },
-      at,
-    );
+    const contained = this.containmentOf(request, evaluation.effect);
+    const underContainment = effectUnder(evaluation.effect, contained);
+    const unassigned = this.unassignedHold(request, at, drift);
+    const effect = stricterOf(underContainment, unassigned?.effect);
+    // A hold for an agent nobody can confirm is the team's question, so no local allowance answers it.
+    const allowed =
+      unassigned === null
+        ? this.allowedWithin(
+            request,
+            { effect, matchedPolicies: evaluation.matchedPolicies },
+            at,
+          )
+        : null;
     return {
       effect: allowed === null ? effect : DECISION_EFFECT.ALLOW,
-      reason: reasonOf(allowed, contained, evaluation.reason),
-      signals: this.signalsOf(evaluation, drift, contained, allowed),
+      reason:
+        unassigned !== null && effect !== underContainment
+          ? unassigned.reason
+          : reasonOf(allowed, contained, evaluation.reason),
+      signals: [
+        ...this.signalsOf(evaluation, drift, contained, allowed),
+        ...(unassigned === null ? [] : [unassigned.signal]),
+      ],
       matchedPolicies: evaluation.matchedPolicies,
       ...(evaluation.shadowEffect === undefined
         ? {}
@@ -155,6 +186,20 @@ export class LocalGate {
         : { alternative: evaluation.alternative }),
       ...(drift.match === SCOPE_MATCH.UNDECLARED ? {} : { scope: drift }),
     };
+  }
+
+  /** First: nothing a rule or an allowance says lets an agent change what governs it. */
+  private containmentOf(
+    request: ActionRequest,
+    effect: DecisionEffect,
+  ): ContainmentAsk | null {
+    return (
+      selfProtection(request) ??
+      hiddenCode(request) ??
+      offIntent(this.options.task ?? null, request, effect) ??
+      underStrain(this.options.strain, request, effect) ??
+      this.contained(request, effect)
+    );
   }
 
   /** Rule ids and what decided, never the matched text, so a verdict's signals can travel. */
@@ -211,11 +256,46 @@ export class LocalGate {
       ...(this.options.agentRole === undefined
         ? {}
         : { agentRole: this.options.agentRole }),
+      ...(this.standing?.state === STANDING.CURRENT
+        ? { agentRoles: this.standing.roles }
+        : {}),
       ...(drift.match === SCOPE_MATCH.UNDECLARED ? {} : { scope: drift.match }),
       ...(this.options.stateFacts === undefined
         ? {}
         : { state: this.options.stateFacts }),
     });
+  }
+
+  /**
+   * When this install's agent is not fresh and certain, what any agent's rule covers waits for a
+   * person, or is refused where such a rule refuses. Asking as every agent can only add questions.
+   */
+  private unassignedHold(
+    request: ActionRequest,
+    at: Date,
+    drift: ScopeComparison,
+  ): { effect: DecisionEffect; reason: string; signal: string } | null {
+    const standing = this.standing;
+    if (standing === undefined || isTrusted(standing)) return null;
+    if (this.agentScopes.length === 0) return null;
+    const asAny = this.agentRules.evaluate(request, {
+      agentName: this.options.agentName,
+      agentRoles: this.agentScopes,
+      now: at,
+      ...(drift.match === SCOPE_MATCH.UNDECLARED ? {} : { scope: drift.match }),
+      ...(this.options.stateFacts === undefined
+        ? {}
+        : { state: this.options.stateFacts }),
+    });
+    const decided = asAny.matchedPolicies.filter((each) => each.observed !== true);
+    if (decided.length === 0) return null;
+    const refuses = decided.some((each) => each.effect === DECISION_EFFECT.DENY);
+    const why = 'reason' in standing ? standing.reason : 'its agent is not confirmed';
+    return {
+      effect: refuses ? DECISION_EFFECT.DENY : DECISION_EFFECT.ASK,
+      reason: `${why}, so this waits for a person until Memnox confirms which agent this install belongs to`,
+      signal: `${ASSIGNMENT_SIGNAL_PREFIX}${standing.state}`,
+    };
   }
 
   /** Last, and only over an ask: a scope a person allowed for a while, and never over the workspace's own ask. */
@@ -226,7 +306,16 @@ export class LocalGate {
   ): Allowance | null {
     if (evaluation.effect !== DECISION_EFFECT.ASK) return null;
     if (askedByWorkspace(evaluation.matchedPolicies)) return null;
-    return allowanceFor(allowancesOf(this.options.allowances), request, {
+    // Permission given before this install changed agent was given under the agent it left.
+    const standing = this.standing;
+    const since =
+      standing?.state === STANDING.CURRENT
+        ? new Date(standing.since).toISOString()
+        : undefined;
+    const given = allowancesOf(this.options.allowances).filter(
+      (each) => since === undefined || each.since >= since,
+    );
+    return allowanceFor(given, request, {
       agentName: this.options.agentName,
       now: at.toISOString(),
     });
@@ -241,6 +330,22 @@ export class LocalGate {
     if (containment === undefined || effect !== DECISION_EFFECT.ALLOW) return null;
     return containmentAsk(request, containment, request.toolClass);
   }
+}
+
+/** Read at each decision, so a long lived gate checks the lease before every action. */
+function standingNow(
+  given: LocalGateOptions['assignment'],
+): AssignmentStanding | undefined {
+  return typeof given === 'function' ? given() : given;
+}
+
+/** The stricter of two effects, the second absent when nothing held. */
+function stricterOf(
+  effect: DecisionEffect,
+  held: DecisionEffect | undefined,
+): DecisionEffect {
+  if (held === undefined) return effect;
+  return EFFECT_PRECEDENCE[held] > EFFECT_PRECEDENCE[effect] ? held : effect;
 }
 
 /** What containment makes of the rules' allow: a refusal where it refuses, else a question. */
@@ -303,6 +408,9 @@ export const INVESTIGATE_SIGNAL = 'intent:investigate';
 
 /** How an ask a person had already allowed for a while names the allowance that answered it. */
 export const ALLOWANCE_SIGNAL_PREFIX = 'allowance:';
+
+/** How a hold for an install whose agent is not confirmed names why, as `assignment:expired`. */
+export const ASSIGNMENT_SIGNAL_PREFIX = 'assignment:';
 
 /** What a hold on code nobody could read first is recorded under. */
 export const HIDDEN_CODE_SIGNAL = 'hidden-code';

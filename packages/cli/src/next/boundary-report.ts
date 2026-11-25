@@ -111,7 +111,7 @@ export function agentBoundary(input: AgentBoundaryOf): {
   radius: BlastRadius;
 } {
   const { role } = input;
-  // Evaluated as the job, so a `roles:` rule fires rather than the product's own rules.
+  // Evaluated as the role, so a `roles:` rule fires rather than the product's own rules.
   const gate = new LocalGate([...input.policies], {
     agentName: input.agent,
     ...(role === undefined ? {} : { agentRole: role }),
@@ -204,12 +204,12 @@ function renderRadius(context: CliContext, radius: BlastRadius, role?: string): 
     { label: 'waits', value: String(radius.needsApproval) },
     { label: 'never', value: String(radius.never) },
     { label: 'no rule', value: String(radius.ungoverned) },
-    // A role outlives the product holding it, so a rule about a job survives a swap.
+    // A role outlives the product holding it, so a rule about a role survives a swap.
     ...(role === undefined
       ? []
       : [
           {
-            label: 'a job',
+            label: 'a role',
             value: 'not a product, so whichever agent is enrolled under it',
           },
         ]),
@@ -235,7 +235,7 @@ function renderBand(
   ]);
 }
 
-/** Every job the rules name, and what each may do, asked of the engine once per role. */
+/** Every role the rules name, and what each may do, asked of the engine once per role. */
 async function renderWorkforce(
   context: CliContext,
   policies: readonly Policy[],
@@ -245,7 +245,7 @@ async function renderWorkforce(
   const { flow } = context;
   const roles = rolesIn([...policies]);
   if (roles.length === 0) {
-    flow.close('No rule here names a job, so there is no workforce to show.');
+    flow.close('No rule here names a role, so there are no roles to show.');
     flow.hint(
       'Add `roles: ["deployer"]` to a rule, then run an agent with --role deployer.',
     );
@@ -261,8 +261,8 @@ async function renderWorkforce(
     return;
   }
   flow.table(
-    'The jobs these rules name',
-    ['Job', 'On its own', 'Asked', 'Never'],
+    'The roles these rules name',
+    ['Role', 'On its own', 'Asked', 'Never'],
     standings.map((standing) => [
       standing.role,
       String(standing.automatic),
@@ -270,6 +270,6 @@ async function renderWorkforce(
       String(standing.never),
     ]),
   );
-  flow.close(`${standings.length} job(s) named by these rules.`);
+  flow.close(`${standings.length} role(s) named by these rules.`);
   flow.hint('memnox next --role <name>   what one of them may do');
 }

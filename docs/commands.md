@@ -502,16 +502,17 @@ rather than a control.
 ### `memnox next --role <name>` / `--roles`
 
 A rule about a product is wrong the moment the team adopts a second one; a rule about
-the job survives the tool being swapped underneath it. `--role` evaluates the boundary
-as that job, so a `roles:` rule fires:
+the role survives the tool being swapped underneath it. A role is a tag the rules name,
+never a purpose: the person gives their agent its work, and the role only says how far it
+may go. `--role` evaluates the boundary as that role, so a `roles:` rule fires:
 
 ```
-DEPLOYER — WHAT THIS JOB MAY DO
-  a job, not a product — whichever agent is enrolled under it
+If this runs unattended
+  a role   not a product, so whichever agent is enrolled under it
 ```
 
-`--roles` lists every job the rules name and what each may do, which is the question a
-workforce raises — not "what may this binary do" but "who is allowed to do what":
+`--roles` lists every role the rules name and what each may do, which is the question
+several agents raise: not "what may this binary do" but "who is allowed to do what":
 
 ```
   coder       5 on its own    0 asked    2 never
@@ -521,9 +522,9 @@ workforce raises — not "what may this binary do" but "who is allowed to do wha
 
 Both are produced by asking the engine action by action, so what is on screen is what
 will happen rather than a summary of what the rules intend. Enrol an agent with
-`memnox run --role deployer -- <agent>`, and state the mission with `--task`.
+`memnox run --role deployer -- <agent>`, and say what you asked for with `--task`.
 
-A role is read from the rules, never from a roster: a job nothing has a rule about is a
+A role is read from the rules, never from a roster: a role nothing has a rule about is a
 name somebody typed once, and listing it would suggest it governs something.
 
 ### `memnox doctor --prove`
@@ -748,9 +749,11 @@ so `gh pr merge && vercel deploy` is two rulings rather than one opaque string.
 Declare what you asked for and it becomes enforceable: `--task "<statement>"`
 with `--paths`, `--repos`, `--services`, `--envs` (comma separated) lets a rule
 match on `scope`, and `--expect <count>` is what an action explosion is measured
-against. `--role <name>` is the job the agent is enrolled under, matched by a
+against. `--role <name>` is the role the agent is enrolled under, matched by a
 rule's `roles:`, and `--for <person>` is the person it works for, matched by a rule's
-`principals:`, so an agent on a shared credential never does what its person may not. A session that declares nothing is _undeclared_ throughout,
+`principals:`, so an agent on a shared credential never does what its person may not.
+`--goal <id>` joins the session to a goal you gave your agents with `memnox goal start`,
+which Memnox keeps and follows but never sets. A session that declares nothing is _undeclared_ throughout,
 never in violation — nothing is inferred.
 
 **Writes stay in the repository.** A write or delete outside the repository the session
@@ -1319,17 +1322,6 @@ control plane is unreachable.
 ### `memnox sync now`
 
 Does a pass immediately rather than waiting. `--json` for the result.
-
-### `memnox sync pair [machine] [--fingerprint <fingerprint>]`
-
-Moves the personal sync key to another of your own machines from a terminal. Run
-it on the new machine first, which registers it and says what it is called; then
-on the machine holding the key, which lists every machine waiting with the
-fingerprint it pairs under. Once both show the same fingerprint, run it again
-with `--fingerprint` on each side: the holder proposes sealing the key to the new
-machine and the new machine proposes taking it, the same proposals
-`personal-sync-key-offer` and `personal-sync-key-accept` raise. Nothing moves
-until each proposal is signed in the Memnox app.
 
 ### What crosses the wire
 

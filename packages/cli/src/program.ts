@@ -71,7 +71,7 @@ const SPINE: readonly string[] = [
   'sessions',
   'approvals',
   'next',
-  'mission',
+  'goal',
   'budget',
   'rewind',
   'doctor',

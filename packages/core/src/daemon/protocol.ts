@@ -22,13 +22,10 @@ import { ACTIVITY_METHOD } from './activity';
 import { AGENTS_METHOD } from './agents-view';
 import { SKILLS_METHOD } from './skills-hub';
 import { PROJECTS_METHOD } from './projects';
-import { BACKUP_METHOD } from './backup';
 import { MEMORY_METHOD } from './memory';
 import { LAN_METHOD } from './lan';
-import { PERSONAL_SYNC_METHOD } from './personal-sync';
 import { PROFILES_METHOD } from './profiles';
 import { WORK_METHOD } from './work';
-import { INDEX_METHOD } from './community-index';
 import { REMOTE_METHOD } from './remote';
 import { SPEECH_METHOD } from './speech';
 import { SPOKEN_RULE_METHOD } from './spoken-rule';
@@ -127,13 +124,10 @@ export const DAEMON_METHOD = {
   ...AGENTS_METHOD,
   ...SKILLS_METHOD,
   ...PROJECTS_METHOD,
-  ...BACKUP_METHOD,
   ...MEMORY_METHOD,
   ...LAN_METHOD,
-  ...PERSONAL_SYNC_METHOD,
   ...PROFILES_METHOD,
   ...WORK_METHOD,
-  ...INDEX_METHOD,
 } as const;
 
 export type DaemonMethod = (typeof DAEMON_METHOD)[keyof typeof DAEMON_METHOD];
@@ -381,6 +375,11 @@ export interface DaemonEvent extends ExtensionEventFields {
    * so a yes goes without Touch ID. Absent asks for it, which is every call that reaches further.
    */
   withinSession?: true;
+  /**
+   * On HELD, when nobody answered in time and it was kept for later: the agent carries on without
+   * it, so it waits with less hurry than a call an agent is blocked on.
+   */
+  parkedAt?: string;
 }
 
 /** A trace drawn as a waterfall: each step's place on the clock, how deep it sits, how it ended. */

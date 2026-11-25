@@ -112,10 +112,9 @@ export class Missions {
 
   private async join(id: string, sessionId: string): Promise<Mission> {
     const mission = await this.read(id);
-    if (mission === null)
-      throw new Error(`no mission ${id}; "memnox mission list" shows them`);
+    if (mission === null) throw new Error(`no goal ${id}; "memnox goal list" shows them`);
     if (mission.closedAt !== undefined) {
-      throw new Error(`mission ${id} was closed, so start a new one for this work`);
+      throw new Error(`goal ${id} was closed, so start a new one for this work`);
     }
     if (mission.sessions.includes(sessionId)) return mission;
     const joined = { ...mission, sessions: [...mission.sessions, sessionId] };
@@ -129,8 +128,7 @@ export class Missions {
 
   private async finish(id: string, now: string): Promise<Mission> {
     const mission = await this.read(id);
-    if (mission === null)
-      throw new Error(`no mission ${id}; "memnox mission list" shows them`);
+    if (mission === null) throw new Error(`no goal ${id}; "memnox goal list" shows them`);
     if (mission.closedAt !== undefined) return mission;
     const closed = { ...mission, closedAt: now };
     await this.records.write(id, closed);
@@ -279,7 +277,7 @@ export function describeStandings(summary: MissionSummary): string {
   return counted.length === 0 ? 'no sessions yet' : counted.join(', ');
 }
 
-/** The lines `memnox mission show` prints, and the voice and phone can read whole. */
+/** The lines `memnox goal show` prints, and the voice and phone can read whole. */
 export function describeMission(summary: MissionSummary): string[] {
   const { mission } = summary;
   const reference = mission.reference === undefined ? '' : ` (${mission.reference})`;
